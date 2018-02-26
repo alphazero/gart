@@ -6,26 +6,60 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"flag"
 	"github.com/alphazero/gart/cmd/exit"
 	"io"
 	"os"
 	"os/signal"
 )
 
+type Mode int
+
+const (
+	Error Mode = iota
+	Standalone
+	Piped
+)
+
 func main() {
 	var in io.Reader
+	//	var fidx int = 1
 
-	if len(os.Args) > 1 && os.Args[1][0] != '-' {
-		buf := bytes.NewBufferString(os.Args[1] + "\n")
-		in = bufio.NewReader(buf)
-	} else {
-		in = os.Stdin
-	}
+	// piped mode or strictly cmdline opts?
+	//	if len(os.Args) > 1 && os.Args[1][0] != '-' {
+	//		buf := bytes.NewBufferString(os.Args[1] + "\n")
+	//		in = bufio.NewReader(buf)
+	//		fidx = 2
+	//	}
 
-	e := processStream(in, os.Stdout, os.Stderr)
+	mode, e := parseFlags(os.Args[1:])
 	if e != nil {
 		exit.OnError(e)
 	}
+	switch mode {
+	case Standalone:
+		buf := bytes.NewBufferString(flags.Arg(0) + "\n")
+		in = bufio.NewReader(buf)
+	case Piped:
+		in = os.Stdin
+	default:
+		panic("bug")
+	}
+
+	if e := processStream(in, os.Stdout, os.Stderr); e != nil {
+		exit.OnError(e)
+	}
+}
+
+var flags = flag.NewFlagSet("options", flag.ContinueOnError)
+
+func parseFlags(args []string) (Mode, error) {
+	flags.SetOutput(os.Stderr)
+	if e := flags.Parse(args); e != nil {
+		return Error, e
+	}
+
+	return processMode(), nil
 }
 
 func processStream(in io.Reader, out, meta io.Writer) (err error) {
