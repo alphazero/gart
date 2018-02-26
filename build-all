@@ -1,8 +1,9 @@
 #!/bin/bash 
 
-mkdir bin
+#mkdir bin #if not exits ..
 
 go build -o bin/gart-test gart.go test.go common.go
+go build -o bin/gart-add gart.go add.go common.go
 #go build -o bin/gart-add  gart.go add.go   common.go
 #go build -o bin/gart-tag  gart.go tag.go   common.go
 #go build -o bin/gart-ls   gart.go ls.go    common.go

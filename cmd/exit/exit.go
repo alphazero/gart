@@ -2,6 +2,7 @@ package exit
 
 import (
 	"fmt"
+	"github.com/alphazero/gart/errors"
 	"os"
 	"path/filepath"
 )
@@ -20,16 +21,21 @@ func Ok() {
 	os.Exit(EC_OK)
 }
 
+// REVU TODO move this function to errors.go -- only keep emit and exit.
 // Exits the process with EC_ERROR code. Error message is emitted to Stderr
 func OnError(e error, detail ...interface{}) {
-	var fmtstr = "err - %v"
-	var args []interface{}
-	args = append(args, e)
-	for _, v := range detail {
-		args = append(args, v)
-		fmtstr += " %v"
-	}
-	emit(fmtstr, args...)
+
+	/*
+		var fmtstr = "err - %v"
+		var args []interface{}
+		args = append(args, e)
+		for _, v := range detail {
+			args = append(args, v)
+			fmtstr += " %v"
+		}
+		emit(fmtstr, args...)
+	*/
+	emit("%s\n", errors.Errorf(e, detail...))
 	os.Exit(EC_ERROR)
 }
 

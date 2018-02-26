@@ -28,7 +28,6 @@ func main() {
 
 	mode, e := parseFlags(os.Args[1:])
 	if e != nil {
-		//		exit.OnError(e)
 		os.Exit(exit.EC_USAGE)
 	}
 	switch mode {
@@ -42,7 +41,7 @@ func main() {
 	}
 
 	if e := processStream(in, os.Stdout, os.Stderr); e != nil {
-		exit.OnError(e)
+		os.Exit(exit.EC_ERROR)
 	}
 }
 
@@ -103,7 +102,7 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 
 		result, e := process(ctx, line[:len(line)-1])
 		if e != nil {
-			meta.Write([]byte(e.Error()))
+			onError(meta, e)
 			err = e
 			break
 		}
