@@ -16,25 +16,20 @@ import (
 type Mode int
 
 const (
-	Error Mode = iota
+	Fault Mode = iota
 	Standalone
 	Piped
 )
 
+var flags = flag.NewFlagSet("cmdline options", flag.ContinueOnError)
+
 func main() {
 	var in io.Reader
-	//	var fidx int = 1
-
-	// piped mode or strictly cmdline opts?
-	//	if len(os.Args) > 1 && os.Args[1][0] != '-' {
-	//		buf := bytes.NewBufferString(os.Args[1] + "\n")
-	//		in = bufio.NewReader(buf)
-	//		fidx = 2
-	//	}
 
 	mode, e := parseFlags(os.Args[1:])
 	if e != nil {
-		exit.OnError(e)
+		//		exit.OnError(e)
+		os.Exit(exit.EC_USAGE)
 	}
 	switch mode {
 	case Standalone:
@@ -51,12 +46,16 @@ func main() {
 	}
 }
 
-var flags = flag.NewFlagSet("options", flag.ContinueOnError)
-
+// Parse flags and also determines the run mode.
+// Most of this is delegated to the actual command (file)
 func parseFlags(args []string) (Mode, error) {
 	flags.SetOutput(os.Stderr)
 	if e := flags.Parse(args); e != nil {
-		return Error, e
+		return Fault, e
+	}
+
+	if e := checkFlags(); e != nil {
+		return Fault, e
 	}
 
 	return processMode(), nil

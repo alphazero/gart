@@ -7,6 +7,8 @@ import (
 	"fmt"
 )
 
+/// flags and processing mode /////////////////////////////////////////////////
+
 var option = struct {
 	test string
 }{
@@ -17,7 +19,12 @@ func init() {
 	flags.StringVar(&option.test, "t", option.test, "test option")
 }
 
-// NOTE each cmd has to determine the run mode.
+// Check mandatory flags, etc.
+func checkFlags() error {
+	return nil
+}
+
+// Each process determines the run mode per its cmd-lien options pattern
 func processMode() Mode {
 	if flags.NArg() == 0 {
 		return Piped
@@ -25,24 +32,21 @@ func processMode() Mode {
 	return Standalone
 }
 
+/// command specific state ////////////////////////////////////////////////////
+
 type State struct {
 	items int
 }
 
+/// command processing ////////////////////////////////////////////////////////
+
 // pre:
 func processPrepare() (context.Context, error) {
-	// check flags
-
 	// setup command context & state
 	var state State
 	ctx := context.WithValue(context.Background(), "state", &state)
 
 	return ctx, nil
-}
-
-// post:
-func processDone(ctxt context.Context) error {
-	return nil
 }
 
 // command:
@@ -53,4 +57,9 @@ func process(ctx context.Context, b []byte) ([]byte, error) {
 	state.items++
 
 	return s, nil
+}
+
+// post:
+func processDone(ctxt context.Context) error {
+	return nil
 }

@@ -9,9 +9,10 @@ import (
 // exit codes
 const (
 	EC_OK = iota
-	EC_ERROR
 	EC_USAGE
+	EC_ERROR
 	EC_INTERRUPT
+	EC_FAULT
 )
 
 // Exits the process with EC_OK code. Nothing emitted.
