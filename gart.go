@@ -64,6 +64,7 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 
 	/// process loop //////////////////////////////////////
 
+	// REVU error here is fundamentally fatal
 	// prepare for processing.
 	ctx, e := processPrepare()
 	if e != nil {
@@ -95,11 +96,25 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 			break
 		}
 		if e != nil {
-			onError(meta, e)
+			onError(meta, e) // REVU fail-stop
 			err = e
 			break
 		}
 
+		// REVU two flavors of errors are required: fail-stop and item specific
+		// error. For example, if find . is piped to gart-add, the stream may be
+		// a mix of directories and files. We don't want to stop in the middle of
+		// the stream with a cryptic "not a regular file".
+		//
+		// in general, each distinct process has d distinct logging policy and distinct
+		// set of fail-stop and (effectively) warnings.
+		// this means errors package needs to distinguish between FatalError and Error.
+		//
+		// (REVU or even simpler, have process return
+		// func process(context.Context, []byte) ([]byte, error, bool).
+		// res, e, fatal := process(ctx, line[:..])
+		// if fatal { onError(e); err = e; break }
+		// if e != nil { onError(e); continue }
 		result, e := process(ctx, line[:len(line)-1])
 		if e != nil {
 			onError(meta, e)
@@ -114,6 +129,8 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 	return
 }
 
+// REVU processShutdown (rename) is hidden here in the code and the
+// name doesn't quite capture it.
 func onReturnOrExit(ctx context.Context, err *error, w io.Writer) {
 	signal.Reset(os.Interrupt, os.Kill)
 	if e := processDone(ctx); e != nil {
