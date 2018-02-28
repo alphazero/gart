@@ -2,9 +2,9 @@
 
 #mkdir bin #if not exits ..
 
-go build -o bin/gart-add gart.go add.go common.go
-#go build -o bin/gart-add  gart.go add.go   common.go
-#go build -o bin/gart-tag  gart.go tag.go   common.go
-#go build -o bin/gart-ls   gart.go ls.go    common.go
-#go build -o bin/gart-mv   gart.go mv.go    common.go
-#go build -o bin/gart-rm   gart.go rm.go    common.go
+go build -o bin/gart-add process.go add.go common.go
+#go build -o bin/gart-add  process.go add.go   common.go
+#go build -o bin/gart-tag  process.go tag.go   common.go
+#go build -o bin/gart-ls   process.go ls.go    common.go
+#go build -o bin/gart-mv   process.go mv.go    common.go
+#go build -o bin/gart-rm   process.go rm.go    common.go

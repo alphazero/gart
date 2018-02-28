@@ -5,9 +5,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 )
+
+/// system wide consts & vars /////////////////////////////////////////////////
 
 // permissions of gart fs artifacts
 const (
@@ -39,31 +40,7 @@ const (
 	devicesFile  = "path/devices"
 )
 
-// gart process info
-type processInfo struct {
-	name    string     // process (base)name
-	wd      string     // process working dir
-	user    *user.User // process user
-	gartDir string     // gart home
-}
-
-func getProcessInfo() (processInfo, error) {
-	var pi processInfo
-	user, e := user.Current()
-	if e != nil {
-		return pi, e
-	}
-	pi.user = user
-
-	if len(os.Args) < 1 {
-		panic("bug -- os.Args is zerolen")
-	}
-	pi.name = filepath.Base(os.Args[0])
-
-	pi.gartDir = filepath.Join(user.HomeDir, gartDir)
-
-	return pi, nil
-}
+/// initialization & process boot /////////////////////////////////////////////
 
 // Verify existing gart repo or initialize the minimal structure.
 //

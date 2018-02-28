@@ -2,9 +2,10 @@ package exit
 
 import (
 	"fmt"
-	"github.com/alphazero/gart/errors"
 	"os"
 	"path/filepath"
+
+	"github.com/alphazero/gart/errors"
 )
 
 // exit codes

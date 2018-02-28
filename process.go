@@ -7,11 +7,44 @@ import (
 	"bytes"
 	"context"
 	"flag"
-	"github.com/alphazero/gart/cmd/exit"
 	"io"
 	"os"
 	"os/signal"
+	"os/user"
+	"path/filepath"
+
+	"github.com/alphazero/gart/cmd/exit"
 )
+
+/// general process ///////////////////////////////////////////////////////////
+
+// gart process info
+type processInfo struct {
+	name    string     // process (base)name
+	wd      string     // process working dir
+	user    *user.User // process user
+	gartDir string     // gart home
+}
+
+func getProcessInfo() (processInfo, error) {
+	var pi processInfo
+	user, e := user.Current()
+	if e != nil {
+		return pi, e
+	}
+	pi.user = user
+
+	if len(os.Args) < 1 {
+		panic("bug -- os.Args is zerolen")
+	}
+	pi.name = filepath.Base(os.Args[0])
+
+	pi.gartDir = filepath.Join(user.HomeDir, gartDir)
+
+	return pi, nil
+}
+
+/// process shell /////////////////////////////////////////////////////////////
 
 type Mode int
 

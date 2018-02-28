@@ -4,10 +4,11 @@ package file
 
 import (
 	"fmt"
-	"github.com/alphazero/gart/errors"
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/alphazero/gart/errors"
 )
 
 func CheckFile(fname string) {}
