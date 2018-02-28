@@ -101,25 +101,15 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 			break
 		}
 
-		// REVU two flavors of errors are required: fail-stop and item specific
-		// error. For example, if find . is piped to gart-add, the stream may be
-		// a mix of directories and files. We don't want to stop in the middle of
-		// the stream with a cryptic "not a regular file".
-		//
-		// in general, each distinct process has d distinct logging policy and distinct
-		// set of fail-stop and (effectively) warnings.
-		// this means errors package needs to distinguish between FatalError and Error.
-		//
-		// (REVU or even simpler, have process return
-		// func process(context.Context, []byte) ([]byte, error, bool).
-		// res, e, fatal := process(ctx, line[:..])
-		// if fatal { onError(e); err = e; break }
-		// if e != nil { onError(e); continue }
-		result, e := process(ctx, line[:len(line)-1])
-		if e != nil {
+		result, e, abort := process(ctx, line[:len(line)-1])
+		if abort {
 			onError(meta, e)
 			err = e
 			break
+		}
+		if e != nil {
+			onError(meta, e)
+			continue
 		}
 		if result != nil {
 			w.Write(result)

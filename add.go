@@ -59,8 +59,9 @@ func processPrepare() (context.Context, error) {
 	return ctx, nil
 }
 
-// command:
-func process(ctx context.Context, b []byte) ([]byte, error) {
+// command gart-add
+// Returns output, error if any, and abort
+func process(ctx context.Context, b []byte) (output []byte, err error, abort bool) {
 
 	state := ctx.Value("state").(*State)
 	if state == nil {
@@ -69,20 +70,18 @@ func process(ctx context.Context, b []byte) ([]byte, error) {
 
 	fds, e := file.GetDetails(string(b))
 	if e != nil {
-		return nil, e
+		return nil, e, false // REVU don't abort - next file may be ok
 	}
-	fmt.Printf("%v\n", fds)
+	//	fmt.Printf("%v\n", fds)
 
-	// REVU digest code needs to use RDONLY open ..
+	// REVU TODO digest code needs to use RDONLY open ..
 	md, e := digest.Compute(fds.Path)
 	if e != nil {
-		return nil, e
-	}
-	if md == nil {
-		panic("remove") // XXX
+		return nil, e, false // TODO REVU
 	}
 	//	return md, nil
-	return []byte(fds.String()), nil
+	output = []byte(fmt.Sprintf("%x %s", md, fds.Path))
+	return
 }
 
 // post:
