@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/file"
-	"os"
 )
 
 /// flags and processing mode /////////////////////////////////////////////////
@@ -37,9 +36,9 @@ func processMode() Mode {
 
 /// command specific state ////////////////////////////////////////////////////
 
+// struct encapsulates mutable and immutable process values.
 type State struct {
-	home  string // gart home
-	pwd   string // process working directory
+	pi    processInfo
 	items int
 }
 
@@ -47,16 +46,19 @@ type State struct {
 
 // pre:
 func processPrepare() (context.Context, error) {
+
+	pi, e := getProcessInfo()
+	if e != nil {
+		return nil, e
+	}
+
 	// setup command context & state
 	var state State
 	ctx := context.WithValue(context.Background(), "state", &state)
 
-	// REVU this is not necessary ?
-	pwd, e := os.Getwd()
-	if e != nil {
+	if e := initOrVerifyGart(pi); e != nil {
 		return ctx, e
 	}
-	state.pwd = pwd
 
 	// TODO open .gart/index/tags.idx in APPEND mode.
 	// TODO open .gart/tags/tagsdef in RW mode.
