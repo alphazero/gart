@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/alphazero/gart/digest"
-	"github.com/alphazero/gart/file"
+	"github.com/alphazero/gart/fs"
 )
 
 /// flags and processing mode /////////////////////////////////////////////////
@@ -48,14 +48,15 @@ type State struct {
 // pre:
 func processPrepare() (context.Context, error) {
 
+	// setup command context & state
+	var state State
+	ctx := context.WithValue(context.Background(), "state", &state)
+
 	pi, e := getProcessInfo()
 	if e != nil {
 		return nil, e
 	}
-
-	// setup command context & state
-	var state State
-	ctx := context.WithValue(context.Background(), "state", &state)
+	state.pi = pi
 
 	if e := initOrVerifyGart(pi); e != nil {
 		return ctx, e
@@ -86,7 +87,7 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 	state := getState(ctx)
 	defer func() { state.items++ }()
 
-	fds, e := file.GetDetails(string(b))
+	fds, e := fs.GetFileDetails(string(b))
 	if e != nil {
 		return nil, e, false // REVU don't abort - next file may be ok
 	}

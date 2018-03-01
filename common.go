@@ -3,18 +3,12 @@
 package main
 
 import (
-	"fmt"
 	"os"
-	"path/filepath"
+
+	"github.com/alphazero/gart/fs"
 )
 
 /// system wide consts & vars /////////////////////////////////////////////////
-
-// permissions of gart fs artifacts
-const (
-	dirPerm  = 0755
-	filePerm = 0644
-)
 
 // gart's top level (minimal) directory structure
 const (
@@ -60,7 +54,7 @@ func initOrVerifyGart(pi processInfo) error {
 
 func verifyGartRepo(pi processInfo) error {
 	// verify directory structure
-	if e := walkDirs(pi, verifyDir); e != nil {
+	if e := fs.WalkDirs(pi.user.HomeDir, gartDirs, fs.VerifyDir); e != nil {
 		return e
 	}
 
@@ -73,8 +67,8 @@ func verifyGartRepo(pi processInfo) error {
 // panics if init is called for an already initialized gart (REVU for now).
 // Errors should be considered fail-stop.
 func initGart(pi processInfo) error {
-	if e := walkDirs(pi, func(path string) error {
-		return os.Mkdir(path, dirPerm)
+	if e := fs.WalkDirs(pi.user.HomeDir, gartDirs, func(path string) error {
+		return os.Mkdir(path, fs.DirPerm)
 	}); e != nil {
 		panic(e)
 	}
@@ -84,54 +78,4 @@ func initGart(pi processInfo) error {
 	// index
 	// etc
 	panic("initGart - is incomplete")
-}
-
-/// REVU gart/repo or gart/files is better place for these
-
-// verify path, that it is a directory, and that the permissions are dirPerm
-func verifyDir(path string) error {
-	fi, e := verifyFileOrDir(path, dirPerm)
-	if e != nil {
-		return e
-	}
-	if !fi.IsDir() {
-		return fmt.Errorf("verify error - not a directory: %s", path)
-	}
-	return nil
-}
-
-// verify path, that it is a regular file, and that the permissions are filePerm
-func verifyFile(path string) error {
-	fi, e := verifyFileOrDir(path, dirPerm)
-	if e != nil {
-		return e
-	}
-	if !fi.Mode().IsRegular() {
-		return fmt.Errorf("verify error - not a regular file: %s", path)
-	}
-	return nil
-}
-
-// polymorphism anyone ..
-func verifyFileOrDir(path string, expectedPerm os.FileMode) (os.FileInfo, error) {
-	fi, e := os.Stat(path)
-	if e != nil {
-		return fi, fmt.Errorf("verify error - %s", e)
-	}
-	if perm := fi.Mode() & os.ModePerm; perm != expectedPerm {
-		return fi, fmt.Errorf("verify error - invalid permission: %o %s", perm, path)
-	}
-	return fi, nil
-}
-
-// iterates over gartDirs and applies function fn.
-// first error encountered is returned.
-func walkDirs(pi processInfo, fn func(string) error) error {
-	for _, dir := range gartDirs {
-		path := filepath.Join(pi.user.HomeDir, dir)
-		if e := fn(path); e != nil {
-			return e
-		}
-	}
-	return nil
 }
