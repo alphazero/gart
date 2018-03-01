@@ -12,8 +12,6 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
-
-	"github.com/alphazero/gart/cmd/exit"
 )
 
 /// general process ///////////////////////////////////////////////////////////
@@ -44,6 +42,15 @@ func getProcessInfo() (processInfo, error) {
 	return pi, nil
 }
 
+// exit codes
+const (
+	EC_OK = iota
+	EC_USAGE
+	EC_ERROR
+	EC_INTERRUPT
+	EC_FAULT
+)
+
 /// process shell /////////////////////////////////////////////////////////////
 
 type Mode int
@@ -61,7 +68,7 @@ func main() {
 
 	mode, e := parseFlags(os.Args[1:])
 	if e != nil {
-		os.Exit(exit.EC_USAGE)
+		os.Exit(EC_USAGE)
 	}
 	switch mode {
 	case Standalone:
@@ -74,7 +81,7 @@ func main() {
 	}
 
 	if e := processStream(in, os.Stdout, os.Stderr); e != nil {
-		os.Exit(exit.EC_ERROR)
+		os.Exit(EC_ERROR)
 	}
 }
 
@@ -109,9 +116,9 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 	interrupt := make(chan os.Signal, 1)
 	defer close(interrupt)
 	go func() {
-		sig := <-interrupt
+		_ = <-interrupt
 		onReturnOrExit(ctx, &err, meta)
-		exit.OnInterrupt(sig)
+		os.Exit(EC_INTERRUPT)
 	}()
 	signal.Notify(interrupt, os.Interrupt, os.Kill)
 
