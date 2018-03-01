@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
-
-	"github.com/alphazero/gart/errors"
 )
 
 func CheckFile(fname string) {}
@@ -65,7 +63,7 @@ func GetDetails(name string) (Details, error) {
 	details.Fstat = fstat
 
 	if !fstat.Mode().IsRegular() {
-		return details, errors.Errorf(errors.IrregularFile, name)
+		return details, fmt.Errorf("not a regular file - %s", name)
 	}
 
 	if e := syscall.Statfs(fpath, &details.Statfs); e != nil {

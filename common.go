@@ -48,23 +48,26 @@ const (
 // is missing, treat it as a corrupted repo and panic.
 //
 // Check permissions and if not as expected, treat it as a corrupted repo and panic.
-//
-// REVU: then why return an error?
 func initOrVerifyGart(pi processInfo) error {
 	// is this the first use?
 	if _, err := os.Stat(pi.gartDir); os.IsNotExist(err) {
 		initGart(pi)
 	}
 
+	return verifyGartRepo(pi)
+
+}
+
+func verifyGartRepo(pi processInfo) error {
 	// verify directory structure
 	if e := walkDirs(pi, verifyDir); e != nil {
-		panic(e)
+		return e
 	}
-	// verify .gart/ structur and minimal files
+
+	// verify .gart/ minimal files
 	// .gart/tag/tags
 	// .gart/path/devices
-
-	panic("initOrVerifyGart - is imcomplete")
+	panic("verifyGartRepo - is imcomplete")
 }
 
 // panics if init is called for an already initialized gart (REVU for now).
@@ -75,8 +78,15 @@ func initGart(pi processInfo) error {
 	}); e != nil {
 		panic(e)
 	}
-	panic("initGart not implemented")
+
+	// TODO create minimal/initial gart files
+	// tagsdef
+	// index
+	// etc
+	panic("initGart - is incomplete")
 }
+
+/// REVU gart/repo or gart/files is better place for these
 
 // verify path, that it is a directory, and that the permissions are dirPerm
 func verifyDir(path string) error {
