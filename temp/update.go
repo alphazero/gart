@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"time"
 	"unsafe"
 )
 
@@ -22,7 +23,7 @@ type Record struct {
 	flags  byte
 	id     uint32
 	refcnt uint32
-	val    string // REVU TODO must insure that the byte len is < 256
+	val    string // REVU TODO must insure that the byte len is < 251
 }
 
 func (Record) randomRecord(maxValLen int) Record {
@@ -131,18 +132,24 @@ func (p *Record) Decode(r io.Reader) (int, error) {
 
 func main() {
 
-	var items = 1 << 17
+	var items = 1 << 12
 	const fname = "tempfile"
 
 	// create file, write rand records, and close
+	var start = time.Now().UnixNano()
 	if n, e := writeRandomFile(fname, items); e != nil {
 		exitOnError(fmt.Errorf("err - wrote %d records - error %v", n, e))
 	} else {
+		var delta = time.Now().UnixNano() - start
+		fmt.Printf("write: n:%d delta-ns:%v ns/page:%f\n", n, time.Duration(delta), float64(delta)/float64(n))
 		fmt.Printf("wrote %d records\n", n)
 	}
+	start = time.Now().UnixNano()
 	if n, e := verifyFileWrite(fname, items); e != nil {
 		exitOnError(fmt.Errorf("read %d records - error %v", n, e))
 	} else {
+		var delta = time.Now().UnixNano() - start
+		fmt.Printf("read: n:%d delta-ns:%v ns/page:%f\n", n, time.Duration(delta), float64(delta)/float64(n))
 		fmt.Printf("verified %d records\n", n)
 	}
 	os.Exit(0)
@@ -154,13 +161,13 @@ var recterm = []byte("\n")
 
 func verifyFileWrite(fname string, items int) (int, error) {
 
-	const flags = os.O_RDONLY
+	//	const flags = os.O_RDONLY
 	fi, e := os.Stat(fname)
 	if e != nil {
 		panic(e)
 	}
 
-	file, e := os.OpenFile(fname, flags, 0644)
+	file, e := os.OpenFile(fname, os.O_RDONLY, 0644)
 	if e != nil {
 		return 0, e
 	}
@@ -168,6 +175,13 @@ func verifyFileWrite(fname string, items int) (int, error) {
 
 	var tot int
 	var r = bufio.NewReaderSize(file, int(fi.Size()))
+
+	var hdr [8]byte
+	if n, e := io.ReadFull(r, hdr[:]); e != nil {
+		return n, fmt.Errorf("read-file - header - %s\n", e)
+	}
+	var rcnt = *(*int)(unsafe.Pointer(&hdr[0]))
+	fmt.Printf("rcnt: %d\n", rcnt)
 	for i := 0; i < items; i++ {
 		var record Record
 		n, e := record.Decode(r)
@@ -193,6 +207,11 @@ func writeRandomFile(fname string, items int) (int, error) {
 
 	var w = bufio.NewWriter(file)
 	defer w.Flush()
+
+	var hdr = *(*[8]byte)(unsafe.Pointer(&(items)))
+	if n, e := w.Write(hdr[:]); e != nil || n != len(hdr) {
+		return n, fmt.Errorf("write-file - header - %s", e)
+	}
 
 	for i := 0; i < items; i++ {
 		var record Record
