@@ -132,7 +132,7 @@ func (p *Record) Decode(r io.Reader) (int, error) {
 
 func main() {
 
-	var items = 1 << 12
+	var items = 1 << 10
 	const fname = "tempfile"
 
 	// create file, write rand records, and close

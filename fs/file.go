@@ -7,6 +7,7 @@ package fs
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -18,6 +19,12 @@ import (
 const (
 	DirPerm  = 0755
 	FilePerm = 0644
+)
+
+// crc table Qs
+const (
+	CRC64_Q = 0xdb032018da3a511e
+	CRC32_Q = 0xDB032018
 )
 
 /// types /////////////////////////////////////////////////////////////////////
@@ -71,6 +78,32 @@ func GetFileDetails(name string) (FileDetails, error) {
 }
 
 /// santa's little helpers ////////////////////////////////////////////////////
+
+// Exclusively fully reads the named file. File is closed on return.
+func ReadFull(fname string) ([]byte, error) {
+
+	fi, e := os.Stat(fname)
+	if e != nil {
+		return nil, e
+	}
+
+	var flags = os.O_EXCL | os.O_RDONLY | os.O_SYNC
+	file, e := os.OpenFile(fname, flags, FilePerm)
+	if e != nil {
+		return nil, e
+	}
+	defer file.Close()
+
+	bufsize := fi.Size()
+	buf := make([]byte, bufsize)
+
+	_, e = io.ReadFull(file, buf)
+	if e != nil {
+		return nil, e
+	}
+
+	return buf, e
+}
 
 // verify path, that it is a directory, and that the permissions are perm
 func VerifyDir(path string) error {
