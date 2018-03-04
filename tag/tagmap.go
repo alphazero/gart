@@ -12,46 +12,15 @@ import (
 	"github.com/alphazero/gart/fs"
 )
 
-/// types /////////////////////////////////////////////////////////////////////
+/// consts and vars ///////////////////////////////////////////////////////////
 
-// tagmpa errors
-var (
-	E_Closed    = fmt.Errorf("tagmap is closed")
-	E_NotExists = fmt.Errorf("tagmap file does not exist")
-	E_Exists    = fmt.Errorf("tagmap file already exists")
+// header related consts
+const (
+	headerSize       = 4096
+	tagmap_file_type = 0xd42b72e897893438 // sha256("tagmap-file")
 )
 
-// tagmap in-mem model
-type tagmap struct {
-	header
-	buf []byte // serialized tag list binary data from persistent image
-	m   map[string]tagref
-}
-
-type tagref struct {
-	offset int
-	blen   int
-}
-
-const headerSize = 4096
-
-// fs block size (4k) header for the tagmap file
-type header struct {
-	size     uint64     // number of Tag entries
-	created  int64      // unix nano
-	updated  int64      // unix nano
-	crc64    uint64     // map data crc
-	reserved [4064]byte // reserved
-}
-
-// be pedantic and verify all size assumptions
-func init() {
-	// header size
-	var hdr header
-	if unsafe.Sizeof(hdr) != headerSize {
-		panic("bug - tagmap header struct size non-conformant")
-	}
-}
+/// types /////////////////////////////////////////////////////////////////////
 
 // using an interface to facilitate swapping the implementation (thinking B-Tree).
 type Tagmap interface {
@@ -73,33 +42,50 @@ type Tagmap interface {
 	// Syncs the tagmap file. IFF the in-mem model has been modified
 	// changes are flushed to the disk. This is a blocking call.
 	//
-	// if flushed is true, n > 0 (if e == nil) and is the size of the
-	// file. If flushed is false, n ==0, e == nil.
-	// If flushed & error != nil, n (may) reflect how many bytes were
-	// actually written.
-	Sync() (flushed bool, n int, e error)
+	Sync() (flushed bool, e error)
 }
 
-func (t *tagmap) Size() uint64     { return t.header.size }
+// fs block size (4k) header for the tagmap file
+type header struct {
+	ftype    uint64     // filetype invariant
+	created  int64      // unix nano
+	updated  int64      // unix nano
+	crc64    uint64     // map data crc
+	tagcnt   uint64     // number of Tag entries
+	buflen   int64      // file size, // REVU isn't it excluding header ?
+	reserved [4044]byte // reserved
+}
+
+type tagref struct {
+	offset int
+	blen   int
+}
+
+// tagmap in-mem model
+type tagmap struct {
+	header
+	source    string
+	buf       []byte
+	changeset []Tag
+	m         map[string]tagref
+}
+
+func init() {
+	// be pedantic and verify all size assumptions
+	// header size
+	var hdr header
+	if unsafe.Sizeof(hdr) != headerSize {
+		panic("bug - tagmap header struct size non-conformant")
+	}
+}
+
+// Size returns the number of tags
+func (t *tagmap) Size() uint64 { return t.header.tagcnt }
+
 func (t *tagmap) CreatedOn() int64 { return t.header.created }
 func (t *tagmap) UpdatedOn() int64 { return t.header.updated }
 
-func (t *tagmap) Sync() (bool, int, error) {
-	panic(" - not implemented")
-}
-
-func (t *tagmap) Add(tag string) (bool, error) {
-	panic(" - not implemented")
-}
-
-func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
-	panic(" - not implemented")
-}
-
-func (t *tagmap) IncrRefcnt(tag string) (int, error) {
-	panic(" - not implemented")
-}
-
+// TODO correct the comment
 // Load loads tagmap from the named file. If file does not
 // exist and create is true, it will create a zero-entry tagmap
 // file. If create is false and file does not exist, E_NotExists
@@ -121,54 +107,146 @@ func LoadTagmap(fname string, create bool) (Tagmap, error) {
 		}
 	}
 
-	// read the tagmap file
+	finfo, e := os.Stat(fname)
+	if e != nil {
+		return nil, e
+	}
 	buf, e := fs.ReadFull(fname)
 	if e != nil {
 		return nil, e
 	}
 
-	// create in-mem rep.
-
-	// read header for tagmap size, etc.
-	var hdr = *(*header)(unsafe.Pointer(&buf[0]))
-	var mapsize = int(float64(hdr.size) * 1.25) // a bit larger to prevent resize
-
-	// build the in-mem tagmap
-	var tmap = &tagmap{
-		header: hdr,
-		m:      make(map[string]tagref, mapsize),
-		buf:    buf[headerSize:],
+	// header.tagcnt still needs to be verified (see below)
+	hdr, e := readAndVerifyHeader(buf, finfo)
+	if e != nil {
+		return nil, e
 	}
 
-	// build mapping to offsets
-	// we assign ids in order. For all ids, id mod 8 != 0 to facilitate building
-	// the encode7 groups for BAH compression.
-	var id int = 1
-	var offset int
-	for offset < len(tmap.buf) {
-		var tag Tag
+	/// create in-mem tagmap rep /////////////////////////////////////////////////
+
+	//	buf = buf[headerSize:] // trim header bytes
+
+	// build the in-mem tagmap
+	var mapsize = int(float64(hdr.tagcnt) * 1.25) // a bit larger to prevent resize
+	var m = make(map[string]tagref, mapsize)
+	var id, offset = 0, headerSize
+	for offset < len(buf) {
+		id++
+		if id&0x7 == 0 { // skip multiples of 8 so we don't have to encode7 for BAH
+			id++
+		}
+		var tag Tag // REVU do we need Tag?
 		tlen, e := tag.decode(buf[offset:])
 		if e != nil {
 			return nil, fmt.Errorf("bug - decoding tag[id:%d] offset:%d - %s", id, offset, e)
 		}
-		tmap.m[tag.name] = tagref{
+		m[tag.name] = tagref{
 			offset: offset,
 			blen:   tlen,
 		}
-		id++
-		if id&0x8 == 0 {
-			id++
-		}
+		offset += tlen
+	}
+	// verify hdr.tagcnt
+	tagcnt := uint64(len(m))
+	if hdr.tagcnt != tagcnt {
+		return nil, fmt.Errorf("LoadTagmap - header - invalid tagcnt: %d loaded: %d ",
+			hdr.tagcnt, tagcnt)
 	}
 
+	var tmap = &tagmap{
+		source: fname,
+		header: *hdr,
+		m:      m,
+		buf:    buf[headerSize:],
+	}
+
+	// build mapping to offsets
 	return tmap, nil
+}
+
+func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
+	if len(buf) < headerSize {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid buffer - len:%d", len(buf))
+	}
+
+	var hdr = (*header)(unsafe.Pointer(&buf[0]))
+
+	if hdr.ftype != tagmap_file_type {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid ftype: %04x ", hdr.ftype)
+	}
+	//	if hdr.flags != 0x00 {
+	//		return nil, fmt.Errorf("readAndVerifyHeader - invalid flags: %04x", hdr.flags)
+	//	}
+	if hdr.created == 0 || hdr.created > hdr.updated {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid created: %d ", hdr.created)
+	}
+	if hdr.updated == 0 {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid updated: %d ", hdr.updated)
+	}
+	var crc64 = digest.Checksum64(buf[headerSize:])
+	if hdr.crc64 != crc64 {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid crc64: %08x expect: %08x",
+			hdr.crc64, crc64)
+	}
+	if hdr.buflen != finfo.Size()-headerSize {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid buflen: %d expect: %d",
+			hdr.buflen, finfo.Size()-headerSize)
+	}
+	for i, v := range hdr.reserved {
+		if v != 0x00 {
+			return nil, fmt.Errorf("readAndVerifyHeader - invalid reserved[%d]: %d", i, v)
+		}
+	}
+	return hdr, nil
+}
+
+// Sync changes (if any) to source file.
+// If tagmap has not changed since loading returns (false, nil)
+// Successful sync of a modified tagmap will return (true, nil)
+// If error is not nil, attempt to sync is implicit (_, some-error)
+func (t *tagmap) Sync() (bool, error) {
+
+	if t.changeset == nil {
+		return false, nil
+	}
+
+	swapfile := fs.SwapfileName(t.source)
+	var ops = os.O_WRONLY | os.O_APPEND
+	sfile, e := fs.OpenNewFile(swapfile, ops)
+	if e != nil {
+		return false, e
+	}
+	defer sfile.Close()
+
+	// update relevant header bits. buflen should already be correct.
+	t.header.updated = time.Now().UnixNano()
+	t.header.crc64 = digest.Checksum64(t.buf)
+
+	hdrbuf := *(*[headerSize]byte)(unsafe.Pointer(&t.header))
+	_, e = sfile.Write(hdrbuf[:])
+	if e != nil {
+		return false, e
+	}
+	_, e = sfile.Write(t.buf[:])
+	if e != nil {
+		return false, e
+	}
+
+	// delete the original file.
+	// rename the swap file
+	// NOTE syscall.Exchangedata will atomically swap the files.
+	//      but may not be supported by all FSs.
+
+	// TODO flush and close the swap file.
+
+	panic(" - not implemented")
 }
 
 // creates a new gart tagmap file. This only writes the header.
 // File is closed on return.
 func createTagmapFile(fname string) error {
-	var flags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND | os.O_SYNC
-	file, e := os.OpenFile(fname, flags, fs.FilePerm)
+	var ops = os.O_WRONLY | os.O_APPEND
+	file, e := fs.OpenNewFile(fname, ops)
 	if e != nil {
 		return e
 	}
@@ -177,8 +255,12 @@ func createTagmapFile(fname string) error {
 	// the initial header.
 	var now = time.Now().UnixNano()
 	var hdr header
+	hdr.ftype = tagmap_file_type
+	//	hdr.flags = 0x00
 	hdr.created = now
 	hdr.updated = now
+	hdr.tagcnt = 0
+	hdr.buflen = 0
 	hdr.crc64 = digest.Checksum64([]byte{})
 
 	var arr = *(*[headerSize]byte)(unsafe.Pointer(&hdr))
@@ -188,4 +270,16 @@ func createTagmapFile(fname string) error {
 	}
 
 	return file.Sync()
+}
+
+func (t *tagmap) Add(tag string) (bool, error) {
+	panic(" - not implemented")
+}
+
+func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
+	panic(" - not implemented")
+}
+
+func (t *tagmap) IncrRefcnt(tag string) (int, error) {
+	panic(" - not implemented")
 }

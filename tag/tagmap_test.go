@@ -44,7 +44,7 @@ func TestCreateTagmapFile(t *testing.T) {
 }
 
 // tagmap load is expected to open in exclusive mode and
-// close the file on call return.
+// keep the file open on call return.
 func TestLoadTagmapCreate(t *testing.T) {
 	var fpath = tagmapPath()
 
