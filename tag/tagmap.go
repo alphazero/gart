@@ -23,6 +23,7 @@ var (
 
 // tagmap in-mem model
 type tagmap struct {
+	header
 	buf []byte // serialized tag list binary data from persistent image
 	m   map[string]tagref
 }
@@ -54,6 +55,10 @@ func init() {
 
 // using an interface to facilitate swapping the implementation (thinking B-Tree).
 type Tagmap interface {
+	Size() uint64
+	CreatedOn() int64
+	UpdatedOn() int64
+
 	// Adds a new tag.
 	// added is true if tag was indeed new. Otherwise false (with no error)
 	// Error is returned if tag name exceeds maximum tag name byteslen.
@@ -74,6 +79,10 @@ type Tagmap interface {
 	// actually written.
 	Sync() (flushed bool, n int, e error)
 }
+
+func (t *tagmap) Size() uint64     { return t.header.size }
+func (t *tagmap) CreatedOn() int64 { return t.header.created }
+func (t *tagmap) UpdatedOn() int64 { return t.header.updated }
 
 func (t *tagmap) Sync() (bool, int, error) {
 	panic(" - not implemented")
@@ -103,7 +112,7 @@ func (t *tagmap) IncrRefcnt(tag string) (int, error) {
 // NOTE this is not a library but these functions need to be exported. That said
 // it is the assumption that these functions are called by gart processes and we need
 // not worry about the argument's validity or other related matter.
-func Load(fname string, create bool) (Tagmap, error) {
+func LoadTagmap(fname string, create bool) (Tagmap, error) {
 
 	if create {
 		// reminder that this will close the new tagmap file on success
@@ -126,8 +135,9 @@ func Load(fname string, create bool) (Tagmap, error) {
 
 	// build the in-mem tagmap
 	var tmap = &tagmap{
-		m:   make(map[string]tagref, mapsize),
-		buf: buf[headerSize:],
+		header: hdr,
+		m:      make(map[string]tagref, mapsize),
+		buf:    buf[headerSize:],
 	}
 
 	// build mapping to offsets
@@ -138,9 +148,13 @@ func Load(fname string, create bool) (Tagmap, error) {
 	for offset < len(tmap.buf) {
 		var tag Tag
 		tlen, e := tag.decode(buf[offset:])
+		if e != nil {
+			return nil, fmt.Errorf("bug - decoding tag[id:%d] offset:%d - %s", id, offset, e)
+		}
 		tmap.m[tag.name] = tagref{
 			offset: offset,
-			blen:   tlen}
+			blen:   tlen,
+		}
 		id++
 		if id&0x8 == 0 {
 			id++
