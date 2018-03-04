@@ -79,6 +79,23 @@ func GetFileDetails(name string) (FileDetails, error) {
 
 /// santa's little helpers ////////////////////////////////////////////////////
 
+// Creates a new file. In-arg ops is OR'd with std. create flags.
+func OpenNewFile(fname string, ops int) (*os.File, error) {
+	flags := os.O_CREATE | os.O_EXCL | os.O_SYNC
+	return os.OpenFile(fname, flags|ops, FilePerm)
+}
+
+// panics on zerolen/empty fname
+func SwapfileName(fname string) string {
+	if fname == "" {
+		panic("bug - SwapfileName - fname is zerolen")
+	}
+
+	// [.../]fname -> [.../].fname.swp
+	var swapbase = fmt.Sprintf(".%s.swp", filepath.Base(fname))
+	return filepath.Join(filepath.Dir(fname), swapbase)
+}
+
 // Exclusively fully reads the named file. File is closed on return.
 func ReadFull(fname string) ([]byte, error) {
 
@@ -87,7 +104,7 @@ func ReadFull(fname string) ([]byte, error) {
 		return nil, e
 	}
 
-	var flags = os.O_EXCL | os.O_RDONLY | os.O_SYNC
+	var flags = os.O_RDONLY | os.O_SYNC
 	file, e := os.OpenFile(fname, flags, FilePerm)
 	if e != nil {
 		return nil, e

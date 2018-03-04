@@ -124,8 +124,6 @@ func LoadTagmap(fname string, create bool) (Tagmap, error) {
 
 	/// create in-mem tagmap rep /////////////////////////////////////////////////
 
-	//	buf = buf[headerSize:] // trim header bytes
-
 	// build the in-mem tagmap
 	var mapsize = int(float64(hdr.tagcnt) * 1.25) // a bit larger to prevent resize
 	var m = make(map[string]tagref, mapsize)
