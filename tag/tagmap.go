@@ -113,7 +113,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 			return nil, fmt.Errorf("bug - decoding tag[id:%d] offset:%d - %s", id, offset, e)
 		}
 		tag.id = id
-		tag.offset = offset
+		tag.offset = offset - headerBytes
 		m[tag.name] = &tag
 
 		offset += uint64(tlen)
@@ -187,30 +187,23 @@ func (t *tagmap) Sync() (bool, error) {
 	if e != nil {
 		return false, e
 	}
-	defer sfile.Close()
-
-	// update relevant header bits. buflen should already be correct.
-	t.header.updated = time.Now().Unix()
-	t.header.crc64 = digest.Checksum64(t.buf)
+	defer sfile.Close() // REVU not sure about behavior of defering this due to os.Rename below.
 
 	hdrbuf := *(*[headerBytes]byte)(unsafe.Pointer(&t.header))
 	_, e = sfile.Write(hdrbuf[:])
 	if e != nil {
 		return false, e
 	}
-	_, e = sfile.Write(t.buf[:])
+	_, e = sfile.Write(t.buf)
 	if e != nil {
 		return false, e
 	}
 
-	// delete the original file.
-	// rename the swap file
-	// NOTE syscall.Exchangedata will atomically swap the files.
-	//      but may not be supported by all FSs.
+	if e := os.Rename(swapfile, t.source); e != nil {
+		return false, fmt.Errorf("tagmap.Sync - os.Replace %q %q - err: %s", e)
+	}
 
-	// TODO flush and close the swap file.
-
-	panic(" - not implemented")
+	return true, nil
 }
 
 // creates a new gart tagmap file. This only writes the header.
@@ -274,6 +267,7 @@ func (t *tagmap) Add(tagname string) (bool, error) {
 	return true, nil
 }
 
+// updates tagmap checksum, timestamp, and dirty flag
 func (t *tagmap) onUpdate() {
 	t.header.crc64 = digest.Checksum64(t.buf)
 	t.header.updated = time.Now().Unix()

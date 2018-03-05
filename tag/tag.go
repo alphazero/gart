@@ -69,7 +69,6 @@ func newTag(tag string, id int, offset uint64) (*Tag, error) {
 //
 // Function returns error if b is nil or does not meet the minimum length requirement.
 func (t *Tag) decode(b []byte) (int, error) {
-	println("decode")
 	if b == nil {
 		return 0, fmt.Errorf("Tag.decode: invalid argument - b is nil")
 	}
@@ -92,7 +91,6 @@ func (t *Tag) decode(b []byte) (int, error) {
 //
 // Nil and undersized buffers will result in errors.
 func (t Tag) encode(b []byte) (int, error) {
-	println("encode")
 	if b == nil {
 		return 0, fmt.Errorf("Tag.Encode: invalid argument - b is nil")
 	}
@@ -108,13 +106,13 @@ func (t Tag) encode(b []byte) (int, error) {
 		panic(fmt.Sprintf("bug - only copied %d bytes of name (len:%d)", n, t.buflen()))
 	}
 
-	// XXX
+	/* XXX
 	fmt.Printf("debug: Tag.encode: f:%d refcnt:%08x len:%d name:%q\n                  ", t.flags, t.refcnt, namelen, t.name)
 	for i := 0; i < t.buflen(); i++ {
 		fmt.Printf(" %02x", b[i])
 	}
 	fmt.Println()
-	// XXX
+	*/
 
 	return t.buflen(), nil
 }
