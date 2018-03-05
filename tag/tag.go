@@ -21,19 +21,14 @@ const (
 // Tag structure defines the in-memory representation of a gart tag.
 type Tag struct {
 	id     int
+	offset int64
 	flags  byte   // reserved
 	refcnt uint32 // number of files tagged with this tag
 	name   string // constraint: max len is 250 bytes.
 }
 
-/*
-func (t Tag) Name() string  { return t.name }
-func (t Tag) Flags() byte    { return t.flags }
-func (t Tag) Id() int        { return t.id }
-func (t Tag) RefCnt() uint32 { return t.refcnt }
-*/
-func (t Tag) Len() int       { return len([]byte(t.name)) }
-func (t Tag) binaryLen() int { return prefixLen + len([]byte(t.name)) }
+func (t Tag) Len() int    { return len([]byte(t.name)) }
+func (t Tag) buflen() int { return prefixLen + len([]byte(t.name)) }
 
 func (t Tag) String() string {
 	return fmt.Sprintf("flags:%08b id:%x refcnt:%d vlen:%d name:%q",
@@ -70,8 +65,8 @@ func (t Tag) encode(b []byte) (int, error) {
 	if b == nil {
 		return 0, fmt.Errorf("Tag.Encode: invalid argument - b is nil")
 	}
-	if len(b) < t.binaryLen() {
-		return 0, fmt.Errorf("Tag.Encode: invalid argument - len(b) < %d ", t.binaryLen())
+	if len(b) < t.buflen() {
+		return 0, fmt.Errorf("Tag.Encode: invalid argument - len(b) < %d ", t.buflen())
 	}
 	b[0] = t.flags
 	*(*uint32)(unsafe.Pointer(&b[1])) = t.refcnt
@@ -79,5 +74,5 @@ func (t Tag) encode(b []byte) (int, error) {
 	if n := copy(b[6:], []byte(t.name)); n != t.Len() {
 		panic(fmt.Sprintf("bug - only copied %d bytes of name (len:%d)", n, t.Len()))
 	}
-	return t.binaryLen(), nil
+	return t.buflen(), nil
 }

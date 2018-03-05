@@ -33,37 +33,37 @@ func tagmapPath() string {
 
 /// test: creating and loading tagmaps ////////////////////////////////////////
 
-func TestCreateTagmapFile(t *testing.T) {
+func TestCreateMapFile(t *testing.T) {
 	var fpath = tagmapPath()
 
-	if e := createTagmapFile(fpath); e != nil {
+	if e := createMapFile(fpath); e != nil {
 		// NOTE subsequent tests depend on this function
-		t.Fatalf("tag.CreateTagmapFile - err: %s", e)
+		t.Fatalf("tag.CreateMapFile - err: %s", e)
 	}
 	remove(t, fpath)
 }
 
 // tagmap load is expected to open in exclusive mode and
 // keep the file open on call return.
-func TestLoadTagmapCreate(t *testing.T) {
+func TestLoadMapCreate(t *testing.T) {
 	var fpath = tagmapPath()
 
-	tmap, e := LoadTagmap(fpath, true)
+	tmap, e := LoadMap(fpath, true)
 	if e != nil {
-		t.Fatalf("tag.TestLoadTagmapCreate - create: true - err: %s", e)
+		t.Fatalf("tag.TestLoadMapCreate - create: true - err: %s", e)
 	}
 	defer remove(t, fpath)
 
 	// expect error since it already exists
-	_, e = LoadTagmap(fpath, true)
+	_, e = LoadMap(fpath, true)
 	if e == nil {
-		t.Fatalf("tag.TestLoadTagmapCreate - error expected")
+		t.Fatalf("tag.TestLoadMapCreate - error expected")
 	}
 
 	// expect no error since create arg is false
-	_, e = LoadTagmap(fpath, false)
+	_, e = LoadMap(fpath, false)
 	if e != nil {
-		t.Fatalf("tag.TestLoadTagmapCreate - create: false - err: %s", e)
+		t.Fatalf("tag.TestLoadMapCreate - create: false - err: %s", e)
 	}
 
 	// check size

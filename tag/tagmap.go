@@ -5,6 +5,7 @@ package tag
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -23,15 +24,23 @@ const (
 /// types /////////////////////////////////////////////////////////////////////
 
 // using an interface to facilitate swapping the implementation (thinking B-Tree).
-type Tagmap interface {
+// REVU
+//		- tag is not a public library. it is intended for internal use only.
+//		- illegal arguments (such as tag length exceeding a limit, etc.)
+//      | illegal state (such as whatever) are BUGS and panic is perfectly ok.
+// REVU
+//		- just remember to always panic(error) so a uniform tool-level recover
+//		  can be written.
+// TODO
+//		- tag names are supposed to be case insensitive
+type Map interface {
 	Size() uint64
 	CreatedOn() int64
 	UpdatedOn() int64
 
 	// Adds a new tag.
 	// added is true if tag was indeed new. Otherwise false (with no error)
-	// Error is returned if tag name exceeds maximum tag name byteslen.
-	Add(string) (added bool, err error)
+	Add(string) (added bool)
 	// Increments the named tag's refcnt and returns the new refcnt.
 	// returns error if tag does not exist.
 	IncrRefcnt(string) (refcnt int, err error)
@@ -52,26 +61,23 @@ type header struct {
 	updated  int64      // unix nano
 	crc64    uint64     // map data crc
 	tagcnt   uint64     // number of Tag entries
-	buflen   int64      // file size, // REVU isn't it excluding header ?
+	buflen   int64      // tag data bytes
 	reserved [4044]byte // reserved
-}
-
-type tagref struct {
-	offset int
-	blen   int
 }
 
 // tagmap in-mem model
 type tagmap struct {
-	header
-	source    string
-	buf       []byte
-	changeset []Tag
-	m         map[string]tagref
+	header          // serialized
+	buf      []byte // serlialized
+	source   string
+	modified bool
+	nextId   int
+	m        map[string]*Tag
 }
 
 func init() {
 	// be pedantic and verify all size assumptions
+
 	// header size
 	var hdr header
 	if unsafe.Sizeof(hdr) != headerSize {
@@ -92,17 +98,17 @@ func (t *tagmap) UpdatedOn() int64 { return t.header.updated }
 // error is returned. Other file IO related errors are propagated
 // as encountered.
 //
-// On successful Open, a Tagmap is returned. If error is not nil,
-// the Tagmap result is nil
+// On successful Open, a Map is returned. If error is not nil,
+// the Map result is nil
 //
 // NOTE this is not a library but these functions need to be exported. That said
 // it is the assumption that these functions are called by gart processes and we need
 // not worry about the argument's validity or other related matter.
-func LoadTagmap(fname string, create bool) (Tagmap, error) {
+func LoadMap(fname string, create bool) (Map, error) {
 
 	if create {
 		// reminder that this will close the new tagmap file on success
-		if e := createTagmapFile(fname); e != nil {
+		if e := createMapFile(fname); e != nil {
 			return nil, e
 		}
 	}
@@ -126,9 +132,10 @@ func LoadTagmap(fname string, create bool) (Tagmap, error) {
 
 	// build the in-mem tagmap
 	var mapsize = int(float64(hdr.tagcnt) * 1.25) // a bit larger to prevent resize
-	var m = make(map[string]tagref, mapsize)
-	var id, offset = 0, headerSize
-	for offset < len(buf) {
+	var m = make(map[string]*Tag, mapsize)
+	var id int
+	var offset = int64(headerSize)
+	for offset < int64(len(buf)) {
 		id++
 		if id&0x7 == 0 { // skip multiples of 8 so we don't have to encode7 for BAH
 			id++
@@ -138,16 +145,16 @@ func LoadTagmap(fname string, create bool) (Tagmap, error) {
 		if e != nil {
 			return nil, fmt.Errorf("bug - decoding tag[id:%d] offset:%d - %s", id, offset, e)
 		}
-		m[tag.name] = tagref{
-			offset: offset,
-			blen:   tlen,
-		}
-		offset += tlen
+		tag.id = id
+		tag.offset = offset
+		m[tag.name] = &tag
+
+		offset += int64(tlen)
 	}
 	// verify hdr.tagcnt
 	tagcnt := uint64(len(m))
 	if hdr.tagcnt != tagcnt {
-		return nil, fmt.Errorf("LoadTagmap - header - invalid tagcnt: %d loaded: %d ",
+		return nil, fmt.Errorf("LoadMap - header - invalid tagcnt: %d loaded: %d ",
 			hdr.tagcnt, tagcnt)
 	}
 
@@ -156,6 +163,7 @@ func LoadTagmap(fname string, create bool) (Tagmap, error) {
 		header: *hdr,
 		m:      m,
 		buf:    buf[headerSize:],
+		nextId: id + 1,
 	}
 
 	// build mapping to offsets
@@ -172,9 +180,6 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 	if hdr.ftype != tagmap_file_type {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid ftype: %04x ", hdr.ftype)
 	}
-	//	if hdr.flags != 0x00 {
-	//		return nil, fmt.Errorf("readAndVerifyHeader - invalid flags: %04x", hdr.flags)
-	//	}
 	if hdr.created == 0 || hdr.created > hdr.updated {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid created: %d ", hdr.created)
 	}
@@ -195,6 +200,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 			return nil, fmt.Errorf("readAndVerifyHeader - invalid reserved[%d]: %d", i, v)
 		}
 	}
+
 	return hdr, nil
 }
 
@@ -204,7 +210,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 // If error is not nil, attempt to sync is implicit (_, some-error)
 func (t *tagmap) Sync() (bool, error) {
 
-	if t.changeset == nil {
+	if !t.modified {
 		return false, nil
 	}
 
@@ -242,7 +248,7 @@ func (t *tagmap) Sync() (bool, error) {
 
 // creates a new gart tagmap file. This only writes the header.
 // File is closed on return.
-func createTagmapFile(fname string) error {
+func createMapFile(fname string) error {
 	var ops = os.O_WRONLY | os.O_APPEND
 	file, e := fs.OpenNewFile(fname, ops)
 	if e != nil {
@@ -270,14 +276,63 @@ func createTagmapFile(fname string) error {
 	return file.Sync()
 }
 
-func (t *tagmap) Add(tag string) (bool, error) {
-	panic(" - not implemented")
+// REVU gart is a tool and gart/tag is NOT a library function.
+//      illegal arguments or invalid state errors are bugs.
+func (t *tagmap) Add(tag string) bool {
+	if len(tag) == 0 {
+		panic(fmt.Errorf("bug - tag.Add: invalid argument - arg is zerolen"))
+	}
+
+	// tag names are case insensitive
+	tag = strings.ToLower(tag)
+
+	if _, found := t.m[tag]; found {
+		return false
+	}
+
+	var offset = t.header.buflen
+	var ptag = &Tag{
+		id:     t.nextId,
+		offset: offset,
+		flags:  0x00,
+		refcnt: 1,
+		name:   tag,
+	}
+	t.m[tag] = ptag
+	t.buf = append(t.buf, make([]byte, ptag.buflen())...)
+	n, e := ptag.encode(t.buf[offset:])
+	if e != nil {
+		panic(fmt.Errorf("bug - tagmap.Add: unexpected error - %s", e))
+	}
+	t.header.buflen += int64(n)
+	t.header.crc64 = digest.Checksum64(t.buf)
+	t.header.updated = time.Now().UnixNano()
+	// sanity check
+	if t.header.buflen != int64(len(t.buf)) {
+		panic(fmt.Errorf("bug - tagmap.Add: assert fail - header.buflen:%d len(t.buf):%d",
+			t.header.buflen, len(t.buf)))
+	}
+	t.nextId++
+
+	return true
 }
 
 func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
 	panic(" - not implemented")
 }
 
+// NOTE incr is updating tagmap.buf in place.
 func (t *tagmap) IncrRefcnt(tag string) (int, error) {
 	panic(" - not implemented")
+}
+
+// digest info suitable for log/debug
+func (h header) String() string {
+	return fmt.Sprintf("ctime:%d utime:%d crc:%016x buflen:%d tagcnt:%d",
+		h.created, h.updated, h.crc64, h.buflen, h.tagcnt)
+}
+
+// digest info suitable for log/debug
+func (t tagmap) String() string {
+	return fmt.Sprintf("%s next-id:%d", t.header, t.nextId)
 }
