@@ -245,44 +245,63 @@ func createMapFile(fname string) error {
 
 // REVU gart is a tool and gart/tag is NOT a library function.
 //      illegal arguments or invalid state errors are bugs.
-func (t *tagmap) Add(name string) (bool, error) {
+func (t *tagmap) Add(tagname string) (bool, error) {
 
 	// eat the cost of this minor struct alloc since all constraint
-	// checking and name normalization is already done in newTag
-	// offset is buflen as tag will be appended to t.buf
-	tag, e := newTag(name, t.nextId, t.header.buflen)
+	// checking and name normalization is already done in newTag.
+	// Offset is buflen as tag will be appended to t.buf
+	tag, e := newTag(tagname, t.nextId, t.header.buflen)
 	if e != nil {
-		return false, e
+		return false, fmt.Errorf("tagmap.Add: invalid argument - name %q", tagname)
 	}
 	if _, found := t.m[tag.name]; found {
 		return false, nil
 	}
 
+	// add tag
 	t.m[tag.name] = tag
 	t.buf = append(t.buf, make([]byte, tag.buflen())...)
 	n, e := tag.encode(t.buf[tag.offset:])
 	if e != nil {
 		panic(fmt.Errorf("bug - tagmap.Add: unexpected error - %s", e))
 	}
+
 	t.header.buflen += uint64(n)
-	t.header.crc64 = digest.Checksum64(t.buf)
-	t.header.updated = time.Now().Unix()
-	// sanity check
-	if t.header.buflen != uint64(len(t.buf)) {
-		panic(fmt.Errorf("bug - tagmap.Add: assert fail - header.buflen:%d len(t.buf):%d",
-			t.header.buflen, len(t.buf)))
-	}
+	t.header.tagcnt++
 	t.nextId++
 
+	t.onUpdate()
 	return true, nil
 }
 
-func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
-	panic(" - not implemented")
+func (t *tagmap) onUpdate() {
+	t.header.crc64 = digest.Checksum64(t.buf)
+	t.header.updated = time.Now().Unix()
+	t.modified = true
 }
 
-// NOTE incr is updating tagmap.buf in place.
-func (t *tagmap) IncrRefcnt(tag string) (int, error) {
+func (t *tagmap) IncrRefcnt(tagname string) (int, error) {
+	name, ok := normalizeName(tagname)
+	if !ok {
+		return 0, fmt.Errorf("tagmap.IncrRefcnt: invalid argument - name %q", tagname)
+	}
+	tag, found := t.m[name]
+	if !found {
+		return 0, fmt.Errorf("tagmap.IncrRefcnt: no such tag - name %q", tagname)
+	}
+
+	// update tag
+	tag.refcnt++
+	_, e := tag.encode(t.buf[tag.offset:]) // REVU this rewrites the entire tag ..
+	if e != nil {
+		panic(fmt.Errorf("bug - tagmap.IncrRefcnt: unexpected error - %s", e))
+	}
+
+	t.onUpdate()
+	return int(tag.refcnt), nil
+}
+
+func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
 	panic(" - not implemented")
 }
 

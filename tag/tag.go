@@ -33,21 +33,6 @@ type Tag struct {
 	offset uint64 // offset + headerBytes = offset in file
 }
 
-// assert invariants
-/*
-func init() {
-	assert := func(have, exp uintptr, s string) {
-		if have != exp {
-			panic(fmt.Errorf("bug - tag.Tag: assert fail: %s have:%d exp:%d", s, have, exp))
-		}
-	}
-	var t Tag
-	assert(unsafe.Offsetof(t.flags), flagsOffset, "flags offset")
-	assert(unsafe.Offsetof(t.refcnt), refcntOffset, "refcnt offset")
-	assert(unsafe.Offsetof(t.refcnt)+unsafe.Sizeof(t.refcnt), lenOffset, "len offset")
-}
-*/
-
 // Returns length of the binary representation. For name len, just len(t.name).
 func (t Tag) buflen() int { return prefixBytes + len(t.name) }
 
@@ -60,13 +45,21 @@ func (t Tag) Debug() string {
 		t.name, t.refcnt, t.flags, t.id, t.buflen())
 }
 
-// Tag name must be at most maxNameBytes long. Zerolen strings are not permitted.
-// Tag name is stored in lower-case, regardless of the input arg case.
-func newTag(name string, id int, offset uint64) (*Tag, error) {
+func normalizeName(name string) (string, bool) {
 	name = strings.ToLower(name) // in case this affects len for funky langs
 	length := len(name)
 	if length == 0 || length > maxNameBytes {
-		return nil, fmt.Errorf("tag.newTag: invalid argument - name len:%d", length)
+		return "", false
+	}
+	return name, true
+}
+
+// Tag name must be at most maxNameBytes long. Zerolen strings are not permitted.
+// Tag name is stored in lower-case, regardless of the input arg case.
+func newTag(tag string, id int, offset uint64) (*Tag, error) {
+	name, ok := normalizeName(tag)
+	if !ok {
+		return nil, fmt.Errorf("Tag.newTag: invalid argument - name %q", tag)
 	}
 	return &Tag{name: name, id: id, offset: offset}, nil
 }
