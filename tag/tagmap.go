@@ -5,7 +5,6 @@ package tag
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -17,42 +16,11 @@ import (
 
 // header related consts
 const (
-	headerSize       = 4096
-	tagmap_file_type = 0xd42b72e897893438 // sha256("tagmap-file")
+	headerBytes      = 4096               // minimum length of a tagmap.dat file
+	tagmap_file_code = 0xd42b72e897893438 // sha256("tagmap-file")[:8]
 )
 
 /// types /////////////////////////////////////////////////////////////////////
-
-// using an interface to facilitate swapping the implementation (thinking B-Tree).
-// REVU
-//		- tag is not a public library. it is intended for internal use only.
-//		- illegal arguments (such as tag length exceeding a limit, etc.)
-//      | illegal state (such as whatever) are BUGS and panic is perfectly ok.
-// REVU
-//		- just remember to always panic(error) so a uniform tool-level recover
-//		  can be written.
-// TODO
-//		- tag names are supposed to be case insensitive
-type Map interface {
-	Size() uint64
-	CreatedOn() int64
-	UpdatedOn() int64
-
-	// Adds a new tag.
-	// added is true if tag was indeed new. Otherwise false (with no error)
-	Add(string) (added bool)
-	// Increments the named tag's refcnt and returns the new refcnt.
-	// returns error if tag does not exist.
-	IncrRefcnt(string) (refcnt int, err error)
-	// returns ids of selected tags.
-	// notDefined is never nil. If not empty, it contains all
-	// tag names that are not defined.
-	SelectTags([]string) (ids []int, notDefined []string)
-	// Syncs the tagmap file. IFF the in-mem model has been modified
-	// changes are flushed to the disk. This is a blocking call.
-	//
-	Sync() (flushed bool, e error)
-}
 
 // fs block size (4k) header for the tagmap file
 type header struct {
@@ -61,7 +29,7 @@ type header struct {
 	updated  int64      // unix nano
 	crc64    uint64     // map data crc
 	tagcnt   uint64     // number of Tag entries
-	buflen   int64      // tag data bytes
+	buflen   uint64     // tag data bytes
 	reserved [4044]byte // reserved
 }
 
@@ -80,16 +48,15 @@ func init() {
 
 	// header size
 	var hdr header
-	if unsafe.Sizeof(hdr) != headerSize {
+	if unsafe.Sizeof(hdr) != headerBytes {
 		panic("bug - tagmap header struct size non-conformant")
 	}
 }
 
 // Size returns the number of tags
-func (t *tagmap) Size() uint64 { return t.header.tagcnt }
-
-func (t *tagmap) CreatedOn() int64 { return t.header.created }
-func (t *tagmap) UpdatedOn() int64 { return t.header.updated }
+func (t *tagmap) Size() uint64         { return t.header.tagcnt }
+func (t *tagmap) CreatedOn() time.Time { return time.Unix(t.header.created, 0) }
+func (t *tagmap) UpdatedOn() time.Time { return time.Unix(t.header.updated, 0) }
 
 // TODO correct the comment
 // Load loads tagmap from the named file. If file does not
@@ -134,8 +101,8 @@ func LoadMap(fname string, create bool) (Map, error) {
 	var mapsize = int(float64(hdr.tagcnt) * 1.25) // a bit larger to prevent resize
 	var m = make(map[string]*Tag, mapsize)
 	var id int
-	var offset = int64(headerSize)
-	for offset < int64(len(buf)) {
+	var offset = uint64(headerBytes)
+	for offset < uint64(len(buf)) {
 		id++
 		if id&0x7 == 0 { // skip multiples of 8 so we don't have to encode7 for BAH
 			id++
@@ -149,7 +116,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 		tag.offset = offset
 		m[tag.name] = &tag
 
-		offset += int64(tlen)
+		offset += uint64(tlen)
 	}
 	// verify hdr.tagcnt
 	tagcnt := uint64(len(m))
@@ -162,7 +129,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 		source: fname,
 		header: *hdr,
 		m:      m,
-		buf:    buf[headerSize:],
+		buf:    buf[headerBytes:],
 		nextId: id + 1,
 	}
 
@@ -171,13 +138,13 @@ func LoadMap(fname string, create bool) (Map, error) {
 }
 
 func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
-	if len(buf) < headerSize {
+	if len(buf) < headerBytes {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid buffer - len:%d", len(buf))
 	}
 
 	var hdr = (*header)(unsafe.Pointer(&buf[0]))
 
-	if hdr.ftype != tagmap_file_type {
+	if hdr.ftype != tagmap_file_code {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid ftype: %04x ", hdr.ftype)
 	}
 	if hdr.created == 0 || hdr.created > hdr.updated {
@@ -186,14 +153,14 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 	if hdr.updated == 0 {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid updated: %d ", hdr.updated)
 	}
-	var crc64 = digest.Checksum64(buf[headerSize:])
+	var crc64 = digest.Checksum64(buf[headerBytes:])
 	if hdr.crc64 != crc64 {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid crc64: %08x expect: %08x",
 			hdr.crc64, crc64)
 	}
-	if hdr.buflen != finfo.Size()-headerSize {
+	if hdr.buflen != uint64(finfo.Size())-headerBytes {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid buflen: %d expect: %d",
-			hdr.buflen, finfo.Size()-headerSize)
+			hdr.buflen, finfo.Size()-headerBytes)
 	}
 	for i, v := range hdr.reserved {
 		if v != 0x00 {
@@ -223,10 +190,10 @@ func (t *tagmap) Sync() (bool, error) {
 	defer sfile.Close()
 
 	// update relevant header bits. buflen should already be correct.
-	t.header.updated = time.Now().UnixNano()
+	t.header.updated = time.Now().Unix()
 	t.header.crc64 = digest.Checksum64(t.buf)
 
-	hdrbuf := *(*[headerSize]byte)(unsafe.Pointer(&t.header))
+	hdrbuf := *(*[headerBytes]byte)(unsafe.Pointer(&t.header))
 	_, e = sfile.Write(hdrbuf[:])
 	if e != nil {
 		return false, e
@@ -257,9 +224,9 @@ func createMapFile(fname string) error {
 	defer file.Close()
 
 	// the initial header.
-	var now = time.Now().UnixNano()
+	var now = time.Now().Unix()
 	var hdr header
-	hdr.ftype = tagmap_file_type
+	hdr.ftype = tagmap_file_code
 	//	hdr.flags = 0x00
 	hdr.created = now
 	hdr.updated = now
@@ -267,7 +234,7 @@ func createMapFile(fname string) error {
 	hdr.buflen = 0
 	hdr.crc64 = digest.Checksum64([]byte{})
 
-	var arr = *(*[headerSize]byte)(unsafe.Pointer(&hdr))
+	var arr = *(*[headerBytes]byte)(unsafe.Pointer(&hdr))
 	_, e = file.Write(arr[:])
 	if e != nil {
 		return e
@@ -278,43 +245,36 @@ func createMapFile(fname string) error {
 
 // REVU gart is a tool and gart/tag is NOT a library function.
 //      illegal arguments or invalid state errors are bugs.
-func (t *tagmap) Add(tag string) bool {
-	if len(tag) == 0 {
-		panic(fmt.Errorf("bug - tag.Add: invalid argument - arg is zerolen"))
+func (t *tagmap) Add(name string) (bool, error) {
+
+	// eat the cost of this minor struct alloc since all constraint
+	// checking and name normalization is already done in newTag
+	// offset is buflen as tag will be appended to t.buf
+	tag, e := newTag(name, t.nextId, t.header.buflen)
+	if e != nil {
+		return false, e
+	}
+	if _, found := t.m[tag.name]; found {
+		return false, nil
 	}
 
-	// tag names are case insensitive
-	tag = strings.ToLower(tag)
-
-	if _, found := t.m[tag]; found {
-		return false
-	}
-
-	var offset = t.header.buflen
-	var ptag = &Tag{
-		id:     t.nextId,
-		offset: offset,
-		flags:  0x00,
-		refcnt: 1,
-		name:   tag,
-	}
-	t.m[tag] = ptag
-	t.buf = append(t.buf, make([]byte, ptag.buflen())...)
-	n, e := ptag.encode(t.buf[offset:])
+	t.m[tag.name] = tag
+	t.buf = append(t.buf, make([]byte, tag.buflen())...)
+	n, e := tag.encode(t.buf[tag.offset:])
 	if e != nil {
 		panic(fmt.Errorf("bug - tagmap.Add: unexpected error - %s", e))
 	}
-	t.header.buflen += int64(n)
+	t.header.buflen += uint64(n)
 	t.header.crc64 = digest.Checksum64(t.buf)
-	t.header.updated = time.Now().UnixNano()
+	t.header.updated = time.Now().Unix()
 	// sanity check
-	if t.header.buflen != int64(len(t.buf)) {
+	if t.header.buflen != uint64(len(t.buf)) {
 		panic(fmt.Errorf("bug - tagmap.Add: assert fail - header.buflen:%d len(t.buf):%d",
 			t.header.buflen, len(t.buf)))
 	}
 	t.nextId++
 
-	return true
+	return true, nil
 }
 
 func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
@@ -325,6 +285,8 @@ func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
 func (t *tagmap) IncrRefcnt(tag string) (int, error) {
 	panic(" - not implemented")
 }
+
+// TODO do both Debug() and String()
 
 // digest info suitable for log/debug
 func (h header) String() string {

@@ -25,12 +25,15 @@ func main() {
 	}
 	fmt.Printf("%s\n", tags)
 
-	var tagNames = []string{"review", "unread", "pdf", "distributed-systems", "Pdf"}
+	var tagNames = []string{"review", "日本語", "unread", "pdf", "distributed-systems", "Pdf"}
 	for _, tag := range tagNames {
-		if tags.Add(tag) {
+		if ok, e := tags.Add(tag); ok {
 			fmt.Printf("op: add %q\n\t%s\n", tag, tags)
-		} else {
+			// TODO tags.Select(tag)
+		} else if e == nil {
 			fmt.Printf("add %q - it already exists\n", tag)
+		} else {
+			fmt.Printf("err - %s\n", e)
 		}
 	}
 }
