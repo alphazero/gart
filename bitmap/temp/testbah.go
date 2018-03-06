@@ -36,21 +36,21 @@ func run() error {
 
 	// match using the uncompressed bitmap - this should return TRUE
 	qbits = []int{1, 7, 9, 15, 95, 803, 805, 1025}
-	result := bmap.MatchAll(qbits...)
+	result := bmap.AllSet(qbits...)
 	fmt.Printf("result:%t\n\tqbits:%d\n\t bits:%d\n\n", result, qbits, bits)
 
 	println("-------")
 
 	// match using the bah07 compressed bitmap - this should return TRUE
 	qbits = []int{1, 7, 9, 15, 95, 803, 805, 1025}
-	result = bah.MatchAll(qbits...)
+	result = bah.AllSet(qbits...)
 	fmt.Printf("result:%t\n\tqbits:%d\n\t bits:%d\n\n", result, qbits, bits)
 
 	println("-------")
 
 	// match using the bah07 compressed bitmap -- this should return FALSE
 	qbits = []int{1, 7, 9, 15, 85, 803, 805, 1025}
-	result = bah.MatchAll(qbits...)
+	result = bah.AllSet(qbits...)
 	fmt.Printf("result:%t\n\tqbits:%d\n\t bits:%d\n\n", result, qbits, bits)
 
 	return nil
