@@ -32,15 +32,26 @@ func run() error {
 	bmap2 := bah.Decompress()
 	fmt.Printf("decompressed: %s\n\n", bmap2)
 
-	var qbits = []int{1, 7, 9, 15, 95, 803, 805, 1025}
-	allSet := bah.MatchAll(qbits...)
-	fmt.Printf("allSet:%t\n\tqbits:%d\n\t bits:%d\n\n", allSet, qbits, bits)
+	var qbits []int
+
+	// match using the uncompressed bitmap - this should return TRUE
+	qbits = []int{1, 7, 9, 15, 95, 803, 805, 1025}
+	result := bmap.MatchAll(qbits...)
+	fmt.Printf("result:%t\n\tqbits:%d\n\t bits:%d\n\n", result, qbits, bits)
 
 	println("-------")
 
+	// match using the bah07 compressed bitmap - this should return TRUE
+	qbits = []int{1, 7, 9, 15, 95, 803, 805, 1025}
+	result = bah.MatchAll(qbits...)
+	fmt.Printf("result:%t\n\tqbits:%d\n\t bits:%d\n\n", result, qbits, bits)
+
+	println("-------")
+
+	// match using the bah07 compressed bitmap -- this should return FALSE
 	qbits = []int{1, 7, 9, 15, 85, 803, 805, 1025}
-	allSet = bah.MatchAll(qbits...)
-	fmt.Printf("allSet:%t\n\tqbits:%d\n\t bits:%d\n\n", allSet, qbits, bits)
+	result = bah.MatchAll(qbits...)
+	fmt.Printf("result:%t\n\tqbits:%d\n\t bits:%d\n\n", result, qbits, bits)
 
 	return nil
 }

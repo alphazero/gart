@@ -120,8 +120,8 @@ func Decompress(bah []byte) []byte {
 	return bitmap
 }
 
-// bah.BitsSet
-func BitsSet(compressed []byte, bits ...int) bool {
+// REVU: this actually works with a normal bitmap as well.
+func BitsSet(bitmap []byte, bits ...int) bool {
 	bitslen := len(bits)
 
 	if bitslen == 0 {
@@ -134,42 +134,37 @@ func BitsSet(compressed []byte, bits ...int) bool {
 	var bit_0 int // initial bit covered by the byte block
 	var bit_n int // last bit covered by the byte block
 	var i int     // indexes bits - bits[i] always > bit_0
-	fmt.Printf("DEBUG - compressed: %08b\n", compressed)
-	//next_byte:
-	for bn, b := range compressed {
+
+	//	fmt.Printf("DEBUG - bitmap: %08b\n", bitmap)
+
+	for bn, b := range bitmap {
+		fmt.Printf("\t\t\tremaining bits to check : %d\n", bits[i:])
 		fmt.Printf("block:%d  b:%08b ", bn, b)
 		switch b & 0x80 {
 		case 0x80: // FILL
 			runlen := int(b&0x7f) << 3 // each FILL covers 8 bits
-			bit_n = bit_0 + runlen - 1
-			fmt.Printf(" FILL runlen:%d (%d, %d)\n", runlen, bit_0, bit_n)
+			bit_n = bit_0 + runlen     // - 1
+			fmt.Printf(" FILL [%d, %d) runlen:%d\n", bit_0, bit_n, runlen)
 			for i < bitslen {
 				// if any bit is in 0-Fill [bit_0, bit_n] return false
-				if bits[i] <= bit_n {
-					//					fmt.Printf("return F b:%08b _0:%d _n:%d bits[%d]:%d\n", b, bit_0, bit_n, i, bits[i])
+				if bits[i] < bit_n {
 					return false
 				}
-				//				fmt.Printf("continue b:%08b _0:%d _n:%d bits[%d]:%d\n", b, bit_0, bit_n, i, bits[i])
 				break
-				//				i++
 			}
-			//			bit_0 = bit_n + 1
 		default:
-			bit_n = bit_0 + 7
-			fmt.Printf(" FORM (%d, %d)\n", bit_0, bit_n)
+			bit_n = bit_0 + 8
+			fmt.Printf(" FORM [%d, %d)\n", bit_0, bit_n)
 			for i < bitslen {
 				bit := bits[i]
 				// if bit is beyond this byte's range
-				if bit > bit_n {
-					//					fmt.Printf("FORM break bit:%d bit_n:%d\n", bit, bit_n)
-					break //continue next_byte
+				if bit >= bit_n {
+					break
 				}
 				bitmask := byte(0x80 >> uint(bit&0x7))
 				if b&bitmask == 0 {
-					//					fmt.Printf("return F b:%08b _0:%d _n:%d bits[%d]:%d\n", b, bit_0, bit_n, i, bits[i])
 					return false
 				}
-				//				fmt.Printf("continue b:%08b _0:%d _n:%d bits[%d]:%d\n", b, bit_0, bit_n, i, bits[i])
 				i++
 			}
 		}
@@ -177,7 +172,7 @@ func BitsSet(compressed []byte, bits ...int) bool {
 			fmt.Printf("end-loop break i:%d bitslen:%d\n", i, bitslen)
 			break // or just return true
 		}
-		bit_0 = bit_n + 1
+		bit_0 = bit_n
 	}
 	return true
 }

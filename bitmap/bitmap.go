@@ -44,6 +44,14 @@ func (v Bitmap) Compress() CompressedBitmap {
 	return CompressedBitmap(Compress(v))
 }
 
+func (v Bitmap) MatchAll(bits ...int) bool {
+	return BitsSet(v, bits...)
+}
+
+func (v Bitmap) MatchAny(bits ...int) bool {
+	panic("Bitmap.MatchAny: not implemented")
+}
+
 /// CompressedBitmap //////////////////////////////////////////////////////////
 
 // Byte aligned variant of WAH bitmap compression
@@ -52,6 +60,7 @@ type CompressedBitmap []byte
 func (v CompressedBitmap) Decompress() Bitmap {
 	return Bitmap(Decompress(v))
 }
+
 func (v CompressedBitmap) MatchAny(bits ...int) bool {
 	panic("CompressedBitmap.MatchAny: not implemented")
 }
