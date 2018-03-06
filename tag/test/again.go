@@ -31,7 +31,7 @@ func main() {
 		panic("bug - sync() of unmodified tagmap returned an error")
 	}
 
-	var tagNames = []string{"love", "日本", "mp4", "mp3", "programming-language", "PLT"}
+	var tagNames = []string{"love", "Doost", "日本", "mp4", "mp3", "programming-language", "PLT"}
 
 	fmt.Println("/// add tags ///////////////////")
 	for _, tag := range tagNames {

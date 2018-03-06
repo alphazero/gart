@@ -1,10 +1,13 @@
 // Doost!
 
+/* tagmap.go: varlen record flatfile, map[] in-mem implementation of tag.Map */
+
 package tag
 
 import (
 	"fmt"
 	"os"
+	"sort"
 	"time"
 	"unsafe"
 
@@ -53,12 +56,13 @@ func init() {
 	}
 }
 
+/// interface: tag.Map ////////////////////////////////////////////////////////
+
 // Size returns the number of tags
 func (t *tagmap) Size() uint64         { return t.header.tagcnt }
 func (t *tagmap) CreatedOn() time.Time { return time.Unix(t.header.created, 0) }
 func (t *tagmap) UpdatedOn() time.Time { return time.Unix(t.header.updated, 0) }
 
-// TODO correct the comment
 // Load loads tagmap from the named file. If file does not
 // exist and create is true, it will create a zero-entry tagmap
 // file. If create is false and file does not exist, E_NotExists
@@ -95,7 +99,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 		return nil, e
 	}
 
-	/// create in-mem tagmap rep /////////////////////////////////////////////////
+	/// create in-mem tagmap rep -------------------------------------------------
 
 	// build the in-mem tagmap
 	var mapsize = int(float64(hdr.tagcnt) * 1.25) // a bit larger to prevent resize
@@ -137,40 +141,6 @@ func LoadMap(fname string, create bool) (Map, error) {
 	return tmap, nil
 }
 
-func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
-	if len(buf) < headerBytes {
-		return nil, fmt.Errorf("readAndVerifyHeader - invalid buffer - len:%d", len(buf))
-	}
-
-	var hdr = (*header)(unsafe.Pointer(&buf[0]))
-
-	if hdr.ftype != tagmap_file_code {
-		return nil, fmt.Errorf("readAndVerifyHeader - invalid ftype: %04x ", hdr.ftype)
-	}
-	if hdr.created == 0 || hdr.created > hdr.updated {
-		return nil, fmt.Errorf("readAndVerifyHeader - invalid created: %d ", hdr.created)
-	}
-	if hdr.updated == 0 {
-		return nil, fmt.Errorf("readAndVerifyHeader - invalid updated: %d ", hdr.updated)
-	}
-	var crc64 = digest.Checksum64(buf[headerBytes:])
-	if hdr.crc64 != crc64 {
-		return nil, fmt.Errorf("readAndVerifyHeader - invalid crc64: %08x expect: %08x",
-			hdr.crc64, crc64)
-	}
-	if hdr.buflen != uint64(finfo.Size())-headerBytes {
-		return nil, fmt.Errorf("readAndVerifyHeader - invalid buflen: %d expect: %d",
-			hdr.buflen, finfo.Size()-headerBytes)
-	}
-	for i, v := range hdr.reserved {
-		if v != 0x00 {
-			return nil, fmt.Errorf("readAndVerifyHeader - invalid reserved[%d]: %d", i, v)
-		}
-	}
-
-	return hdr, nil
-}
-
 // Sync changes (if any) to source file.
 // If tagmap has not changed since loading returns (false, nil)
 // Successful sync of a modified tagmap will return (true, nil)
@@ -206,36 +176,6 @@ func (t *tagmap) Sync() (bool, error) {
 	return true, nil
 }
 
-// creates a new gart tagmap file. This only writes the header.
-// File is closed on return.
-func createMapFile(fname string) error {
-	var ops = os.O_WRONLY | os.O_APPEND
-	file, e := fs.OpenNewFile(fname, ops)
-	if e != nil {
-		return e
-	}
-	defer file.Close()
-
-	// the initial header.
-	var now = time.Now().Unix()
-	var hdr header
-	hdr.ftype = tagmap_file_code
-	//	hdr.flags = 0x00
-	hdr.created = now
-	hdr.updated = now
-	hdr.tagcnt = 0
-	hdr.buflen = 0
-	hdr.crc64 = digest.Checksum64([]byte{})
-
-	var arr = *(*[headerBytes]byte)(unsafe.Pointer(&hdr))
-	_, e = file.Write(arr[:])
-	if e != nil {
-		return e
-	}
-
-	return file.Sync()
-}
-
 // REVU gart is a tool and gart/tag is NOT a library function.
 //      illegal arguments or invalid state errors are bugs.
 func (t *tagmap) Add(tagname string) (bool, error) {
@@ -267,13 +207,6 @@ func (t *tagmap) Add(tagname string) (bool, error) {
 	return true, nil
 }
 
-// updates tagmap checksum, timestamp, and dirty flag
-func (t *tagmap) onUpdate() {
-	t.header.crc64 = digest.Checksum64(t.buf)
-	t.header.updated = time.Now().Unix()
-	t.modified = true
-}
-
 func (t *tagmap) IncrRefcnt(tagname string) (int, error) {
 	name, ok := normalizeName(tagname)
 	if !ok {
@@ -295,9 +228,100 @@ func (t *tagmap) IncrRefcnt(tagname string) (int, error) {
 	return int(tag.refcnt), nil
 }
 
-func (t *tagmap) SelectTags([]string) (ids []int, notDefined []string) {
-	panic(" - not implemented")
+// NOTE output ids should be sorted ascending 1, 2, 7, ..., n
+func (t *tagmap) SelectTags(tags []string) (ids []int, notDefined []string) {
+	for _, s := range tags {
+		if name, ok := normalizeName(s); ok {
+			if tag, found := t.m[name]; found {
+				ids = append(ids, tag.id)
+			} else {
+				notDefined = append(notDefined, s)
+			}
+		} else { // s invalid REVU panic? {
+			notDefined = append(notDefined, s)
+		}
+	}
+
+	// sort ids ascending
+	sort.IntSlice(ids).Sort()
+
+	return
 }
+
+/// internal ops //////////////////////////////////////////////////////////////
+
+// creates a new gart tagmap file. This only writes the header.
+// File is closed on return.
+func createMapFile(fname string) error {
+	var ops = os.O_WRONLY | os.O_APPEND
+	file, e := fs.OpenNewFile(fname, ops)
+	if e != nil {
+		return e
+	}
+	defer file.Close()
+
+	// the initial header.
+	var now = time.Now().Unix()
+	var hdr header
+	hdr.ftype = tagmap_file_code
+	//	hdr.flags = 0x00
+	hdr.created = now
+	hdr.updated = now
+	hdr.tagcnt = 0
+	hdr.buflen = 0
+	hdr.crc64 = digest.Checksum64([]byte{})
+
+	var arr = *(*[headerBytes]byte)(unsafe.Pointer(&hdr))
+	_, e = file.Write(arr[:])
+	if e != nil {
+		return e
+	}
+
+	return file.Sync()
+}
+
+func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
+	if len(buf) < headerBytes {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid buffer - len:%d", len(buf))
+	}
+
+	var hdr = (*header)(unsafe.Pointer(&buf[0]))
+
+	if hdr.ftype != tagmap_file_code {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid ftype: %04x ", hdr.ftype)
+	}
+	if hdr.created == 0 || hdr.created > hdr.updated {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid created: %d ", hdr.created)
+	}
+	if hdr.updated == 0 {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid updated: %d ", hdr.updated)
+	}
+	var crc64 = digest.Checksum64(buf[headerBytes:])
+	if hdr.crc64 != crc64 {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid crc64: %08x expect: %08x",
+			hdr.crc64, crc64)
+	}
+	if hdr.buflen != uint64(finfo.Size())-headerBytes {
+		return nil, fmt.Errorf("readAndVerifyHeader - invalid buflen: %d expect: %d",
+			hdr.buflen, finfo.Size()-headerBytes)
+	}
+	for i, v := range hdr.reserved {
+		if v != 0x00 {
+			return nil, fmt.Errorf("readAndVerifyHeader - invalid reserved[%d]: %d", i, v)
+		}
+	}
+
+	return hdr, nil
+}
+
+// updates tagmap checksum, timestamp, and dirty flag
+func (t *tagmap) onUpdate() {
+	t.header.crc64 = digest.Checksum64(t.buf)
+	t.header.updated = time.Now().Unix()
+	t.modified = true
+}
+
+/// debug /////////////////////////////////////////////////////////////////////
 
 // TODO do both Debug() and String()
 
