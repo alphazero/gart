@@ -69,3 +69,7 @@ func SprintBuf(buf []byte) (s string) {
 	}
 	return
 }
+
+func DisplayBuf(label string, buf []byte) {
+	fmt.Printf("%s\n%s\n", label, SprintBuf(buf))
+}
