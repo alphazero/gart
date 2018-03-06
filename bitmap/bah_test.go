@@ -17,13 +17,13 @@ func init() {
 
 const sparse_density = 0.07
 
-func randomBitmap_7(size int) []byte {
-	return randomBitmap_7_density(size, sparse_density)
+func randomBitmap(size int) []byte {
+	return randomBitmap_density(size, sparse_density)
 }
 
 // size is number of bytes.
 // density [0.0, .9999..] is number of FORM bytes / size.
-func randomBitmap_7_density(size int, density float64) []byte {
+func randomBitmap_density(size int, density float64) []byte {
 	var bitmap []byte
 	p := int(1.0 / density)
 	// generate bits in sequence
@@ -38,8 +38,8 @@ func randomBitmap_7_density(size int, density float64) []byte {
 }
 
 func TestBahCompressBAH7(t *testing.T) {
-	bitmap := randomBitmap_7(64)
-	bah := Compress(bitmap)
+	bitmap := randomBitmap(64)
+	bah := compress(bitmap)
 	DisplayBuf("bitmap", bitmap)
 	DisplayBuf("bah07 ", bah)
 	if bah == nil {
@@ -49,9 +49,9 @@ func TestBahCompressBAH7(t *testing.T) {
 
 func TestBahDecompressBAH7(t *testing.T) {
 	// test
-	bitmap := randomBitmap_7(128 * 512)
-	compressed := Compress(bitmap)
-	result := Decompress(compressed)
+	bitmap := randomBitmap(128 * 512)
+	compressed := compress(bitmap)
+	result := decompress(compressed)
 
 	// result check
 	type expectation struct {
@@ -172,10 +172,10 @@ var benchmarks = []struct {
 
 func BenchmarkCompress(b *testing.B) {
 	for _, bm := range benchmarks {
-		bitmap := randomBitmap_7_density(bm.mapsize, bm.density)
+		bitmap := randomBitmap_density(bm.mapsize, bm.density)
 		b.Run(bm.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				Compress(bitmap)
+				compress(bitmap)
 			}
 		})
 	}
@@ -183,11 +183,11 @@ func BenchmarkCompress(b *testing.B) {
 
 func BenchmarkDecompress(b *testing.B) {
 	for _, bm := range benchmarks {
-		bitmap := randomBitmap_7_density(bm.mapsize, bm.density)
-		compressed := Compress(bitmap)
+		bitmap := randomBitmap_density(bm.mapsize, bm.density)
+		compressed := compress(bitmap)
 		b.Run(bm.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				Decompress(compressed)
+				decompress(compressed)
 			}
 		})
 	}
@@ -227,7 +227,7 @@ func BenchmarkGetBits(b *testing.B) {
 	selection := randomSelection(5, 0, size*7)
 	println(len(selection))
 	//	println("--")
-	bitmap := randomBitmap_7_density(size, 0.01)
+	bitmap := randomBitmap_density(size, 0.01)
 	println(len(bitmap))
 	compressed := Compress(bitmap)
 	println(len(compressed))
@@ -241,7 +241,7 @@ func BenchmarkSelectsAll(b *testing.B) {
 	b.StopTimer()
 	size := 32 << 2
 	selection := randomSelection(9, 0, size*7)
-	bitmap := randomBitmap_7_density(size, 0.01)
+	bitmap := randomBitmap_density(size, 0.01)
 	compressed := Compress(bitmap)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {

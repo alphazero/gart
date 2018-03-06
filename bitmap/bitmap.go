@@ -7,11 +7,11 @@ import (
 	"sort"
 )
 
-/// Bitmap ////////////////////////////////////////////////////////////////////
+/// bitmap_t ////////////////////////////////////////////////////////////////////
 
-type Bitmap []byte // REVU rename to bitmap
+type bitmap_t []byte // REVU rename to bitmap
 
-type Ops interface { // REVU: maybe better to rename to Bitmap see ^^
+type Bitmap interface { // REVU: maybe better to rename to bitmap_t see ^^
 	AnySet(bits ...int) bool
 	AllSet(bits ...int) bool
 	NoneSet(bits ...int) bool // REVU is this just !AllSet() but reads better
@@ -25,10 +25,10 @@ type Ops interface { // REVU: maybe better to rename to Bitmap see ^^
 // x---*--- x*-----* x---*--- x----*-- x-*-----     group hi bit x is never set
 //     4     9    15     20        29    34         bits
 //
-func Build(bits ...int) Bitmap {
+func Build(bits ...int) bitmap_t {
 	sort.IntSlice(bits).Sort()
 	max := bits[len(bits)-1]
-	var bitmap = Bitmap(make([]byte, (max>>3)+1))
+	var bitmap = bitmap_t(make([]byte, (max>>3)+1))
 
 	for _, bit := range bits {
 		i := uint(bit)
@@ -43,56 +43,56 @@ func Build(bits ...int) Bitmap {
 }
 
 // byte aligned variant of WAH
-func (v Bitmap) Compress() CompressedBitmap {
-	return CompressedBitmap(compress(v))
+func (v bitmap_t) Compress() compressed_t {
+	return compressed_t(compress(v))
 }
 
-func (v Bitmap) AllSet(bits ...int) bool {
+func (v bitmap_t) AllSet(bits ...int) bool {
 	return allSet(v, bits...)
 }
 
-func (v Bitmap) NoneSet(bits ...int) bool {
+func (v bitmap_t) NoneSet(bits ...int) bool {
 	return !allSet(v, bits...)
 }
 
-func (v Bitmap) AnySet(bits ...int) bool {
+func (v bitmap_t) AnySet(bits ...int) bool {
 	return anySet(v, bits...)
 }
 
-func (v Bitmap) String() (s string) {
+func (v bitmap_t) String() (s string) {
 	return SprintBuf([]byte(v))
 }
 
-func (v Bitmap) Debug() {
+func (v bitmap_t) Debug() {
 	DisplayBuf("bitmap", []byte(v))
 }
 
-/// CompressedBitmap //////////////////////////////////////////////////////////
+/// compressed_t //////////////////////////////////////////////////////////
 
 // Byte aligned variant of WAH bitmap compression
-type CompressedBitmap []byte
+type compressed_t []byte
 
-func (v CompressedBitmap) Decompress() Bitmap {
-	return Bitmap(decompress(v))
+func (v compressed_t) Decompress() bitmap_t {
+	return bitmap_t(decompress(v))
 }
 
-func (v CompressedBitmap) AnySet(bits ...int) bool {
+func (v compressed_t) AnySet(bits ...int) bool {
 	return anySet(v, bits...)
 }
 
-func (v CompressedBitmap) AllSet(bits ...int) bool {
+func (v compressed_t) AllSet(bits ...int) bool {
 	return allSet(v, bits...)
 }
 
-func (v CompressedBitmap) NoneSet(bits ...int) bool {
+func (v compressed_t) NoneSet(bits ...int) bool {
 	return !allSet(v, bits...)
 }
 
-func (v CompressedBitmap) String() (s string) {
+func (v compressed_t) String() (s string) {
 	return SprintBuf([]byte(v))
 }
 
-func (v CompressedBitmap) Debug() {
+func (v compressed_t) Debug() {
 	DisplayBuf("compressed", []byte(v))
 }
 

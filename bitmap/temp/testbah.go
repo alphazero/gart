@@ -4,9 +4,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/alphazero/gart/bitmap"
 	"math/rand"
 	"time"
+
+	"github.com/alphazero/gart/bitmap"
 )
 
 var rnd = rand.New(rand.NewSource(333))
