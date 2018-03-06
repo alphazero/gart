@@ -36,7 +36,7 @@ func Build(bits ...int) Bitmap {
 }
 
 func (v Bitmap) String() (s string) {
-	return SprintBytes([]byte(v))
+	return SprintBuf([]byte(v))
 }
 
 // byte aligned variant of WAH
@@ -58,12 +58,12 @@ func (v CompressedBitmap) MatchAll(bit ...int) bool {
 }
 
 func (v CompressedBitmap) String() (s string) {
-	return SprintBytes([]byte(v))
+	return SprintBuf([]byte(v))
 }
 
 /// santa's little helpers /////////////////////////////////////////////////////
 
-func SprintBytes(buf []byte) (s string) {
+func SprintBuf(buf []byte) (s string) {
 	for _, b := range buf {
 		s += fmt.Sprintf(" %08b", b)
 	}
