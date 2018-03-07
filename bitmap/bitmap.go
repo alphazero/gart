@@ -9,12 +9,12 @@ import (
 
 /// bitmap_t ////////////////////////////////////////////////////////////////////
 
-type bitmap_t []byte // REVU rename to bitmap
+type bitmap_t []byte
 
-type Bitmap interface { // REVU: maybe better to rename to bitmap_t see ^^
+type Bitmap interface {
 	AnySet(bits ...int) bool
 	AllSet(bits ...int) bool
-	NoneSet(bits ...int) bool // REVU is this just !AllSet() but reads better
+	NoneSet(bits ...int) bool
 }
 
 //    0        1        2        3        4      ... byte
@@ -47,14 +47,17 @@ func (v bitmap_t) Compress() compressed_t {
 	return compressed_t(compress(v))
 }
 
+// Returns true if all bits are sest in the bitmap
 func (v bitmap_t) AllSet(bits ...int) bool {
 	return allSet(v, bits...)
 }
 
+// Returns true if none of the bits are sest in the bitmap
 func (v bitmap_t) NoneSet(bits ...int) bool {
 	return !allSet(v, bits...)
 }
 
+// Returns true if any of the bits are sest in the bitmap
 func (v bitmap_t) AnySet(bits ...int) bool {
 	return anySet(v, bits...)
 }
@@ -76,14 +79,17 @@ func (v compressed_t) Decompress() bitmap_t {
 	return bitmap_t(decompress(v))
 }
 
+// Returns true if any of the bits are sest in the bitmap
 func (v compressed_t) AnySet(bits ...int) bool {
 	return anySet(v, bits...)
 }
 
+// Returns true if all bits are sest in the bitmap
 func (v compressed_t) AllSet(bits ...int) bool {
 	return allSet(v, bits...)
 }
 
+// Returns true if of the bits bits are sest in the bitmap
 func (v compressed_t) NoneSet(bits ...int) bool {
 	return !allSet(v, bits...)
 }
