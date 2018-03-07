@@ -4,9 +4,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/alphazero/gart/tag"
 	"os"
 	"time"
+
+	"github.com/alphazero/gart/tag"
 )
 
 func main() {
