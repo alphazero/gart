@@ -32,12 +32,12 @@ var gartDirs = []string{
 
 // gart metadata and index files
 const (
-	tagsdefFile  = "tags/TAGS"
-	tagIndexFile = "index/INDEX"
-	devicesFile  = "path/DEVICES"
+	tagsdefFile         = "tags/TAGS"
+	objecttagsIndexFile = "index/OID-TAGS"
+	devicesFile         = "paths/DEVICES"
 )
 
-/// initialization & process boot /////////////////////////////////////////////
+/// gart initialization & process boot ////////////////////////////////////////
 
 // Verify existing gart repo or initialize the minimal structure.
 //
@@ -64,23 +64,26 @@ func initGart(pi processInfo) error {
 		panic(e)
 	}
 
-	var fname string
 	// TODO create minimal/initial gart files
+	var fname string
 
-	// tag definitions file
+	// tag definitions file created on tagmap load.
+	// Note that tag.LoadMap immediately closes file.
 	fname = filepath.Join(pi.gartDir, tagsdefFile)
 	_, e := tag.LoadMap(fname, true)
 	if e != nil {
 		return e
 	}
-	// verify
-	if e := fs.VerifyFile(fname); e != nil {
-		panic(fmt.Errorf("bug - initGart: verification of %s failed - err: %v", fname, e))
-	}
 
-	// index
-	// etc
-	panic("initGart - is incomplete")
+	// oid-tags index
+	fname = filepath.Join(pi.gartDir, objecttagsIndexFile)
+	fmt.Fprintf(os.Stderr, "WARNING - gart.initGart: %s creation is TODO\n", fname)
+
+	// devices index
+	fname = filepath.Join(pi.gartDir, devicesFile)
+	fmt.Fprintf(os.Stderr, "WARNING - gart.initGart: %s creation is TODO\n", fname)
+
+	return nil
 }
 
 func verifyGartRepo(pi processInfo) error {
@@ -89,8 +92,13 @@ func verifyGartRepo(pi processInfo) error {
 		return e
 	}
 
-	// verify .gart/ minimal files
-	// .gart/tag/tags
-	// .gart/path/devices
-	panic("verifyGartRepo - is imcomplete")
+	files := []string{tagsdefFile, objecttagsIndexFile, devicesFile}
+	for _, file := range files {
+		fname := filepath.Join(pi.gartDir, file)
+		// verify
+		if e := fs.VerifyFile(fname); e != nil {
+			return e
+		}
+	}
+	return nil
 }

@@ -129,7 +129,7 @@ func VerifyDir(path string) error {
 		return e
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("verify error - not a directory: %s", path)
+		return fmt.Errorf("err - fs.verifyDir - not a directory: %s", path)
 	}
 	return nil
 }
@@ -141,7 +141,7 @@ func VerifyFile(path string) error {
 		return e
 	}
 	if !fi.Mode().IsRegular() {
-		return fmt.Errorf("verify error - not a regular file: %s", path)
+		return fmt.Errorf("err - fs.verifyFile - not a regular file: %s", path)
 	}
 	return nil
 }
@@ -150,10 +150,10 @@ func VerifyFile(path string) error {
 func verifyFileOrDir(path string, expectedPerm os.FileMode) (os.FileInfo, error) {
 	fi, e := os.Stat(path)
 	if e != nil {
-		return fi, fmt.Errorf("verify error - %s", e)
+		return fi, fmt.Errorf("err - fs.VerifyFileOrDir - %s", e)
 	}
 	if perm := fi.Mode() & os.ModePerm; perm != expectedPerm {
-		return fi, fmt.Errorf("verify error - invalid permission: %o %s", perm, path)
+		return fi, fmt.Errorf("err - fs.verifyFileOrDir - invalid permission: %o %s", perm, path)
 	}
 	return fi, nil
 }
