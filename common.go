@@ -67,7 +67,7 @@ try: // if forcing a re-init, we try twice
 		if e != nil {
 			if force {
 				if !silent {
-					fmt.Fprintln(pi.meta, "gart-init: removing existing repo at %q", pi.gartDir)
+					fmt.Fprintf(pi.meta, "gart-init: removing existing repo at %q\n", pi.gartDir)
 				}
 				if rme := os.RemoveAll(pi.gartDir); rme != nil {
 					panic(rme) // bug or system error
