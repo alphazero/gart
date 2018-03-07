@@ -11,6 +11,9 @@ import (
 
 type bitmap_t []byte
 
+// Generalized bitmap ops (compressed or not).
+// For all functions in this interface, the in-arg bits array
+// must be in ascending sort order.
 type Bitmap interface {
 	AnySet(bits ...int) bool
 	AllSet(bits ...int) bool
@@ -54,7 +57,7 @@ func (v bitmap_t) AllSet(bits ...int) bool {
 
 // Returns true if none of the bits are sest in the bitmap
 func (v bitmap_t) NoneSet(bits ...int) bool {
-	return !allSet(v, bits...)
+	return noneSet(v, bits...)
 }
 
 // Returns true if any of the bits are sest in the bitmap
@@ -91,7 +94,7 @@ func (v compressed_t) AllSet(bits ...int) bool {
 
 // Returns true if of the bits bits are sest in the bitmap
 func (v compressed_t) NoneSet(bits ...int) bool {
-	return !allSet(v, bits...)
+	return noneSet(v, bits...)
 }
 
 func (v compressed_t) String() (s string) {

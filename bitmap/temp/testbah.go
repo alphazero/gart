@@ -54,5 +54,19 @@ func run() error {
 	result = bah.AllSet(qbits...)
 	fmt.Printf("result:%t\n\tqbits:%d\n\t bits:%d\n\n", result, qbits, bits)
 
+	println("-------")
+
+	// expect false
+	qbits = []int{3, 6, 10, 14, 87, 801, 807, 102}
+	result = bah.NoneSet(qbits...)
+	fmt.Printf("non-set result:%t\n\tqbits:%d\n\n", result, qbits)
+
+	println("-------")
+
+	// expect true (803)
+	qbits = []int{3, 6, 10, 14, 87, 803, 807, 102}
+	result = bah.AnySet(qbits...)
+	fmt.Printf("any-set result:%t\n\tqbits:%d\n\n", result, qbits)
+
 	return nil
 }

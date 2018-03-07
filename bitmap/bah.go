@@ -35,7 +35,6 @@ var fillPattern [127]byte
 
 /// compression - decompression ///////////////////////////////////////////////
 
-// expects a 7bit segmented array
 // Compress expects a 7bit-encoded array, meaning each element of in-arg bitmap
 // is expected to have 0 at its MSB. Contrary input is treated as bug.
 //
@@ -95,7 +94,9 @@ makefill:
 	return
 }
 
-// returns a 7bit segmented slice. In-arg is not modified.
+// Returns the decompressed psuedo 7bit encoded array.
+// If in-arg is already decompressed the result will be identical.
+// The input arg is not modified.
 func decompress(bah []byte) []byte {
 	var nopmap [1]byte
 	var bahlen = len(bah)
@@ -120,14 +121,12 @@ func decompress(bah []byte) []byte {
 	return bitmap
 }
 
-// REVU: this would work well with a generalized bitmap.getBits(bitnums...int) []bool
-//
-func anySet(bitmap []byte, bits ...int) bool {
-	panic("bitmap.anySet: not implemented")
-}
-
 // allSet returns true if all the in-arg bits are set in the
-// in-arg bitmap.
+// in-arg bitmap. Input arg is expected to be a 7bit encoded
+// array as the MSB is treated as the BAH control bit.
+// Passing a decompressed array is fine but is a waste of cpu time.
+//
+// Note: bits must be in ascending sort order.
 func allSet(bitmap []byte, bits ...int) bool {
 	bitslen := len(bits)
 
@@ -135,15 +134,11 @@ func allSet(bitmap []byte, bits ...int) bool {
 		return false
 	}
 
-	// for each byte in the compressed bitmap, check if any bit
-	// in the block range are set.
-
 	var bit_0 int // initial bit covered by the byte block
 	var bit_n int // last bit covered by the byte block
 	var i int     // indexes bits - bits[i] always > bit_0
 
 	//	fmt.Printf("DEBUG - bitmap: %08b\n", bitmap)
-
 	for bn, b := range bitmap {
 		fmt.Printf("\t\t\tremaining bits to check : %d\n", bits[i:])
 		fmt.Printf("block:%d  b:%08b ", bn, b)
@@ -153,9 +148,8 @@ func allSet(bitmap []byte, bits ...int) bool {
 			bit_n = bit_0 + runlen     // - 1
 			fmt.Printf(" FILL [%d, %d) runlen:%d\n", bit_0, bit_n, runlen)
 			for i < bitslen {
-				// if any bit is in 0-Fill [bit_0, bit_n] return false
 				if bits[i] < bit_n {
-					return false
+					return false // bit is in 0-Fill [bit_0, bit_n]
 				}
 				break
 			}
@@ -164,9 +158,8 @@ func allSet(bitmap []byte, bits ...int) bool {
 			fmt.Printf(" FORM [%d, %d)\n", bit_0, bit_n)
 			for i < bitslen {
 				bit := bits[i]
-				// if bit is beyond this byte's range
 				if bit >= bit_n {
-					break
+					break // bit is beyond this byte's range
 				}
 				bitmask := byte(0x80 >> uint(bit&0x7))
 				if b&bitmask == 0 {
@@ -184,72 +177,106 @@ func allSet(bitmap []byte, bits ...int) bool {
 	return true
 }
 
-/*
-/// more ops TODO /////////////////////////////////////////////////////////////
+// Return the corresponding boolean value of the in-arg bit posiitons.
+// TODO decide regarding the bit positions outside of the range of the bitmap.
+//
+// Note: bits must be in ascending sort order.
+// TODO TEST!
+func getBitvals(bitmap []byte, bits ...int) []bool {
+	bitslen := len(bits)
 
-// GetBits returns selected bits of compressed bitmap, as array of bool,
-// corresponding to the n ...arg. NOTE that n[]  must be in ascending
-// sort order. For example, if n = {1, 3, 99} and bitval[] = {true, false, true},
-// then the mapping is {1->true, 3->false, 99->true}.
-//
-// Note thta function will not check if input is in fact sorted, and this is
-// delegated to the call site.
-//
-// TODO numbering the bits [1, n] or [0, n) ?
-//
-// If any bit number exceeds the length of the decompressed bitmap, it will be returned
-// in the returned out-of-bounds 'oob' array. Per above example, if the decompressed
-// bitmap has only 64 bits, then results will be bitval[]={true, false}, and
-// oob[]={99}.
-//
-// Function will never return nil values for either bitval[] or oob[].
-//
-// Function will panic if bitmap[] arg is nil.
-func GetBits(bitmap []byte, n ...int) (bitval []bool, oob []int) {
-	var nlen = len(n)
-	if nlen == 0 {
-		return
+	if bitslen == 0 {
+		return []bool{}
 	}
 
-	var boolVal = [2]bool{false, true}
-	var nidx int // indexes in-arg n
-next_block:
-	for bn, block := range bitmap {
-		from := (bn << 3) - bn
-		switch block & 0x80 {
-		case 0x80:
-			fill := (block & 0x40) >> 6
-			rlen := int(block & 0x3f)
-			to := from + (7 * rlen)
-			for nidx < nlen {
-				//				bitnum := n[nidx]
-				if n[nidx] >= to {
-					continue next_block
+	var bitvals = make([]bool, bitslen) // results
+	var bit_0 int                       // initial bit covered by the byte block
+	var bit_n int                       // last bit covered by the byte block
+	var i int                           // indexes bits & bitvals - bits[i] always > bit_0
+
+	//	fmt.Printf("DEBUG - bitmap: %08b\n", bitmap)
+	for bn, b := range bitmap {
+		fmt.Printf("\t\t\tremaining bits to check : %d\n", bits[i:])
+		fmt.Printf("block:%d  b:%08b ", bn, b)
+		switch b & 0x80 {
+		case 0x80: // FILL
+			runlen := int(b&0x7f) << 3 // each FILL covers 8 bits
+			bit_n = bit_0 + runlen     // - 1
+			fmt.Printf(" FILL [%d, %d) runlen:%d\n", bit_0, bit_n, runlen)
+			for i < bitslen {
+				if bits[i] >= bit_n {
+					break // bit is beyond this byte's range
 				}
-				bitval = append(bitval, boolVal[fill])
-				nidx++
+				bitvals[i] = false // 'application'
+				i++
 			}
 		default:
-			to := from + 7
-			for nidx < nlen {
-				bitnum := n[nidx]
-				if bitnum >= to {
-					continue next_block
+			bit_n = bit_0 + 8
+			fmt.Printf(" FORM [%d, %d)\n", bit_0, bit_n)
+			for i < bitslen {
+				bit := bits[i]
+				if bit >= bit_n {
+					break // bit is beyond this byte's range
 				}
-				shift := uint(to - bitnum - 1)
-				v := (block >> shift) & 0x01
-				bitval = append(bitval, boolVal[v]) // REVU: here we perform the logical op
-				nidx++
+				bitmask := byte(0x80 >> uint(bit&0x7))
+				bitvals[i] = b&bitmask != 0
+				i++
 			}
 		}
-		if nidx == nlen {
-			break
+		if i == bitslen {
+			fmt.Printf("end-loop break i:%d bitslen:%d\n", i, bitslen)
+			break // or just return true
 		}
+		bit_0 = bit_n
 	}
-	if nidx < nlen {
-		oob = n[nidx:]
-	}
-	return
+	return bitvals
 }
 
-*/
+// Returns true if any of the bit values are set.
+// REVU this impl. is not the most efficient as getBitvals traverses  the entire
+// bits array, where as (like in allSet) we simply want to return as soon as we
+// hit a bit that is set.
+// REVU just dup & modify the code from getBitsedicate func in-arg.
+// TODO test!
+func anySet(bitmap []byte, bits ...int) bool {
+	bitvals := getBitvals(bitmap, bits...)
+	for _, b := range bitvals {
+		if b {
+			return true
+		}
+	}
+	return false
+}
+
+// REVU this has to iterate over the full bits...
+func noneSet(bitmap []byte, bits ...int) bool {
+	bitvals := getBitvals(bitmap, bits...)
+	fmt.Printf("DEBUG - bits  s: %d\n", bits)
+	fmt.Printf("DEBUG - bitvals: %t\n", bitvals)
+	for i, b := range bitvals {
+		if b {
+			println(i)
+			return false
+		}
+	}
+	return true
+}
+
+// XXX
+// REVU this really should be an object (since it needs state)
+// and then the if/then statements in allSet/getBitvals are actually
+// in that object. The iterator simply walks the compressed array and
+// switched on block type. So we basically save a loop and switch
+// code de-dup at the cost of possible inefficiencies and less strightforward
+// code.
+type application func(b bool) (halt bool, result interface{})
+
+func apply(b []byte, fn application) interface{} {
+	// REVU it just gets too complicated.
+	//      consider AllSet, for example.
+	//      also it needs an accum. of some sort.
+	//      Go is not the right language for this. Here is one for FP.
+	panic("not a good idea :)")
+}
+
+// XXX
