@@ -22,9 +22,12 @@ type processInfo struct {
 	wd      string     // process working dir
 	user    *user.User // process user
 	gartDir string     // gart home
+	in      io.Reader  // process input stream   REVU not sure if necessary
+	out     io.Writer  // process output stream  REVU not sure if necessary
+	meta    io.Writer  // process out-of-band output stream
 }
 
-func getProcessInfo() (processInfo, error) {
+func getProcessInfo(in io.Reader, out, meta io.Writer) (processInfo, error) {
 	var pi processInfo
 	user, e := user.Current()
 	if e != nil {
@@ -38,6 +41,9 @@ func getProcessInfo() (processInfo, error) {
 	pi.name = filepath.Base(os.Args[0])
 
 	pi.gartDir = filepath.Join(user.HomeDir, gartDir)
+	pi.in = in
+	pi.out = out
+	pi.meta = meta
 
 	return pi, nil
 }
@@ -106,7 +112,7 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 
 	// REVU error here is fundamentally fatal
 	// prepare for processing.
-	ctx, e := processPrepare()
+	ctx, e := processPrepare(in, out, meta)
 	if e != nil {
 		onError(meta, e)
 		return e

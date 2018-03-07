@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
@@ -27,7 +28,7 @@ func checkFlags() error {
 	return nil
 }
 
-// Each process determines the run mode per its cmd-lien options pattern
+// Each process determines the run mode per its cmd-line options pattern
 func processMode() Mode {
 	if flags.NArg() == 0 {
 		return Piped
@@ -46,20 +47,22 @@ type State struct {
 /// command processing ////////////////////////////////////////////////////////
 
 // pre:
-func processPrepare() (context.Context, error) {
+func processPrepare(in io.Reader, out, meta io.Writer) (context.Context, error) {
 
 	// setup command context & state
 	var state State
 	ctx := context.WithValue(context.Background(), "state", &state)
 
-	pi, e := getProcessInfo()
+	pi, e := getProcessInfo(in, out, meta)
 	if e != nil {
 		return nil, e
 	}
 	state.pi = pi
 
-	if e := initOrVerifyGart(pi); e != nil {
-		return ctx, e
+	//	if e := initOrVerifyGart(pi); e != nil {
+	if e := initOrVerifyGart(pi, false); e != nil {
+		fmt.Fprintln(pi.meta, e)
+		return ctx, fmt.Errorf("fatal - gart repo not initialized. run 'gart-init'")
 	}
 
 	// TODO open .gart/index/tags.idx in APPEND mode.

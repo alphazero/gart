@@ -45,9 +45,9 @@ const (
 // is missing, treat it as a corrupted repo and panic.
 //
 // Check permissions and if not as expected, treat it as a corrupted repo and panic.
-func initOrVerifyGart(pi processInfo) error {
+func initOrVerifyGart(pi processInfo, silentInit bool) error {
 	// is this the first use?
-	if _, err := os.Stat(pi.gartDir); os.IsNotExist(err) {
+	if _, err := os.Stat(pi.gartDir); os.IsNotExist(err) && silentInit {
 		initGart(pi)
 	}
 
