@@ -3,4 +3,4 @@
 #mkdir bin #if not exits ..
 
 go build -o bin/gart-init process.go common.go gart-init.go
-go build -o bin/gart-add process.go common.go add.go
+go build -o bin/gart-add process.go common.go gart-add.go
