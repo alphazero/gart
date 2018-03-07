@@ -45,10 +45,11 @@ const (
 // is missing, treat it as a corrupted repo and panic.
 //
 // Check permissions and if not as expected, treat it as a corrupted repo and panic.
+// REVU anything other than init should just call verifyGart TODO REMOVE THIS
 func initOrVerifyGart(pi processInfo, silentInit bool) error {
 	// is this the first use?
 	if _, err := os.Stat(pi.gartDir); os.IsNotExist(err) && silentInit {
-		initGart(pi)
+		initGart(pi, false, false)
 	}
 
 	return verifyGartRepo(pi)
@@ -57,14 +58,29 @@ func initOrVerifyGart(pi processInfo, silentInit bool) error {
 
 // panics if init is called for an already initialized gart (REVU for now).
 // Errors should be considered fail-stop.
-func initGart(pi processInfo) error {
-	if e := fs.WalkDirs(pi.user.HomeDir, gartDirs, func(path string) error {
-		return os.Mkdir(path, fs.DirPerm)
-	}); e != nil {
-		panic(e)
+func initGart(pi processInfo, force, silent bool) error {
+try: // if forcing a re-init, we try twice
+	for {
+		e := fs.WalkDirs(pi.user.HomeDir, gartDirs, func(path string) error {
+			return os.Mkdir(path, fs.DirPerm)
+		})
+		if e != nil {
+			if force {
+				if !silent {
+					fmt.Fprintln(pi.meta, "gart-init: removing existing repo at %q", pi.gartDir)
+				}
+				if rme := os.RemoveAll(pi.gartDir); rme != nil {
+					panic(rme) // bug or system error
+				}
+				force = false
+				goto try
+			}
+			fmt.Sprintln(pi.meta, e)
+			return fmt.Errorf("gart.InitGart: %s", e)
+		}
+		break
 	}
 
-	// TODO create minimal/initial gart files
 	var fname string
 
 	// tag definitions file created on tagmap load.
@@ -75,10 +91,12 @@ func initGart(pi processInfo) error {
 		return e
 	}
 
+	// TODO create minimal/initial gart files
 	// oid-tags index
 	fname = filepath.Join(pi.gartDir, objecttagsIndexFile)
 	fmt.Fprintf(os.Stderr, "WARNING - gart.initGart: %s creation is TODO\n", fname)
 
+	// TODO create minimal/initial gart files
 	// devices index
 	fname = filepath.Join(pi.gartDir, devicesFile)
 	fmt.Fprintf(os.Stderr, "WARNING - gart.initGart: %s creation is TODO\n", fname)

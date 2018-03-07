@@ -136,7 +136,8 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 	var r = bufio.NewReader(in)
 	var w = bufio.NewWriter(out)
 	defer func() { w.Flush() }()
-	for {
+	var abort bool
+	for !abort {
 		line, e := r.ReadBytes('\n')
 		if e == io.EOF {
 			break
@@ -149,8 +150,8 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 
 		result, e, abort := process(ctx, line[:len(line)-1])
 		if abort {
-			onError(meta, e)
-			err = e
+			//			onError(meta, e)
+			//			err = e
 			break
 		}
 		if e != nil {

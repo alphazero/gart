@@ -53,6 +53,7 @@ func processPrepare(in io.Reader, out, meta io.Writer) (context.Context, error) 
 	var state State
 	ctx := context.WithValue(context.Background(), "state", &state)
 
+	// REVU TODO this sh/could be in process-base (process.go)
 	pi, e := getProcessInfo(in, out, meta)
 	if e != nil {
 		return nil, e
