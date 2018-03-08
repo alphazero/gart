@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
@@ -47,41 +46,22 @@ type State struct {
 /// command processing ////////////////////////////////////////////////////////
 
 // pre:
-func processPrepare(in io.Reader, out, meta io.Writer) (context.Context, error) {
+func cmdPrepare(pi processInfo) error {
 
-	// setup command context & state
-	var state State
-	ctx := context.WithValue(context.Background(), "state", &state)
-
-	// REVU TODO this sh/could be in process-base (process.go)
-	pi, e := getProcessInfo(in, out, meta)
-	if e != nil {
-		return nil, e
-	}
-	state.pi = pi
-
+	// REVU cmds need something like mode
+	//      but it really only applies to gart-init
+	//		since below is really true for all cmds
 	//	if e := initOrVerifyGart(pi); e != nil {
 	if e := initOrVerifyGart(pi, false); e != nil {
 		fmt.Fprintln(pi.meta, e)
-		return ctx, fmt.Errorf("fatal - gart repo not initialized. run 'gart-init'")
+		return fmt.Errorf("fatal - gart repo not initialized. run 'gart-init'")
 	}
 
 	// TODO open .gart/index/tags.idx in APPEND mode.
 	// TODO open .gart/tags/tagsdef in RW mode.
 	// REVU lock it ?
 
-	return ctx, nil
-}
-
-// REVU TODO this should be in common
-func getState(ctx context.Context) *State {
-	// binding must be present, of correct type, and non-nil
-	// If not, we have a bug
-	state, ok := ctx.Value("state").(*State)
-	if !ok || state == nil {
-		panic("bug")
-	}
-	return state
+	return nil
 }
 
 // command gart-add

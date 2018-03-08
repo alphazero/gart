@@ -36,6 +36,30 @@ type processInfo struct {
 	meta    io.Writer  // process out-of-band output stream
 }
 
+func processPrepare(in io.Reader, out, meta io.Writer) (context.Context, error) {
+	pi, e := getProcessInfo(in, out, meta)
+	if e != nil {
+		return nil, e
+	}
+
+	// setup command context & state
+	var state State
+	ctx := context.WithValue(context.Background(), "state", &state)
+	state.pi = pi
+
+	return ctx, cmdPrepare(pi)
+}
+
+func getState(ctx context.Context) *State {
+	// binding must be present, of correct type, and non-nil
+	// If not, we have a bug
+	state, ok := ctx.Value("state").(*State)
+	if !ok || state == nil {
+		panic("bug")
+	}
+	return state
+}
+
 func getProcessInfo(in io.Reader, out, meta io.Writer) (processInfo, error) {
 	var pi processInfo
 	user, e := user.Current()
