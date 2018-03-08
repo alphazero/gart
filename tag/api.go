@@ -16,11 +16,12 @@ type Map interface {
 	// Adds a new tag. Tag name must be at most maxNameBytes or an error is returned.
 	// Further note that tag names are case-insensitive.
 	// added is true if tag was indeed new. Otherwise false (with no error)
-	Add(name string) (bool, error)
+	// If error is nil, the tag id is returned.
+	Add(name string) (added bool, id int, err error)
 
 	// Increments the named tag's refcnt and returns the new refcnt.
 	// returns error if tag does not exist.
-	IncrRefcnt(name string) (refcnt int, err error)
+	IncrRefcnt(name string) (refcnt int, id int, err error)
 
 	// Returns ids of selected tags. These are used to construct BAH bitmaps.
 	// notDefined is never nil. If not empty, it contains all

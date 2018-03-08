@@ -25,6 +25,6 @@ func main() {
 	fmt.Println("/// list tags //////////////////")
 	tags := tagmap.Tags()
 	for _, tag := range tags {
-		fmt.Printf("%v\n", tag)
+		fmt.Printf("%s\n", tag.Debug())
 	}
 }

@@ -41,8 +41,8 @@ func (t Tag) String() string { return fmt.Sprintf("tag:{ %q (%d) } ", t.name, t.
 
 // debug representation
 func (t Tag) Debug() string {
-	return fmt.Sprintf("tag: %q refcnt:%d f:%08b id:%x binlen:%d",
-		t.name, t.refcnt, t.flags, t.id, t.buflen())
+	return fmt.Sprintf("tag: f:%08b id:%4d refcnt:%4d binlen:%d %q",
+		t.flags, t.id, t.refcnt, t.buflen(), t.name)
 }
 
 func normalizeName(name string) (string, bool) {

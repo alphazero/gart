@@ -71,7 +71,7 @@ func cmdPrepare(state *State) error {
 	for i, tag := range state.tags {
 		fmt.Fprintf(state.pi.meta, "debug - gart-add.cmdPrepare: adding tag %q\n", tag)
 		tag = strings.Trim(tag, " ")
-		if _, e := state.tagmap.Add(tag); e != nil {
+		if _, _, e := state.tagmap.Add(tag); e != nil {
 			return fmt.Errorf("err - gart-add.cmdPrepare: on add tag %q - %v", e)
 		}
 		state.tags[i] = tag
@@ -121,16 +121,20 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	// tags _____________________________
 
-	systemics, e := addFileSystemicTags(state.tagmap, fds)
+	systemics, stids, e := addFileSystemicTags(state.tagmap, fds)
 	if e != nil {
 		panic(e)
 	}
-	if e := addFileTags(state.tagmap, state.tags...); e != nil {
+	tids, e := addFileTags(state.tagmap, state.tags...)
+	if e != nil {
 		panic(e)
 	}
 
 	// TODO create bitmap for tags.
-
+	ids := append(tids, stids...)
+	fmt.Fprintf(state.pi.meta, "stids:%d\n", stids)
+	fmt.Fprintf(state.pi.meta, "tids:%d\n", tids)
+	fmt.Fprintf(state.pi.meta, "ids:%d\n", ids)
 	// output
 	output = emit(state, md, &fds, systemics)
 	return
@@ -149,27 +153,33 @@ func emit(state *State, md []byte, fds *fs.FileDetails, systemics []string) []by
 	return []byte(sout)
 }
 
-func addFileSystemicTags(tagmap tag.Map, fds fs.FileDetails) ([]string, error) {
+// REVU remove File from name
+func addFileSystemicTags(tagmap tag.Map, fds fs.FileDetails) ([]string, []int, error) {
 	systemics := tag.AllSystemic(fds)
-	e := addFileTags(tagmap, systemics...)
-	return systemics, e
+	ids, e := addFileTags(tagmap, systemics...)
+	return systemics, ids, e
 }
 
 // Critical step here is incrementing the refcnts. The tag may already
 // exist in the tagsdef so Add may be a NOP.
 // TODO just have tag.Map.Incr or Add return the assigned id. it will be
 //      required for creating the bitmap.
-func addFileTags(tagmap tag.Map, tags ...string) error {
+// REVU remove File from name
+func addFileTags(tagmap tag.Map, tags ...string) ([]int, error) {
 
-	for _, name := range tags {
-		if _, e := tagmap.Add(name); e != nil {
-			return fmt.Errorf("bug - gart-add: addFileTags: on Add %q - %v", name, e)
+	var ids = make([]int, len(tags))
+
+	for i, name := range tags {
+		_, id, e := tagmap.Add(name)
+		if e != nil {
+			return nil, fmt.Errorf("bug - gart-add: addFileTags: on Add %q - %v", name, e)
 		}
-		if _, e := tagmap.IncrRefcnt(name); e != nil {
-			return fmt.Errorf("bug - gart-add: addFileTags: on IncrRefCnt %q - %v", name, e)
+		if _, _, e := tagmap.IncrRefcnt(name); e != nil {
+			return nil, fmt.Errorf("bug - gart-add: addFileTags: on IncrRefCnt %q - %v", name, e)
 		}
+		ids[i] = id
 	}
-	return nil
+	return ids, nil
 }
 
 // post:

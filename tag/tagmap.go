@@ -178,17 +178,17 @@ func (t *tagmap) Sync() (bool, error) {
 
 // REVU gart is a tool and gart/tag is NOT a library function.
 //      illegal arguments or invalid state errors are bugs.
-func (t *tagmap) Add(tagname string) (bool, error) {
+func (t *tagmap) Add(tagname string) (bool, int, error) {
 
 	// eat the cost of this minor struct alloc since all constraint
 	// checking and name normalization is already done in newTag.
 	// Offset is buflen as tag will be appended to t.buf
 	tag, e := newTag(tagname, t.nextId, t.header.buflen)
 	if e != nil {
-		return false, fmt.Errorf("tagmap.Add: invalid argument - name %q", tagname)
+		return false, 0, fmt.Errorf("tagmap.Add: invalid argument - name %q", tagname)
 	}
-	if _, found := t.m[tag.name]; found {
-		return false, nil
+	if tag, found := t.m[tag.name]; found {
+		return false, tag.id, nil
 	}
 
 	// add tag
@@ -201,20 +201,29 @@ func (t *tagmap) Add(tagname string) (bool, error) {
 
 	t.header.buflen += uint64(n)
 	t.header.tagcnt++
-	t.nextId++
+	//	t.nextId++ // TODO fix this - ids must be relative prime to 8
+	t.nextId = incrId(t.nextId)
 
 	t.onUpdate()
-	return true, nil
+	return true, tag.id, nil
 }
 
-func (t *tagmap) IncrRefcnt(tagname string) (int, error) {
+func incrId(n int) int {
+	n++
+	if n&0x7 == 0 {
+		n++
+	}
+	return n
+}
+
+func (t *tagmap) IncrRefcnt(tagname string) (int, int, error) {
 	name, ok := normalizeName(tagname)
 	if !ok {
-		return 0, fmt.Errorf("tagmap.IncrRefcnt: invalid argument - name %q", tagname)
+		return 0, 0, fmt.Errorf("tagmap.IncrRefcnt: invalid argument - name %q", tagname)
 	}
 	tag, found := t.m[name]
 	if !found {
-		return 0, fmt.Errorf("tagmap.IncrRefcnt: no such tag - name %q", tagname)
+		return 0, 0, fmt.Errorf("tagmap.IncrRefcnt: no such tag - name %q", tagname)
 	}
 
 	// update tag
@@ -225,7 +234,7 @@ func (t *tagmap) IncrRefcnt(tagname string) (int, error) {
 	}
 
 	t.onUpdate()
-	return int(tag.refcnt), nil
+	return int(tag.refcnt), tag.id, nil
 }
 
 // NOTE output ids should be sorted ascending 1, 2, 7, ..., n
