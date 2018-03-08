@@ -2,5 +2,7 @@
 
 #mkdir bin #if not exits ..
 
-go build -o bin/gart-init process.go common.go gart-init.go
-go build -o bin/gart-add process.go common.go gart-add.go
+PROCBASE="gart.go process.go"
+
+go build -o bin/gart-init $PROCBASE gart-init.go
+go build -o bin/gart-add  $PROCBASE gart-add.go

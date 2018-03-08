@@ -52,7 +52,7 @@ func cmdPrepare(pi processInfo) error {
 	//      but it really only applies to gart-init
 	//		since below is really true for all cmds
 	//	if e := initOrVerifyGart(pi); e != nil {
-	if e := initOrVerifyGart(pi, false); e != nil {
+	if e := verifyGartRepo(pi); e != nil {
 		fmt.Fprintln(pi.meta, e)
 		return fmt.Errorf("fatal - gart repo not initialized. run 'gart-init'")
 	}

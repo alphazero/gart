@@ -47,7 +47,7 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	state := getState(ctx)
 
-	if e := initGart(state.pi, option.force, option.silent); e != nil {
+	if e := initGartRepo(state.pi, option.force, option.silent); e != nil {
 		fmt.Fprintln(state.pi.meta, e)
 		err = fmt.Errorf("fatal - existing gart repo. run 'gart-init --force'")
 		return

@@ -49,7 +49,7 @@ const (
 func initOrVerifyGart(pi processInfo, silentInit bool) error {
 	// is this the first use?
 	if _, err := os.Stat(pi.gartDir); os.IsNotExist(err) && silentInit {
-		initGart(pi, false, false)
+		initGartRepo(pi, false, false)
 	}
 
 	return verifyGartRepo(pi)
@@ -58,7 +58,7 @@ func initOrVerifyGart(pi processInfo, silentInit bool) error {
 
 // panics if init is called for an already initialized gart (REVU for now).
 // Errors should be considered fail-stop.
-func initGart(pi processInfo, force, silent bool) error {
+func initGartRepo(pi processInfo, force, silent bool) error {
 try: // if forcing a re-init, we try twice
 	for {
 		e := fs.WalkDirs(pi.user.HomeDir, gartDirs, func(path string) error {
@@ -94,12 +94,12 @@ try: // if forcing a re-init, we try twice
 	// TODO create minimal/initial gart files
 	// oid-tags index
 	fname = filepath.Join(pi.gartDir, objecttagsIndexFile)
-	fmt.Fprintf(os.Stderr, "WARNING - gart.initGart: %s creation is TODO\n", fname)
+	fmt.Fprintf(os.Stderr, "WARNING - gart.initGartRepo: %s creation is TODO\n", fname)
 
 	// TODO create minimal/initial gart files
 	// devices index
 	fname = filepath.Join(pi.gartDir, devicesFile)
-	fmt.Fprintf(os.Stderr, "WARNING - gart.initGart: %s creation is TODO\n", fname)
+	fmt.Fprintf(os.Stderr, "WARNING - gart.initGartRepo: %s creation is TODO\n", fname)
 
 	return nil
 }
