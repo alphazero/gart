@@ -12,26 +12,39 @@ import (
 	"github.com/alphazero/gart/fs"
 )
 
+// REVU keep for now ..
 const prefix = "gart:tag:"
 
-func Systemic(fds fs.FileDetails) []string {
+func AllSystemic(fds fs.FileDetails) []string {
 	return []string{
-		ext(fds.Ext),
-		today(),
+		Ext(fds.Ext),
+		Today(),
 	}
 }
 
 // All gart objects are tagged with the journal date. This function retuns
 // a tag name of form "MMM-dd-YYYY" (e.g. MAR-21-2018).
-func today() string {
+func Today() string {
 	y, m, d := time.Now().Date()
-	m3 := strings.ToUpper(m.String()[:3])
+	m3 := "day:" + strings.ToLower(m.String()[:3])
 	return fmt.Sprintf("%s-%02d-%d", m3, d, y)
 }
 
-// REVU can a file be name "<something>." TODO check
-func ext(ext string) string {
-	s := prefix + "ext:"
+// Note: it is possible that a user may choose to define a tag that collides
+// with an, e.g. '.txt.', extension. For now the 'ext:' prefix addresses such
+// a case, but the query api ~is:
+//
+// 		gart-find --ext pdf --tags "...." # find all pdf objects + tags
+//  or
+// 		gart-find --no-ext --tags "...."  # find all objects with no extension + ..
+//
+// so even if user (for whatever reason) has applied e.g. '.txt' tag, it can
+// not collide in the tag.Map. Of course, the prefix is necessary.
+//
+// ex: "ext:pdf" # .pdf extension
+// ex: "ext:"    # no extension
+func Ext(ext string) string {
+	s := "ext:"
 	if len(ext) > 1 {
 		s += ext[1:]
 	}

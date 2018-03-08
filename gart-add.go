@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/alphazero/gart/digest"
@@ -41,13 +42,15 @@ func processMode() Mode {
 type State struct {
 	pi processInfo
 	/* gart-add specific */
-	tags  []string
-	items int // files processed (regardless of completion stat)
+	tags   []string
+	tagmap tag.Map
+	items  int // files processed (regardless of completion stat)
 }
 
 /// command processing ////////////////////////////////////////////////////////
 
 // pre:
+// prepare for a run of gart-add process.
 func cmdPrepare(state *State) error {
 
 	var pi = state.pi
@@ -58,13 +61,20 @@ func cmdPrepare(state *State) error {
 		return fmt.Errorf("fatal - gart repo not initialized. run 'gart-init'")
 	}
 
+	state.tagmap = loadTagMap(pi)
+
 	// TODO open .gart/index/tags.idx in ? APPEND mode.
-	// TODO open .gart/tags/tagsdef in RW mode.
 	// REVU lock it ?
 
+	// Don't Map.Add systemics here. Only user tags.
 	state.tags = strings.Split(option.tags, ",")
 	for i, tag := range state.tags {
-		state.tags[i] = strings.Trim(tag, " ")
+		fmt.Fprintf(state.pi.meta, "debug - gart-add.cmdPrepare: adding tag %q\n", tag)
+		tag = strings.Trim(tag, " ")
+		if _, e := state.tagmap.Add(tag); e != nil {
+			return fmt.Errorf("err - gart-add.cmdPrepare: on add tag %q - %v", e)
+		}
+		state.tags[i] = tag
 	}
 	return nil
 }
@@ -83,6 +93,12 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	md, e := digest.Compute(fds.Path)
 	if e != nil {
+		pe := e.(*os.PathError) // REVU counting on digest.Compute being straight up here ..
+		if pe.Err.Error() == "permission denied" {
+			output = []byte(fmt.Sprintf("warn - gart-add: skipping %q - %s",
+				pe.Path, pe.Err)) // do not abort
+			return
+		}
 		panic(fmt.Errorf("bug - digest.Compute returned error - %s", e))
 	}
 
@@ -100,13 +116,67 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	// XXX temporary
 
-	tags := append(state.tags, tag.Systemic(fds)...)
-	output = []byte(fmt.Sprintf("%x.. %s %s", md[:4], fds.Name, tags))
+	systemics, e := addFileSystemicTags(state.tagmap, fds)
+	if e != nil {
+		panic(e)
+	}
+
+	if e := addFileTags(state.tagmap, state.tags...); e != nil {
+		panic(e)
+	}
+
+	// output
+	output = emit(state, md, &fds, systemics)
 	return
 }
 
+func emit(state *State, md []byte, fds *fs.FileDetails, systemics []string) []byte {
+	sout := fmt.Sprintf("%x.. %s user:[ ", md[:4], fds.Name)
+	for _, ut := range state.tags {
+		sout += fmt.Sprintf("%q ", ut)
+	}
+	sout += fmt.Sprintf("] system:[ ")
+	for _, st := range systemics {
+		sout += fmt.Sprintf("%q ", st)
+	}
+	sout += fmt.Sprintf("]")
+	return []byte(sout)
+}
+
+func addFileSystemicTags(tagmap tag.Map, fds fs.FileDetails) ([]string, error) {
+	systemics := tag.AllSystemic(fds)
+	e := addFileTags(tagmap, systemics...)
+	return systemics, e
+}
+
+// Critical step here is incrementing the refcnts. The tag may already
+// exist in the tagsdef so Add may be a NOP.
+func addFileTags(tagmap tag.Map, tags ...string) error {
+
+	for _, name := range tags {
+		if _, e := tagmap.Add(name); e != nil {
+			return fmt.Errorf("bug - gart-add: addFileTags: on Add %q - %v", name, e)
+		}
+		if _, e := tagmap.IncrRefcnt(name); e != nil {
+			return fmt.Errorf("bug - gart-add: addFileTags: on IncrRefCnt %q - %v", name, e)
+		}
+	}
+	return nil
+}
+
 // post:
-func processDone(ctxt context.Context) error {
+func processDone(ctx context.Context) error {
+
+	state := getState(ctx)
+
+	// tagmap may return (false, nil), which indicates that this gart-add run
+	// did not result in the defintion of a new tag. But it must never return
+	// an error.
+	_, e := state.tagmap.Sync()
+	if e != nil {
+		return fmt.Errorf("bug - gart-add: tag.Map.Sync returned error - %v", e)
+	}
+
 	// TODO close .gart/index/tags.idx in APPEND mode.
 	// REVU unlock it ?
 

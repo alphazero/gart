@@ -120,3 +120,15 @@ func verifyGartRepo(pi processInfo) error {
 	}
 	return nil
 }
+
+// This function is only called by processes. Any errors loading the tags file
+// here is a panic worthy bug.
+func loadTagMap(pi processInfo) tag.Map {
+	fname := filepath.Join(pi.gartDir, tagsdefFile)
+	tagmap, e := tag.LoadMap(fname, false)
+	if e != nil {
+		fmt.Fprintf(pi.meta, "err - gart.GetTagMap: fname:%q - %v\n", fname, e)
+		panic(fmt.Errorf("bug - gart.getTagMap - tag.LoadMap returned error."))
+	}
+	return tagmap
+}
