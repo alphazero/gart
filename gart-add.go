@@ -92,6 +92,8 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 		return nil, e, false // we don't abort - next file may be ok
 	}
 
+	// fingerprint ______________________
+
 	// REVU TODO need to check Compute. Only returning errors from OpenFile?
 	//      If yes, then it must be a PathError and no need to check pe.Err
 	//      just warn and return to continue
@@ -105,6 +107,20 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 		}
 		panic(fmt.Errorf("bug - digest.Compute returned error - %s", e))
 	}
+
+	// index:card _______________________
+	// check if card exists.
+	// -> new: create card file.
+	//
+	// -> old: read card,
+	//		dup or not, chec oid-tags, get bitmap and compare.
+	//			-> diff: update oid-tags. REVU we need BAH.AND(old, new) here TODO
+	//			-> same: NOP
+	//		check paths.
+	//		-> dup: update card with dup's path
+	//		-> nop: user is adding the same file again, possibly just adding tags
+	//				REVU this should be OK if a (new) flag --update-tags is provided.
+	//					 use-case: we did a find . | gart-add and remembered we forgot some tags.
 
 	// TODO
 	//		- update .gart/paths (if required)
@@ -131,14 +147,11 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 		panic(e)
 	}
 
-	// TODO create bitmap for tags.
 	ids := append(tids, stids...)
-	//	fmt.Fprintf(state.pi.meta, "stids:%d\n", stids)
-	//	fmt.Fprintf(state.pi.meta, "tids:%d\n", tids)
-	//	fmt.Fprintf(state.pi.meta, "ids:%d\n", ids)
-	bmap := bitmap.Build(ids...).Compress()
-	//	fmt.Fprintf(state.pi.meta, "bah:%08b\n", bmap)
-	// output
+	_ = bitmap.Build(ids...).Compress()
+
+	// tags _____________________________
+
 	output = emit(state, md, &fds, systemics)
 	return
 }
