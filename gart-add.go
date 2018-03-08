@@ -94,9 +94,6 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	// fingerprint ______________________
 
-	// REVU TODO need to check Compute. Only returning errors from OpenFile?
-	//      If yes, then it must be a PathError and no need to check pe.Err
-	//      just warn and return to continue
 	md, e := digest.Compute(fds.Path)
 	if e != nil {
 		pe := e.(*os.PathError) // REVU counting on digest.Compute being straight up here ..

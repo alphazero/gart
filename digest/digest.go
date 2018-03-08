@@ -60,9 +60,9 @@ var (
 	_ = sha512.New
 )
 
-// Default uses sha-1
+// Default uses sha-256
 func Compute(fname string) ([]byte, error) {
-	return ComputeWith(fname, crypto.SHA1)
+	return ComputeWith(fname, crypto.SHA256)
 }
 
 func ComputeWith(fname string, hash crypto.Hash) (md []byte, err error) {
