@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
 	"github.com/alphazero/gart/tag"
@@ -132,9 +133,11 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	// TODO create bitmap for tags.
 	ids := append(tids, stids...)
-	fmt.Fprintf(state.pi.meta, "stids:%d\n", stids)
-	fmt.Fprintf(state.pi.meta, "tids:%d\n", tids)
-	fmt.Fprintf(state.pi.meta, "ids:%d\n", ids)
+	//	fmt.Fprintf(state.pi.meta, "stids:%d\n", stids)
+	//	fmt.Fprintf(state.pi.meta, "tids:%d\n", tids)
+	//	fmt.Fprintf(state.pi.meta, "ids:%d\n", ids)
+	bmap := bitmap.Build(ids...).Compress()
+	//	fmt.Fprintf(state.pi.meta, "bah:%08b\n", bmap)
 	// output
 	output = emit(state, md, &fds, systemics)
 	return
