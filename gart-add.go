@@ -91,6 +91,9 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 		return nil, e, false // we don't abort - next file may be ok
 	}
 
+	// REVU TODO need to check Compute. Only returning errors from OpenFile?
+	//      If yes, then it must be a PathError and no need to check pe.Err
+	//      just warn and return to continue
 	md, e := digest.Compute(fds.Path)
 	if e != nil {
 		pe := e.(*os.PathError) // REVU counting on digest.Compute being straight up here ..
@@ -116,14 +119,17 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	// XXX temporary
 
+	// tags _____________________________
+
 	systemics, e := addFileSystemicTags(state.tagmap, fds)
 	if e != nil {
 		panic(e)
 	}
-
 	if e := addFileTags(state.tagmap, state.tags...); e != nil {
 		panic(e)
 	}
+
+	// TODO create bitmap for tags.
 
 	// output
 	output = emit(state, md, &fds, systemics)
@@ -151,6 +157,8 @@ func addFileSystemicTags(tagmap tag.Map, fds fs.FileDetails) ([]string, error) {
 
 // Critical step here is incrementing the refcnts. The tag may already
 // exist in the tagsdef so Add may be a NOP.
+// TODO just have tag.Map.Incr or Add return the assigned id. it will be
+//      required for creating the bitmap.
 func addFileTags(tagmap tag.Map, tags ...string) error {
 
 	for _, name := range tags {
