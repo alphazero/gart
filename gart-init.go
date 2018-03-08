@@ -39,7 +39,7 @@ type State struct {
 /// command processing ////////////////////////////////////////////////////////
 
 // pre:
-func cmdPrepare(pi processInfo) error { return nil }
+func cmdPrepare(state *State) error { return nil }
 
 // command gart-init REVU build flags?
 // Returns output, error if any, and abort

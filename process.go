@@ -47,7 +47,7 @@ func processPrepare(in io.Reader, out, meta io.Writer) (context.Context, error) 
 	ctx := context.WithValue(context.Background(), "state", &state)
 	state.pi = pi
 
-	return ctx, cmdPrepare(pi)
+	return ctx, cmdPrepare(&state)
 }
 
 func getState(ctx context.Context) *State {

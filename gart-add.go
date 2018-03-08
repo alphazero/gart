@@ -5,21 +5,21 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
+	"github.com/alphazero/gart/tag"
 )
 
 /// flags and processing mode /////////////////////////////////////////////////
 
 var option = struct {
-	test string
-}{
-	test: "default",
-}
+	tags string
+}{}
 
 func init() {
-	flags.StringVar(&option.test, "t", option.test, "test option")
+	flags.StringVar(&option.tags, "tags", option.tags, "quoted comma separated list of tags")
 }
 
 // Check mandatory flags, etc.
@@ -41,26 +41,31 @@ func processMode() Mode {
 type State struct {
 	pi processInfo
 	/* gart-add specific */
+	tags  []string
 	items int // files processed (regardless of completion stat)
 }
 
 /// command processing ////////////////////////////////////////////////////////
 
 // pre:
-func cmdPrepare(pi processInfo) error {
+func cmdPrepare(state *State) error {
 
-	// REVU cmds need something like mode
-	//      but it really only applies to gart-init
-	//		since below is really true for all cmds
+	var pi = state.pi
+
+	// REVU cmds need something like mode since below is really true for all cmds
 	if e := verifyGartRepo(pi); e != nil {
-		fmt.Fprintln(pi.meta, e)
+		fmt.Fprintln(state.pi.meta, e)
 		return fmt.Errorf("fatal - gart repo not initialized. run 'gart-init'")
 	}
 
-	// TODO open .gart/index/tags.idx in APPEND mode.
+	// TODO open .gart/index/tags.idx in ? APPEND mode.
 	// TODO open .gart/tags/tagsdef in RW mode.
 	// REVU lock it ?
 
+	state.tags = strings.Split(option.tags, ",")
+	for i, tag := range state.tags {
+		state.tags[i] = strings.Trim(tag, " ")
+	}
 	return nil
 }
 
@@ -78,10 +83,10 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	md, e := digest.Compute(fds.Path)
 	if e != nil {
-		return nil, e, false // TODO REVU
+		panic(fmt.Errorf("bug - digest.Compute returned error - %s", e))
 	}
 
-	// REVU
+	// TODO
 	//		- update .gart/paths (if required)
 	//		  REVU check state to see if this has already been done
 	//		- create tags bitmap REVU default tags (e.g. ext) + cmdline options
@@ -94,7 +99,9 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 	//		  REVU state should have this file open in APPEND mode already.
 
 	// XXX temporary
-	output = []byte(fmt.Sprintf("%x %s", md, fds.Path))
+
+	tags := append(state.tags, tag.Systemic(fds)...)
+	output = []byte(fmt.Sprintf("%x.. %s %s", md[:4], fds.Name, tags))
 	return
 }
 
