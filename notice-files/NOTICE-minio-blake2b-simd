@@ -1,0 +1,6 @@
+NOTICE of 3rd party LICENSE:
+
+Gart uses the excellent minio/blake2b-simd library. See LICENSE-minio-blake2b-simd
+in the gart/notice-files/ for license details. 
+
+END NOTICE.
