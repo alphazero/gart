@@ -96,6 +96,11 @@ func SwapfileName(fname string) string {
 	return filepath.Join(filepath.Dir(fname), swapbase)
 }
 
+func OpenReadOnly(fname string) (*os.File, error) {
+	var flags = os.O_RDONLY | os.O_SYNC
+	return os.OpenFile(fname, flags, FilePerm)
+}
+
 // Exclusively fully reads the named file. File is closed on return.
 func ReadFull(fname string) ([]byte, error) {
 
@@ -146,7 +151,8 @@ func VerifyFile(path string) error {
 	return nil
 }
 
-// polymorphism anyone ..
+// Checks that the file or dir exists, and, that the fs objects permissions are
+// as expected.
 func verifyFileOrDir(path string, expectedPerm os.FileMode) (os.FileInfo, error) {
 	fi, e := os.Stat(path)
 	if e != nil {

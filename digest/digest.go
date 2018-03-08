@@ -12,7 +12,8 @@ import (
 	"hash/crc32"
 	"hash/crc64"
 	"io"
-	"os"
+
+	"github.com/alphazero/gart/fs"
 )
 
 /// system wide ///////////////////////////////////////////////////////////////
@@ -77,13 +78,13 @@ func ComputeWith(fname string, hash crypto.Hash) (md []byte, err error) {
 }
 
 func compute(fname string, h hash.Hash) ([]byte, error) {
-	f, e := os.Open(fname)
+	file, e := fs.OpenReadOnly(fname)
 	if e != nil {
 		return nil, e
 	}
-	defer f.Close()
+	defer file.Close()
 
-	if _, e := io.Copy(h, f); e != nil {
+	if _, e := io.Copy(h, file); e != nil {
 		return nil, e
 	}
 	return h.Sum(nil), nil

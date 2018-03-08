@@ -39,8 +39,9 @@ func processMode() Mode {
 
 // struct encapsulates mutable and immutable process values.
 type State struct {
-	pi    processInfo
-	items int
+	pi processInfo
+	/* gart-add specific */
+	items int // files processed (regardless of completion stat)
 }
 
 /// command processing ////////////////////////////////////////////////////////
@@ -51,7 +52,6 @@ func cmdPrepare(pi processInfo) error {
 	// REVU cmds need something like mode
 	//      but it really only applies to gart-init
 	//		since below is really true for all cmds
-	//	if e := initOrVerifyGart(pi); e != nil {
 	if e := verifyGartRepo(pi); e != nil {
 		fmt.Fprintln(pi.meta, e)
 		return fmt.Errorf("fatal - gart repo not initialized. run 'gart-init'")
@@ -76,7 +76,6 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 		return nil, e, false // we don't abort - next file may be ok
 	}
 
-	// REVU TODO digest code needs to use RDONLY open ..
 	md, e := digest.Compute(fds.Path)
 	if e != nil {
 		return nil, e, false // TODO REVU

@@ -13,6 +13,9 @@ import (
 
 /// system wide consts & vars /////////////////////////////////////////////////
 
+// NOTE Reminder that gart processes do not change working directory. All paths
+//      used in functions must be absolute.
+
 // gart's top level (minimal) directory structure
 const (
 	gartDir  = ".gart"
