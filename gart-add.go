@@ -73,9 +73,8 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	fds, e := fs.GetFileDetails(string(b))
 	if e != nil {
-		return nil, e, false // REVU don't abort - next file may be ok
+		return nil, e, false // we don't abort - next file may be ok
 	}
-	//	fmt.Printf("%v\n", fds)
 
 	// REVU TODO digest code needs to use RDONLY open ..
 	md, e := digest.Compute(fds.Path)

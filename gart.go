@@ -39,24 +39,11 @@ const (
 
 /// gart initialization & process boot ////////////////////////////////////////
 
-// Verify existing gart repo or initialize the minimal structure.
+// Initializes the minimal structure.
 //
-// If top level gart repo exists but any of the mininal files or dirs
-// is missing, treat it as a corrupted repo and panic.
+// To re-initialize an existing gart repo the in-arg force must be true, otherwise
+// an error is returned without any side-effects.
 //
-// Check permissions and if not as expected, treat it as a corrupted repo and panic.
-// REVU anything other than init should just call verifyGart TODO REMOVE THIS
-func initOrVerifyGart(pi processInfo, silentInit bool) error {
-	// is this the first use?
-	if _, err := os.Stat(pi.gartDir); os.IsNotExist(err) && silentInit {
-		initGartRepo(pi, false, false)
-	}
-
-	return verifyGartRepo(pi)
-
-}
-
-// panics if init is called for an already initialized gart (REVU for now).
 // Errors should be considered fail-stop.
 func initGartRepo(pi processInfo, force, silent bool) error {
 try: // if forcing a re-init, we try twice
@@ -94,16 +81,22 @@ try: // if forcing a re-init, we try twice
 	// TODO create minimal/initial gart files
 	// oid-tags index
 	fname = filepath.Join(pi.gartDir, objecttagsIndexFile)
-	fmt.Fprintf(os.Stderr, "WARNING - gart.initGartRepo: %s creation is TODO\n", fname)
+	fmt.Fprintf(pi.meta, "WARNING - gart.initGartRepo: %s creation is TODO\n", fname)
 
 	// TODO create minimal/initial gart files
 	// devices index
 	fname = filepath.Join(pi.gartDir, devicesFile)
-	fmt.Fprintf(os.Stderr, "WARNING - gart.initGartRepo: %s creation is TODO\n", fname)
+	fmt.Fprintf(pi.meta, "WARNING - gart.initGartRepo: %s creation is TODO\n", fname)
 
 	return nil
 }
 
+// Verify existing gart repo (post gart-init minimal structure).
+//
+// If top level gart repo exists but any of the mininal files or dirs
+// are missing, treat it as a corrupted repo and panic.
+//
+// Check permissions and if not as expected, treat it as a corrupted repo and panic.
 func verifyGartRepo(pi processInfo) error {
 	// verify directory structure
 	if e := fs.WalkDirs(pi.user.HomeDir, gartDirs, fs.VerifyDir); e != nil {
@@ -113,7 +106,11 @@ func verifyGartRepo(pi processInfo) error {
 	files := []string{tagsdefFile, objecttagsIndexFile, devicesFile}
 	for _, file := range files {
 		fname := filepath.Join(pi.gartDir, file)
-		// verify
+		fmt.Fprintf(pi.meta, "DEBUG - verify %q\n", fname)
+		// XXX
+		fmt.Fprintf(pi.meta, "WARNING - gart.verifyGartRepo: %s creation is TODO\n", fname)
+		continue
+		// XXX
 		if e := fs.VerifyFile(fname); e != nil {
 			return e
 		}
