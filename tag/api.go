@@ -29,4 +29,7 @@ type Map interface {
 
 	// Syncs the tagmap file. IFF the in-mem model has been modified
 	Sync() (ok bool, e error)
+
+	// List tags
+	Tags() []Tag
 }

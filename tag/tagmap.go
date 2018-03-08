@@ -248,6 +248,16 @@ func (t *tagmap) SelectTags(tags []string) (ids []int, notDefined []string) {
 	return
 }
 
+func (t *tagmap) Tags() []Tag {
+	var tags = make([]Tag, t.header.tagcnt)
+	var i int
+	for _, t := range t.m {
+		tags[i] = *t
+		i++
+	}
+	return tags
+}
+
 /// internal ops //////////////////////////////////////////////////////////////
 
 // creates a new gart tagmap file. This only writes the header.
