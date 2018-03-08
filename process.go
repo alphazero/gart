@@ -16,6 +16,15 @@ import (
 
 /// general process ///////////////////////////////////////////////////////////
 
+// exit codes
+const (
+	EC_OK = iota
+	EC_USAGE
+	EC_ERROR
+	EC_INTERRUPT
+	EC_FAULT
+)
+
 // gart process info
 type processInfo struct {
 	name    string     // process (base)name
@@ -47,15 +56,6 @@ func getProcessInfo(in io.Reader, out, meta io.Writer) (processInfo, error) {
 
 	return pi, nil
 }
-
-// exit codes
-const (
-	EC_OK = iota
-	EC_USAGE
-	EC_ERROR
-	EC_INTERRUPT
-	EC_FAULT
-)
 
 /// process shell /////////////////////////////////////////////////////////////
 
@@ -150,8 +150,6 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 
 		result, e, abort := process(ctx, line[:len(line)-1])
 		if abort {
-			//			onError(meta, e)
-			//			err = e
 			break
 		}
 		if e != nil {
