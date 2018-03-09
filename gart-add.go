@@ -100,7 +100,7 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 	fds, e := fs.GetFileDetails(string(b))
 	if e != nil {
 		if fds.Fstat.IsDir() {
-			output = fmtOutput("debug - gart-add: skipping dir - err: %s", e)
+			//			output = fmtOutput("debug - gart-add: skipping dir - err: %s", e)
 			return
 		}
 		return nil, e, false // unexpected err - we don't abort - next file may be ok
@@ -118,7 +118,6 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 		// anything else (?) well, let's treat it as a bug for now.
 		panic(fmt.Errorf("bug - digest.Compute returned error - %s", e))
 	}
-	fmt.Fprintf(state.pi.out, "DEBUG - len:%d %02x\n", len(md), md)
 
 	// index:card _______________________
 	// check if card exists.

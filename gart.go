@@ -109,9 +109,8 @@ func verifyGartRepo(pi processInfo) error {
 	files := []string{tagsdefFile, objecttagsIndexFile, devicesFile}
 	for _, file := range files {
 		fname := filepath.Join(pi.gartDir, file)
-		fmt.Fprintf(pi.meta, "DEBUG - verify %q\n", fname)
 		// XXX
-		fmt.Fprintf(pi.meta, "WARNING - gart.verifyGartRepo: %s creation is TODO\n", fname)
+		fmt.Fprintf(pi.meta, "WARNING - gart.verifyGartRepo: %s verification is TODO\n", fname)
 		continue
 		// XXX
 		if e := fs.VerifyFile(fname); e != nil {

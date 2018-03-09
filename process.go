@@ -132,9 +132,10 @@ func parseFlags(args []string) (Mode, error) {
 
 func processStream(in io.Reader, out, meta io.Writer) (err error) {
 
+	var silent bool = true // REVU generic proc needs to get this from flags TODO
+
 	/// process loop //////////////////////////////////////
 
-	// REVU error here is fundamentally fatal
 	// prepare for processing.
 	ctx, e := processPrepare(in, out, meta)
 	if e != nil {
@@ -180,7 +181,7 @@ func processStream(in io.Reader, out, meta io.Writer) (err error) {
 			onError(meta, e)
 			continue
 		}
-		if result != nil {
+		if !silent && result != nil {
 			w.Write(result)
 			w.WriteByte('\n')
 		}
