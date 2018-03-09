@@ -94,7 +94,8 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	// fingerprint ______________________
 
-	md, e := digest.Compute(fds.Path)
+	//	md, e := digest.Compute(fds.Path)
+	md, e := digest.SumFile(fds.Path)
 	if e != nil {
 		pe := e.(*os.PathError) // REVU counting on digest.Compute being straight up here ..
 		if pe.Err.Error() == "permission denied" {
@@ -104,6 +105,7 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 		}
 		panic(fmt.Errorf("bug - digest.Compute returned error - %s", e))
 	}
+	fmt.Fprintf(state.pi.out, "DEBUG - len:%d %02x\n", len(md), md)
 
 	// index:card _______________________
 	// check if card exists.

@@ -3,20 +3,30 @@
 package digest
 
 import (
-	"crypto"
-	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
-	"fmt"
-	"hash"
+	"blake2b"
 	"hash/crc32"
 	"hash/crc64"
-	"io"
 
 	"github.com/alphazero/gart/fs"
 )
 
-/// system wide ///////////////////////////////////////////////////////////////
+// Sum: Black2B size 256 digest
+func Sum(b []byte) [32]byte {
+	return blake2b.Sum256(b)
+}
+
+// Returns the (32 byte) Blake2B digest of the named file.
+func SumFile(fname string) ([]byte, error) {
+	buf, e := fs.ReadFull(fname)
+	if e != nil {
+		return nil, e
+	}
+
+	h := Sum(buf)
+	return h[:], nil
+}
+
+/// checksums /////////////////////////////////////////////////////////////////
 
 // crc table Qs
 const (
@@ -52,40 +62,4 @@ func Checksum32(b []byte) uint32 {
 	return crc32.Checksum(b, crc32q)
 }
 
-/// types /////////////////////////////////////////////////////////////////////
-// insure these cryptos are linked via import. Such a goofy language.
-var (
-	_ = sha1.New
-	_ = sha256.New
-	_ = sha512.New
-)
-
-// Default uses sha-256
-func Compute(fname string) ([]byte, error) {
-	return ComputeWith(fname, crypto.SHA256)
-}
-
-func ComputeWith(fname string, hash crypto.Hash) (md []byte, err error) {
-	defer func(e *error) {
-		r := recover()
-		if r != nil {
-			*e = fmt.Errorf("(recovered) %v", r)
-		}
-	}(&err)
-
-	// note: hash.New() can panic if crypto package not linked.
-	return compute(fname, hash.New())
-}
-
-func compute(fname string, h hash.Hash) ([]byte, error) {
-	file, e := fs.OpenReadOnly(fname)
-	if e != nil {
-		return nil, e
-	}
-	defer file.Close()
-
-	if _, e := io.Copy(h, file); e != nil {
-		return nil, e
-	}
-	return h.Sum(nil), nil
-}
+/// blob digests //////////////////////////////////////////////////////////////

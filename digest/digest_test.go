@@ -1,46 +1,34 @@
 package digest_test
 
 import (
-	"archive/digest"
-	"crypto"
-	"log"
+	"github.com/alphazero/gart/digest"
 	"testing"
 )
 
-const fname = "digest_test.go"
+const smallfile = "digest_test.go"
+const largefile = "testfile.big"
 
-func TestSha1(t *testing.T) {
-	md, e := digest.ComputeWith(fname, crypto.SHA1)
-	if e != nil {
-		t.Fatalf("error -> %v", e)
-	}
-	if md == nil {
-		t.Fatalf("md is nil")
-	}
-	log.Printf("md: len:%d %x %x %x\n", len(md), md, md[:1], md[1:])
-}
+var path = []byte("/Users/alphazero/Code/oss/halide-tutorial-code-CVPR2015/.git/objects/pack/pack-32b76872a71454dfc48ce7ffa328fdefd8379e46.pack")
 
-func BenchmarkSha1(b *testing.B) {
+func BenchmarkBlake2bPath(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_, e := digest.ComputeWith(fname, crypto.SHA1)
-		if e != nil {
-			b.Fatalf("err - %v", e)
+		md := digest.Sum(path)
+		if len(md) != 32 {
+			b.Fatalf("err - len: expected:32 have:%d", len(md))
 		}
 	}
 }
-
-func BenchmarkSha256(b *testing.B) {
+func BenchmarkBlake2bLargeFile(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_, e := digest.ComputeWith(fname, crypto.SHA256)
+		_, e := digest.SumFile(largefile)
 		if e != nil {
 			b.Fatalf("err = %v", e)
 		}
 	}
 }
-
-func BenchmarkSha512(b *testing.B) {
+func BenchmarkBlake2bSmallFile(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_, e := digest.ComputeWith(fname, crypto.SHA512)
+		_, e := digest.SumFile(smallfile)
 		if e != nil {
 			b.Fatalf("err = %v", e)
 		}
