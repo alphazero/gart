@@ -15,7 +15,7 @@ import (
 // REVU keep for now ..
 const prefix = "gart:tag:"
 
-func AllSystemic(fds fs.FileDetails) []string {
+func AllSystemic(fds *fs.FileDetails) []string {
 	return []string{
 		Ext(fds.Ext),
 		Today(),

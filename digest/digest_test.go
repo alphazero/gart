@@ -1,8 +1,9 @@
 package digest_test
 
 import (
-	"github.com/alphazero/gart/digest"
 	"testing"
+
+	"github.com/alphazero/gart/digest"
 )
 
 const smallfile = "digest_test.go"
