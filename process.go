@@ -132,7 +132,7 @@ func parseFlags(args []string) (Mode, error) {
 
 func processStream(in io.Reader, out, meta io.Writer) (err error) {
 
-	var silent bool = true // REVU generic proc needs to get this from flags TODO
+	var silent bool // REVU generic proc needs to get this from flags TODO
 
 	/// process loop //////////////////////////////////////
 

@@ -100,7 +100,6 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 	fds, e := fs.GetFileDetails(string(b))
 	if e != nil {
 		if fds.Fstat.IsDir() {
-			//			output = fmtOutput("debug - gart-add: skipping dir - err: %s", e)
 			return
 		}
 		return nil, e, false // unexpected err - we don't abort - next file may be ok
@@ -145,8 +144,6 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 	// 		- append to index/TAGS
 	//		  REVU state should have this file open in APPEND mode already.
 
-	// XXX temporary
-
 	// tags _____________________________
 
 	// Get user (utids) & systemic (stids) tag ids.
@@ -154,10 +151,9 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 	if e != nil {
 		panic(e) // TODO emit fatal error and return abort
 	}
-	_ = bitmap.Build(ids...).Compress()
+	bm := bitmap.Build(ids...).Compress()
 
-	// XXX this is temporary for dev-debug
-	output = fmtOutput("%08x %q", md[:4], fds.Name)
+	output = fmtOutput("%08x %08b %q", md[:4], bm, fds.Name)
 
 	return
 }
