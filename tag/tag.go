@@ -8,7 +8,7 @@ import (
 	"unsafe"
 )
 
-/// binary image invariants ///////////////////////////////////////////////////
+/// Tag ////////////////////////////////////////////////////////////////////////
 
 // individual tag binary representation invariants
 const (
@@ -20,8 +20,6 @@ const (
 	refcntOffset = uintptr(1)
 	lenOffset    = uintptr(5)
 )
-
-/// Tag ////////////////////////////////////////////////////////////////////////
 
 type Tag struct {
 	flags  byte   // reserved
@@ -105,14 +103,6 @@ func (t Tag) encode(b []byte) (int, error) {
 	if n := copy(b[prefixBytes:], []byte(t.name)); n != namelen {
 		panic(fmt.Sprintf("bug - only copied %d bytes of name (len:%d)", n, t.buflen()))
 	}
-
-	/* XXX
-	fmt.Printf("debug: Tag.encode: f:%d refcnt:%08x len:%d name:%q\n                  ", t.flags, t.refcnt, namelen, t.name)
-	for i := 0; i < t.buflen(); i++ {
-		fmt.Printf(" %02x", b[i])
-	}
-	fmt.Println()
-	*/
 
 	return t.buflen(), nil
 }
