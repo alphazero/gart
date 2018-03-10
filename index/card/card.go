@@ -79,6 +79,7 @@ func (p *card_t) DebugStr() string {
 		s += fp("\tpath[%d]: %q\n", i, path)
 	}
 	s += fp("\tdirty:    %t\n", p.dirty)
+	s += fp("\tbufsize:  %d\n", p.bufsize())
 	return s
 }
 
@@ -220,14 +221,61 @@ func (c *card_t) Paths() []string        { panic("cart_t: index.Card method not 
 func (c *card_t) AddPath(fpath string) (bool, error) {
 	panic("cart_t: index.Card method not implemented")
 }
+
+// REVU if only a single fs object is associated with this card, return an error.
+// TODO index.RemoveObject(oid)
 func (c *card_t) RemovePath(fpath string) (bool, error) {
 	panic("cart_t: index.Card method not implemented")
 }
+
+// REVU this 'bah' business is silly. Again, this is not a library!
 func (c *card_t) UpdateUserTagBah(bitmap []byte) {
 	panic("cart_t: index.Card method not implemented")
 }
+
+// Save writes the card to a swap file and then rename to file 'fname' as given.
+// Save always writes the file, even if card file has not changed. Use Sync in
+// conjunction with card.Load(cardfile) if io is to be limited to the case of
+// changed cards.
 func (c *card_t) Save(fname string) (bool, error) {
+
+	swapfile := fs.SwapfileName(fname)
+	var ops = os.O_WRONLY | os.O_APPEND
+	sfile, e := fs.OpenNewFile(swapfile, ops)
+	if e != nil {
+		return false, e
+	}
+	defer sfile.Close()
+
+	var bufsize = c.bufsize()
+	var buf = make([]byte, bufsize)
+	println(len(buf)) // XXX mr. compiler ..
+	// TODO header.encode(buf[0:])
+	// TODO card_t.encode(buf[headerBytes:]
+
+	hdrbuf := *(*[headerBytes]byte)(unsafe.Pointer(&c.header))
+	_, e = sfile.Write(hdrbuf[:])
+	if e != nil {
+		return false, e
+	}
+
+	// update checksum if card is 'dirty'
+	if c.dirty {
+
+	}
 	panic("cart_t: index.Card method not implemented")
+}
+
+func (c *card_t) bufsize() int {
+	n := headerBytes
+	n += index.OidBytes
+	n += len(c.tagsBah)
+	n += len(c.systemicsBah)
+	// each path is len of the []byte of path + \n
+	for _, p := range c.paths {
+		n += len([]byte(p)) + 1
+	}
+	return n
 }
 
 /// internal ops ///////////////////////////////////////////////////////////////
