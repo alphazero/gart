@@ -2,7 +2,10 @@
 
 package tag
 
-import "time"
+import (
+	"github.com/alphazero/gart/fs"
+	"time"
+)
 
 // tag.Map is the main interface of this package with the rest of the system.
 type Map interface {
@@ -33,4 +36,15 @@ type Map interface {
 
 	// List tags
 	Tags() []Tag
+}
+
+/// gart capabilities /////////////////////////////////////////////////////////
+
+// Updates the provided tag.Map for the gart object. This function is called by
+// gart-add (only?) Remember that a gart object maps to 1 or more fs objects.
+//
+func UpdateMapForNewObject(tagmap Map, fsd *fs.FileDetails, tags []string) ([]int, error) {
+	// systemics: add if necessary and update refcnt
+	// user tags: same
+	panic("tag.UpdateMapForNewObject: not implemented")
 }
