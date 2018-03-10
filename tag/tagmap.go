@@ -111,7 +111,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 		if id&0x7 == 0 { // skip multiples of 8 so we don't have to encode7 for BAH
 			id++
 		}
-		var tag Tag // REVU do we need Tag?
+		var tag Tag
 		tlen, e := tag.decode(buf[offset:])
 		if e != nil {
 			return nil, fmt.Errorf("bug - decoding tag[id:%d] offset:%d - %s", id, offset, e)
