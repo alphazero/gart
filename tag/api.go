@@ -3,8 +3,9 @@
 package tag
 
 import (
-	"github.com/alphazero/gart/fs"
 	"time"
+
+	"github.com/alphazero/gart/fs"
 )
 
 // tag.Map is the main interface of this package with the rest of the system.
