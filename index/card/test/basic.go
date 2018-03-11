@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/index"
@@ -48,6 +49,8 @@ func main() {
 
 	doSave(crd)
 
+	// sleep to check updated timestamp change
+	time.Sleep(time.Second * 2)
 	add := []string{"", fname1, fname, fname2}
 
 	for _, p := range add {

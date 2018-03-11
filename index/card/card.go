@@ -82,6 +82,7 @@ func (p *card_t) DebugStr() string {
 	for i, path := range p.paths {
 		s += fp("\tpath[%d]: %q\n", i, path)
 	}
+	s += fp("\tsource:   %q\n", p.source)
 	s += fp("\tmodified: %t\n", p.modified)
 	s += fp("\tbufsize:  %d\n", p.bufsize())
 	return s
@@ -138,6 +139,7 @@ func New(oid *index.OID, path string, tagsBah, systemicsBah []byte) (index.Card,
 
 // Read an existing card file. File is read in RDONLY mode and immediately closed.
 // Use index.Card.Sync() to update the file (if modified).
+// TODO rename Load(fname string, create bool) ..
 func Read(fname string) (index.Card, error) {
 	finfo, e := os.Stat(fname)
 	if e != nil {
@@ -179,11 +181,11 @@ func Read(fname string) (index.Card, error) {
 	var pathcnt int
 	for offset < len(buf) {
 		n, path := readLine(buf[offset:])
-		paths = append(paths, string(path))
+		paths[pathcnt] = string(path)
 		offset += n
 		pathcnt++
 	}
-	// At least one path must be in the card or we have a bug
+
 	if pathcnt != int(hdr.pathcnt) {
 		return nil, fmt.Errorf("bug - card_t.Read: pathcnt exp:%d have:%d - fname: %q",
 			hdr.pathcnt, pathcnt, fname)
@@ -195,9 +197,9 @@ func Read(fname string) (index.Card, error) {
 		tagsBah:      tagsBah,
 		systemicsBah: systemicsBah,
 		paths:        paths,
+		modified:     false,
+		source:       fname,
 	}, nil
-
-	panic("card_t.Read: not implemented")
 }
 
 /// interface: index.Card /////////////////////////////////////////////////////
@@ -373,6 +375,12 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 		return nil, fmt.Errorf("card.readAndVerifyHeader - invalid ftype: %04x ", hdr.ftype)
 	}
 
+	//	// check filesize:
+	//	if hdr.bufsize != finfo.Size() {
+	//		return nil, fmt.Error("bug - card.readAndVerifyHeader - hdr.bufsize:%d finfo.Size:%d",
+	//			hdr.bufsize, finfo.Size())
+	//	}
+
 	// TODO correct CRC usage in fix tagmap_t as well.
 	var crc32 = digest.Checksum32(buf[8:])
 	if hdr.crc32 != crc32 {
@@ -385,6 +393,11 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 	}
 	if hdr.updated == 0 {
 		return nil, fmt.Errorf("card.readAndVerifyHeader - invalid updated: %d ", hdr.updated)
+	}
+
+	// At least one path must be in the card or we have a bug
+	if hdr.pathcnt == 0 {
+		return nil, fmt.Errorf("card.readAndVerifyHeader - invalid pathcnt: %d", hdr.pathcnt)
 	}
 
 	// reserved must be all 0x00
