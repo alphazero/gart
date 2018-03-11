@@ -42,7 +42,7 @@ func (oid OID) IsValid() bool {
 type Card interface {
 	CreatedOn() time.Time // unix seconds precision
 	UpdatedOn() time.Time // unix seconds precision
-	Flags() uint32        // REVU: use semantic flags e.g. Card.HasDups() bool, etc.
+	Flags() byte          // REVU: use semantic flags e.g. Card.HasDups() bool, etc.
 
 	// Object ID is the Card entry's content hash
 	Oid() OID

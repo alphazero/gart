@@ -63,7 +63,8 @@ type card_t struct {
 	paths        []string  // serialized associated fs object paths
 
 	/* not persisted */
-	modified bool // REVU on New, add/del tags, add/del paths
+	source   string // only set on LoadOrCreate()
+	modified bool   // REVU on New, add/del tags, add/del paths
 }
 
 func (p *card_t) DebugStr() string {
@@ -78,7 +79,7 @@ func (p *card_t) DebugStr() string {
 	for i, path := range p.paths {
 		s += fp("\tpath[%d]: %q\n", i, path)
 	}
-	s += fp("\tmodified:    %t\n", p.modified)
+	s += fp("\tmodified: %t\n", p.modified)
 	s += fp("\tbufsize:  %d\n", p.bufsize())
 	return s
 }
@@ -93,7 +94,6 @@ func (p *card_t) DebugStr() string {
 
 // REVU every other func is using fname. the OS FS dirs are a convenient index but
 //      should not be considered canonical.
-func Exists(oid []byte) bool { panic("card_t.Exists: not implemented") }
 
 // Creates a new card. card_t file is assigned on Card.Save().
 func New(oid *index.OID, path string, tagsBah, systemicsBah []byte) (index.Card, error) {
@@ -210,9 +210,6 @@ func readLine(buf []byte) (int, []byte) {
 }
 
 /// interface: index.Card /////////////////////////////////////////////////////
-func (c *card_t) RemovePath(fpath string) (bool, error) {
-	panic("card_t: index.Card method not implemented")
-}
 
 // REVU this 'bah' business is silly. Again, this is not a library!
 func (c *card_t) UpdateUserTagBah(bitmap []byte) {
@@ -260,17 +257,56 @@ func (c *card_t) Save(fname string) error {
 	return nil
 }
 
-func (c *card_t) CreatedOn() time.Time   { panic("card_t: index.Card method not implemented") }
-func (c *card_t) UpdatedOn() time.Time   { panic("card_t: index.Card method not implemented") }
-func (c *card_t) Flags() uint32          { panic("card_t: index.Card method not implemented") }
-func (c *card_t) Oid() index.OID         { panic("card_t: index.Card method not implemented") }
-func (c *card_t) TagsBitmap() []byte     { panic("card_t: index.Card method not implemented") }
-func (c *card_t) SystemicBitmap() []byte { panic("card_t: index.Card method not implemented") }
-func (c *card_t) DayTagBah() []byte      { panic("card_t: index.Card method not implemented") }
-func (c *card_t) Paths() []string        { panic("card_t: index.Card method not implemented") }
-func (c *card_t) AddPath(fpath string) (bool, error) {
-	panic("card_t: index.Card method not implemented")
+func (c *card_t) CreatedOn() time.Time   { return time.Unix(c.created, 0) }
+func (c *card_t) UpdatedOn() time.Time   { return time.Unix(c.updated, 0) }
+func (c *card_t) Flags() byte            { return c.flags }
+func (c *card_t) Oid() index.OID         { return c.oid }
+func (c *card_t) TagsBitmap() []byte     { return c.tagsBah }      // REVU return copy?
+func (c *card_t) SystemicBitmap() []byte { return c.systemicsBah } // REVU return copy?
+func (c *card_t) Paths() []string        { return c.paths }        // REVU return copy?
+
+func (c *card_t) AddPath(path string) (bool, error) {
+	if path == "" {
+		return false, fmt.Errorf("err - card_t.AddPath: invalid arg - zerolen path")
+	}
+	for _, s := range c.paths {
+		if s == path {
+			return false, nil // REVU no error on add existing
+		}
+	}
+	c.paths = append(c.paths, path)
+	c.pathcnt++
+	c.modified = true
+
+	return true, nil
 }
+
+func (c *card_t) RemovePath(path string) (bool, error) {
+	if path == "" {
+		return false, fmt.Errorf("err - card_t.RemovePath: invalid arg - zerolen path")
+	}
+	var i int
+	for i < len(c.paths) {
+		if path == c.paths[i] {
+			break // found
+		}
+		i++
+	}
+	if i == len(c.paths) {
+		return false, nil
+	}
+	var paths = make([]string, len(c.paths)-1)
+	copy(paths, c.paths[:i])
+	copy(paths[i:], c.paths[i+1:])
+	c.pathcnt--
+	c.modified = true
+
+	return true, nil
+}
+
+func Exists(oid []byte) bool { panic("card_t.Exists: not implemented") }
+
+/// internal ops ///////////////////////////////////////////////////////////////
 
 func (c *card_t) encode(buf []byte) error {
 	var bufsize = c.bufsize()
@@ -318,8 +354,6 @@ func (c *card_t) encode(buf []byte) error {
 
 	return nil // fini
 }
-
-/// internal ops ///////////////////////////////////////////////////////////////
 
 // ? REVU if only a single fs object is associated with this card, return an error.
 // TODO index.RemoveObject(oid)

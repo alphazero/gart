@@ -13,6 +13,7 @@ import (
 )
 
 const fname = "/Users/alphazero/Code/go/src/gart/process.go"
+const fname1 = "/Users/alphazero/Code/go/src/github.com/alphazero/gart/process.go"
 const path = "/Users/alphazero/Code/go/src/gart/index/card/test"
 
 func cardfile(oid *index.OID) string {
@@ -50,6 +51,18 @@ func main() {
 		exitOnError(e)
 	}
 	fmt.Printf("wrote: %q\n", cfile)
+
+	fmt.Println("/// add a path //////////////////")
+	ok, e := card.AddPath(fname1)
+	if e != nil {
+		exitOnError(e)
+	}
+	if ok {
+		fmt.Printf("added %q\n", fname1)
+		fmt.Printf("%s\n", card.DebugStr())
+	} else {
+		fmt.Printf("existing %q not added\n", fname1)
+	}
 
 	fmt.Printf("& Salaam!\n")
 }
