@@ -59,7 +59,7 @@ type Card interface {
 	//
 	UpdateUserTagBah(bitmap []byte)
 	//
-	Save(fname string) (bool, error)
+	Save(fname string) error
 	// XXX
 	DebugStr() string
 }

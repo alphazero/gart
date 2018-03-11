@@ -223,15 +223,14 @@ func (c *card_t) UpdateUserTagBah(bitmap []byte) {
 // Save always writes the file, even if card file has not changed. Use Sync in
 // conjunction with card.Load(cardfile) if io is to be limited to the case of
 // changed cards.
-func (c *card_t) Save(fname string) (bool, error) {
+func (c *card_t) Save(fname string) error {
 
 	// TODO use the same fs func for tagmap
 	swapfile := fs.SwapfileName(fname)
 	var abort = true // REVU for now, treat dangling swaps as system bugs
 	sfile, existing, e := fs.OpenNewSwapfile(swapfile, abort)
 	if e != nil {
-		err := fmt.Errorf("bug - card_t.Save: on OpenNewSwapfile - existing:%t - %s", existing, e)
-		return false, err
+		return fmt.Errorf("bug - card_t.Save: on OpenNewSwapfile - existing:%t - %s", existing, e)
 	}
 	defer sfile.Close()
 
@@ -239,26 +238,26 @@ func (c *card_t) Save(fname string) (bool, error) {
 	var buf = make([]byte, bufsize)
 
 	if e := c.encode(buf); e != nil {
-		return false, e // only bugs
+		return e // only bugs
 	}
 
 	// write buf to file
 	_, e = sfile.Write(buf)
 	if e != nil {
-		return false, e
+		return e
 	}
 
 	// fsync the swap file
 	if e := sfile.Sync(); e != nil {
-		return false, fmt.Errorf("bug - card_t.Save: sfile.Sync - %s", e)
+		return fmt.Errorf("bug - card_t.Save: sfile.Sync - %s", e)
 	}
 	// rename to actual card file
 	if e := os.Rename(swapfile, fname); e != nil {
-		return false, fmt.Errorf("bug - card_t.Save: os.Rename swp:%q dst:%q - %s",
+		return fmt.Errorf("bug - card_t.Save: os.Rename swp:%q dst:%q - %s",
 			swapfile, fname, e)
 	}
 
-	panic("card_t: index.Card method not implemented")
+	return nil
 }
 
 func (c *card_t) CreatedOn() time.Time   { panic("card_t: index.Card method not implemented") }
