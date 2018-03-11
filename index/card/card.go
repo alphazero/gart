@@ -2,6 +2,9 @@
 
 package card
 
+// ? REVU if only a single fs object is associated with this card, return an error.
+// TODO index.RemoveObject(oid)
+
 import (
 	"fmt"
 	"os"
@@ -96,6 +99,7 @@ func (p *card_t) DebugStr() string {
 //      should not be considered canonical.
 
 // Creates a new card. card_t file is assigned on Card.Save().
+// REVU consider deprecating New and Save. Use only Load(filename, create) & Sync()
 func New(oid *index.OID, path string, tagsBah, systemicsBah []byte) (index.Card, error) {
 	// accept any value for an oid except all zero bytes.
 	if !oid.IsValid() {
@@ -196,19 +200,6 @@ func Read(fname string) (index.Card, error) {
 	panic("card_t.Read: not implemented")
 }
 
-// read until '\n' or end of buffer.
-// Return offset at position after the delim.
-func readLine(buf []byte) (int, []byte) {
-	var xof int //= offset
-	for xof < len(buf) {
-		if buf[xof] == '\n' {
-			break
-		}
-		xof++
-	}
-	return xof + 1, buf[:xof]
-}
-
 /// interface: index.Card /////////////////////////////////////////////////////
 
 // REVU this 'bah' business is silly. Again, this is not a library!
@@ -278,6 +269,7 @@ func (c *card_t) AddPath(path string) (bool, error) {
 	}
 	c.paths = append(c.paths, path)
 	c.pathcnt++
+	c.updated = time.Now().Unix()
 	c.modified = true
 
 	return true, nil
@@ -308,6 +300,7 @@ found:
 	}
 	c.pathcnt--
 	c.paths = c.paths[:c.pathcnt]
+	c.updated = time.Now().Unix()
 	c.modified = true
 
 	return true, nil
@@ -317,6 +310,8 @@ func Exists(oid []byte) bool { panic("card_t.Exists: not implemented") }
 
 /// internal ops ///////////////////////////////////////////////////////////////
 
+// REVU crc is being set here -- function name does NOT reflect it.
+// TODO rethink this!
 func (c *card_t) encode(buf []byte) error {
 	var bufsize = c.bufsize()
 
@@ -366,21 +361,6 @@ func (c *card_t) encode(buf []byte) error {
 	return nil // fini
 }
 
-// ? REVU if only a single fs object is associated with this card, return an error.
-// TODO index.RemoveObject(oid)
-
-func (c *card_t) bufsize() int {
-	n := headerBytes
-	n += index.OidBytes
-	n += len(c.tagsBah)
-	n += len(c.systemicsBah)
-	// each path is len of the []byte of path + \n
-	for _, p := range c.paths {
-		n += len([]byte(p)) + 1
-	}
-	return n
-}
-
 // REVU can we just merge header with card_t ? why not?
 func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 	if len(buf) < headerBytes {
@@ -394,7 +374,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 	}
 
 	// TODO correct CRC usage in fix tagmap_t as well.
-	var crc32 = digest.Checksum32(buf[4:])
+	var crc32 = digest.Checksum32(buf[8:])
 	if hdr.crc32 != crc32 {
 		return nil, fmt.Errorf("card.readAndVerifyHeader - invalid crc32: %04x expect: %04x",
 			hdr.crc32, crc32)
@@ -415,4 +395,29 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 	}
 
 	return hdr, nil
+}
+
+func (c *card_t) bufsize() int {
+	n := headerBytes
+	n += index.OidBytes
+	n += len(c.tagsBah)
+	n += len(c.systemicsBah)
+	// each path is len of the []byte of path + \n
+	for _, p := range c.paths {
+		n += len([]byte(p)) + 1
+	}
+	return n
+}
+
+// read until '\n' or end of buffer.
+// Return offset at position after the delim.
+func readLine(buf []byte) (int, []byte) {
+	var xof int //= offset
+	for xof < len(buf) {
+		if buf[xof] == '\n' {
+			break
+		}
+		xof++
+	}
+	return xof + 1, buf[:xof]
 }

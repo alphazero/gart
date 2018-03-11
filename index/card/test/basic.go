@@ -40,28 +40,44 @@ func main() {
 	var systemics = []byte{0x7f}
 
 	//	var cfile = cardfile(oid)
-	card, e := card.New(oid, fname, tags, systemics)
+	crd, e := card.New(oid, fname, tags, systemics)
 	if e != nil {
 		exitOnError(e)
 	}
-	fmt.Printf("%s\n", card.DebugStr())
+	fmt.Printf("%s\n", crd.DebugStr())
 
-	doSave(card)
+	doSave(crd)
 
 	add := []string{"", fname1, fname, fname2}
 
 	for _, p := range add {
-		doAdd(card, p)
+		doAdd(crd, p)
 	}
 
-	doSave(card)
+	doSave(crd)
 
-	doRemove(card, fname2)
-	doRemove(card, "")
-	doRemove(card, fname1)
+	doRemove(crd, fname2)
+	doRemove(crd, "")
+	doRemove(crd, fname1)
 
-	doSave(card)
+	doSave(crd)
+
+	/// check Read
+	crd1 := doRead(crd.Oid())
+	doRemove(crd1, fname)
+
 	fmt.Printf("& Salaam!\n")
+}
+func doRead(oid index.OID) index.Card {
+
+	cfile := cardfile(&oid)
+	crd, e := card.Read(cfile)
+	if e != nil {
+		exitOnError(e)
+	}
+	fmt.Printf("read: %q\n", cfile)
+	fmt.Printf("%s\n", crd.DebugStr())
+	return crd
 }
 
 func doSave(card index.Card) {
