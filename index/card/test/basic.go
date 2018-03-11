@@ -14,6 +14,7 @@ import (
 
 const fname = "/Users/alphazero/Code/go/src/gart/process.go"
 const fname1 = "/Users/alphazero/Code/go/src/github.com/alphazero/gart/process.go"
+const fname2 = "/usr/local/go/src/alphazero/gart/process.go"
 const path = "/Users/alphazero/Code/go/src/gart/index/card/test"
 
 func cardfile(oid *index.OID) string {
@@ -45,26 +46,63 @@ func main() {
 	}
 	fmt.Printf("%s\n", card.DebugStr())
 
+	doSave(card)
+
+	add := []string{"", fname1, fname, fname2}
+
+	for _, p := range add {
+		doAdd(card, p)
+	}
+
+	doSave(card)
+
+	doRemove(card, fname2)
+	doRemove(card, "")
+	doRemove(card, fname1)
+
+	doSave(card)
+	fmt.Printf("& Salaam!\n")
+}
+
+func doSave(card index.Card) {
 	// write it
-	cfile := cardfile(oid)
+	var oid = card.Oid()
+	cfile := cardfile(&oid)
 	if e := card.Save(cfile); e != nil {
 		exitOnError(e)
 	}
 	fmt.Printf("wrote: %q\n", cfile)
+	fmt.Printf("%s\n", card.DebugStr())
+}
 
-	fmt.Println("/// add a path //////////////////")
-	ok, e := card.AddPath(fname1)
+func doRemove(card index.Card, s string) {
+	fmt.Printf("/// remove path /// %q\n", s)
+	ok, e := card.RemovePath(s)
 	if e != nil {
-		exitOnError(e)
+		fmt.Printf("err - %s\n", e)
+		return
 	}
 	if ok {
-		fmt.Printf("added %q\n", fname1)
-		fmt.Printf("%s\n", card.DebugStr())
+		fmt.Printf("removed %q\n", s)
+		//		fmt.Printf("%s\n", card.DebugStr())
 	} else {
-		fmt.Printf("existing %q not added\n", fname1)
+		fmt.Printf("%q not found\n", s)
 	}
+}
 
-	fmt.Printf("& Salaam!\n")
+func doAdd(card index.Card, s string) {
+	fmt.Printf("/// add path /// %q\n", s)
+	ok, e := card.AddPath(s)
+	if e != nil {
+		fmt.Printf("err - %s\n", e)
+		return
+	}
+	if ok {
+		fmt.Printf("added %q\n", s)
+		//		fmt.Printf("%s\n", card.DebugStr())
+	} else {
+		fmt.Printf("existing %q not added\n", s)
+	}
 }
 
 func exitOnError(e error) {

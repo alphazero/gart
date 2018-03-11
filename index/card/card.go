@@ -254,6 +254,8 @@ func (c *card_t) Save(fname string) error {
 			swapfile, fname, e)
 	}
 
+	c.modified = false
+
 	return nil
 }
 
@@ -285,20 +287,27 @@ func (c *card_t) RemovePath(path string) (bool, error) {
 	if path == "" {
 		return false, fmt.Errorf("err - card_t.RemovePath: invalid arg - zerolen path")
 	}
+
 	var i int
 	for i < len(c.paths) {
 		if path == c.paths[i] {
-			break // found
+			if c.pathcnt == 1 {
+				return false, fmt.Errorf("err - card_t.RemovePath: illegal state - card's only path")
+			}
+			goto found
 		}
 		i++
 	}
-	if i == len(c.paths) {
-		return false, nil
+	return false, nil // not found
+
+found:
+	//	var paths = make([]string, len(c.paths)-1)
+	//	copy(paths, c.paths[:i])
+	if i != len(c.paths) {
+		copy(c.paths[i:], c.paths[i+1:])
 	}
-	var paths = make([]string, len(c.paths)-1)
-	copy(paths, c.paths[:i])
-	copy(paths[i:], c.paths[i+1:])
 	c.pathcnt--
+	c.paths = c.paths[:c.pathcnt]
 	c.modified = true
 
 	return true, nil
@@ -339,6 +348,8 @@ func (c *card_t) encode(buf []byte) error {
 	// finally, compute & encode the checksum
 	var crc32 = digest.Checksum32(buf[8:bufsize])
 	*(*uint32)(unsafe.Pointer(&buf[4])) = crc32
+	// also update the card's crc
+	c.crc32 = crc32
 
 	// XXX temp asserts
 	if offset != bufsize {
