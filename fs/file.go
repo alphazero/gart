@@ -103,17 +103,21 @@ try:
 	}
 
 	file, e := OpenNewFile(fname, ops)
-	if e != nil && os.IsExist(e) {
-		existed = true
-		if abort {
+	if e != nil {
+		if os.IsExist(e) {
+			existed = true
+			if abort {
+				return nil, existed, e
+			}
+			if rme := os.Remove(fname); rme != nil {
+				err := fmt.Errorf("bug - fs.OpenNewSwapfile: on os.Remove - %s", rme)
+				return nil, existed, err
+			}
+			tries++
+			goto try // try again
+		} else {
 			return nil, existed, e
 		}
-		if rme := os.Remove(fname); rme != nil {
-			err := fmt.Errorf("bug - fs.OpenNewSwapfile: on os.Remove - %s", rme)
-			return nil, existed, err
-		}
-		tries++
-		goto try // try again
 	}
 	return file, existed, nil
 }
