@@ -63,7 +63,7 @@ type card_t struct {
 	paths        []string  // serialized associated fs object paths
 
 	/* not persisted */
-	dirty bool // REVU on New, add/del tags, add/del paths
+	modified bool // REVU on New, add/del tags, add/del paths
 }
 
 func (p *card_t) DebugStr() string {
@@ -78,7 +78,7 @@ func (p *card_t) DebugStr() string {
 	for i, path := range p.paths {
 		s += fp("\tpath[%d]: %q\n", i, path)
 	}
-	s += fp("\tdirty:    %t\n", p.dirty)
+	s += fp("\tmodified:    %t\n", p.modified)
 	s += fp("\tbufsize:  %d\n", p.bufsize())
 	return s
 }
@@ -126,7 +126,7 @@ func New(oid *index.OID, path string, tagsBah, systemicsBah []byte) (index.Card,
 		tagsBah:      tagsBah,
 		systemicsBah: systemicsBah,
 		paths:        []string{path},
-		dirty:        true,
+		modified:     true,
 	}
 
 	return card, nil
@@ -210,27 +210,13 @@ func readLine(buf []byte) (int, []byte) {
 }
 
 /// interface: index.Card /////////////////////////////////////////////////////
-func (c *card_t) CreatedOn() time.Time   { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) UpdatedOn() time.Time   { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) Flags() uint32          { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) Oid() index.OID         { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) TagsBitmap() []byte     { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) SystemicBitmap() []byte { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) DayTagBah() []byte      { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) Paths() []string        { panic("cart_t: index.Card method not implemented") }
-func (c *card_t) AddPath(fpath string) (bool, error) {
-	panic("cart_t: index.Card method not implemented")
-}
-
-// REVU if only a single fs object is associated with this card, return an error.
-// TODO index.RemoveObject(oid)
 func (c *card_t) RemovePath(fpath string) (bool, error) {
-	panic("cart_t: index.Card method not implemented")
+	panic("card_t: index.Card method not implemented")
 }
 
 // REVU this 'bah' business is silly. Again, this is not a library!
 func (c *card_t) UpdateUserTagBah(bitmap []byte) {
-	panic("cart_t: index.Card method not implemented")
+	panic("card_t: index.Card method not implemented")
 }
 
 // Save writes the card to a swap file and then rename to file 'fname' as given.
@@ -239,32 +225,105 @@ func (c *card_t) UpdateUserTagBah(bitmap []byte) {
 // changed cards.
 func (c *card_t) Save(fname string) (bool, error) {
 
+	// TODO use the same fs func for tagmap
 	swapfile := fs.SwapfileName(fname)
-	var ops = os.O_WRONLY | os.O_APPEND
-	sfile, e := fs.OpenNewFile(swapfile, ops)
+	var abort = true // REVU for now, treat dangling swaps as system bugs
+	sfile, existing, e := fs.OpenNewSwapfile(swapfile, abort)
 	if e != nil {
-		return false, e
+		err := fmt.Errorf("bug - card_t.Save: on OpenNewSwapfile - existing:%t - %s", existing, e)
+		return false, err
 	}
 	defer sfile.Close()
 
 	var bufsize = c.bufsize()
 	var buf = make([]byte, bufsize)
-	println(len(buf)) // XXX mr. compiler ..
-	// TODO header.encode(buf[0:])
-	// TODO card_t.encode(buf[headerBytes:]
 
-	hdrbuf := *(*[headerBytes]byte)(unsafe.Pointer(&c.header))
-	_, e = sfile.Write(hdrbuf[:])
+	if e := c.encode(buf); e != nil {
+		return false, e // only bugs
+	}
+
+	// write buf to file
+	_, e = sfile.Write(buf)
 	if e != nil {
 		return false, e
 	}
 
-	// update checksum if card is 'dirty'
-	if c.dirty {
-
+	// fsync the swap file
+	if e := sfile.Sync(); e != nil {
+		return false, fmt.Errorf("bug - card_t.Save: sfile.Sync - %s", e)
 	}
-	panic("cart_t: index.Card method not implemented")
+	// rename to actual card file
+	if e := os.Rename(swapfile, fname); e != nil {
+		return false, fmt.Errorf("bug - card_t.Save: os.Rename swp:%q dst:%q - %s",
+			swapfile, fname, e)
+	}
+
+	panic("card_t: index.Card method not implemented")
 }
+
+func (c *card_t) CreatedOn() time.Time   { panic("card_t: index.Card method not implemented") }
+func (c *card_t) UpdatedOn() time.Time   { panic("card_t: index.Card method not implemented") }
+func (c *card_t) Flags() uint32          { panic("card_t: index.Card method not implemented") }
+func (c *card_t) Oid() index.OID         { panic("card_t: index.Card method not implemented") }
+func (c *card_t) TagsBitmap() []byte     { panic("card_t: index.Card method not implemented") }
+func (c *card_t) SystemicBitmap() []byte { panic("card_t: index.Card method not implemented") }
+func (c *card_t) DayTagBah() []byte      { panic("card_t: index.Card method not implemented") }
+func (c *card_t) Paths() []string        { panic("card_t: index.Card method not implemented") }
+func (c *card_t) AddPath(fpath string) (bool, error) {
+	panic("card_t: index.Card method not implemented")
+}
+
+func (c *card_t) encode(buf []byte) error {
+	var bufsize = c.bufsize()
+
+	if len(buf) < bufsize {
+		return fmt.Errorf("bug - card_t.encode: buflen:%d required:%d", len(buf), bufsize)
+	}
+
+	*(*uint32)(unsafe.Pointer(&buf[0])) = c.ftype
+	*(*int64)(unsafe.Pointer(&buf[8])) = c.created
+	*(*int64)(unsafe.Pointer(&buf[16])) = c.updated
+	buf[24] = c.flags
+	buf[25] = c.pathcnt
+	buf[26] = c.tbahlen
+	buf[27] = c.sbahlen
+	*(*[4]byte)(unsafe.Pointer(&buf[28])) = c.reserved
+	*(*index.OID)(unsafe.Pointer(&buf[32])) = c.oid
+	var offset = 64
+	copy(buf[offset:], c.tagsBah)
+	offset += int(c.tbahlen)
+	copy(buf[offset:], c.systemicsBah)
+	offset += int(c.sbahlen)
+	for _, path := range c.paths {
+		copy(buf[offset:], []byte(path))
+		offset += len(path)
+		buf[offset] = '\n'
+		offset++
+	}
+
+	// finally, compute & encode the checksum
+	var crc32 = digest.Checksum32(buf[8:bufsize])
+	*(*uint32)(unsafe.Pointer(&buf[4])) = crc32
+
+	// XXX temp asserts
+	if offset != bufsize {
+		return fmt.Errorf("bug - card_t.encode: offset:%d expected:%d", offset, bufsize)
+	}
+	// if card wasn't modified then the checksums should be the same
+	if !c.modified {
+		if c.crc32 != crc32 {
+			return fmt.Errorf("bug - card_t.encode: crc32:%08x c.crc32:%08x", crc32, c.crc32)
+		}
+	}
+	// XXX temp assert
+
+	return nil // fini
+}
+
+/// internal ops ///////////////////////////////////////////////////////////////
+
+// ? REVU if only a single fs object is associated with this card, return an error.
+// TODO index.RemoveObject(oid)
 
 func (c *card_t) bufsize() int {
 	n := headerBytes
@@ -277,8 +336,6 @@ func (c *card_t) bufsize() int {
 	}
 	return n
 }
-
-/// internal ops ///////////////////////////////////////////////////////////////
 
 // REVU can we just merge header with card_t ? why not?
 func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {

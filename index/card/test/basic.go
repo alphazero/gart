@@ -43,6 +43,18 @@ func main() {
 		exitOnError(e)
 	}
 	fmt.Printf("%s\n", card.DebugStr())
+
+	// write it
+	cfile := cardfile(oid)
+	wrote, e := card.Save(cfile)
+	if e != nil {
+		exitOnError(e)
+	}
+	if wrote {
+		fmt.Printf("wrote: %q\n", cfile)
+	}
+
+	fmt.Printf("& Salaam!\n")
 }
 
 func exitOnError(e error) {
