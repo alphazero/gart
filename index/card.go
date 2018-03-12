@@ -82,11 +82,11 @@ func (p *header) DebugStr() string {
 // and a variable number of associated paths and tags.
 // Not all elements of this structure are persisted in the binary image.
 type card_t struct {
-	header                // serialized
-	oid          OID      // 32 bytes TODO assert this on init
-	tagsBah      []byte   // serialized user tags' bah bitmap - can change
-	systemicsBah []byte   // serialized systemic tags' bah bitmap - write once
-	paths        []string // serialized associated fs object paths
+	header             // serialized
+	oid       OID      // 32 bytes TODO assert this on init
+	tags      []byte   // serialized user tags' bah bitmap - can change
+	systemics []byte   // serialized systemic tags' bah bitmap - write once
+	paths     []string // serialized associated fs object paths
 
 	/* not persisted */
 	source   string // only set on LoadOrCreate()
@@ -100,8 +100,8 @@ func (p *card_t) DebugStr() string {
 	var s string = p.header.DebugStr()
 	s += fp("------------\n")
 	s += fp("\toid:      %x\n", p.oid)
-	s += fp("\ttags:     %08b\n", p.tagsBah)
-	s += fp("\tsystemics:%08b\n", p.systemicsBah)
+	s += fp("\ttags:     %08b\n", p.tags)
+	s += fp("\tsystemics:%08b\n", p.systemics)
 	for i, path := range p.paths {
 		s += fp("\tpath[%d]: %q\n", i, path)
 	}
@@ -124,7 +124,7 @@ func (p *card_t) DebugStr() string {
 
 // Creates a new card. card_t file is assigned on Card.Save().
 // REVU consider deprecating New and Save. Use only Load(filename, create) & Sync()
-func NewCard(oid *OID, path string, tagsBah, systemicsBah []byte) (Card, error) {
+func NewCard(oid *OID, path string, tags, systemics []byte) (Card, error) {
 	// accept any value for an oid except all zero bytes.
 	if !oid.IsValid() {
 		return nil, fmt.Errorf("err - card.New: oid is invalid")
@@ -132,11 +132,11 @@ func NewCard(oid *OID, path string, tagsBah, systemicsBah []byte) (Card, error) 
 	if len(path) == 0 { // REVU not a library! do not verify path
 		return nil, fmt.Errorf("bug - card.New: path is zero-len")
 	}
-	if len(tagsBah) == 0 {
-		return nil, fmt.Errorf("bug - card.New: tagsBah is zero-len")
+	if len(tags) == 0 {
+		return nil, fmt.Errorf("bug - card.New: tags is zero-len")
 	}
-	if len(systemicsBah) == 0 {
-		return nil, fmt.Errorf("bug - card.New: systemicsBah is zero-len")
+	if len(systemics) == 0 {
+		return nil, fmt.Errorf("bug - card.New: systemics is zero-len")
 	}
 	// header.crc32 is computed and set at save.
 	hdr := header{
@@ -144,17 +144,17 @@ func NewCard(oid *OID, path string, tagsBah, systemicsBah []byte) (Card, error) 
 		created: time.Now().Unix(),
 		updated: time.Now().Unix(),
 		pathcnt: 1,
-		tbahlen: uint8(len(tagsBah)),
-		sbahlen: uint8(len(systemicsBah)),
+		tbahlen: uint8(len(tags)),
+		sbahlen: uint8(len(systemics)),
 	}
 
 	card := &card_t{
-		header:       hdr,
-		oid:          *oid,
-		tagsBah:      tagsBah,
-		systemicsBah: systemicsBah,
-		paths:        []string{path},
-		modified:     true,
+		header:    hdr,
+		oid:       *oid,
+		tags:      tags,
+		systemics: systemics,
+		paths:     []string{path},
+		modified:  true,
 	}
 
 	return card, nil
@@ -193,10 +193,10 @@ func ReadCard(fname string) (Card, error) {
 	offset += len(oid)
 
 	// read user-tags and systemics-tags BAHs
-	tagsBah := buf[offset : offset+int(hdr.tbahlen)]
+	tags := buf[offset : offset+int(hdr.tbahlen)]
 	offset += int(hdr.tbahlen)
 
-	systemicsBah := buf[offset : offset+int(hdr.sbahlen)]
+	systemics := buf[offset : offset+int(hdr.sbahlen)]
 	offset += int(hdr.sbahlen)
 
 	// read (all) path(s)
@@ -215,13 +215,13 @@ func ReadCard(fname string) (Card, error) {
 	}
 
 	return &card_t{
-		header:       *hdr,
-		oid:          oid,
-		tagsBah:      tagsBah,
-		systemicsBah: systemicsBah,
-		paths:        paths,
-		modified:     false,
-		source:       fname,
+		header:    *hdr,
+		oid:       oid,
+		tags:      tags,
+		systemics: systemics,
+		paths:     paths,
+		modified:  false,
+		source:    fname,
 	}, nil
 }
 
@@ -232,7 +232,7 @@ func (c *card_t) UpdateTags(bm []byte) {
 	if len(bm) == 0 {
 		panic("bug - card_t.UpdateTags: bm is zerolen")
 	}
-	c.tagsBah = bm
+	c.tags = bm
 }
 
 // Save writes the card to a swap file and then rename to file 'fname' as given.
@@ -282,9 +282,9 @@ func (c *card_t) CreatedOn() time.Time { return time.Unix(c.created, 0) }
 func (c *card_t) UpdatedOn() time.Time { return time.Unix(c.updated, 0) }
 func (c *card_t) Flags() byte          { return c.flags }
 func (c *card_t) Oid() OID             { return c.oid }
-func (c *card_t) Tags() []byte         { return c.tagsBah }      // REVU return copy?
-func (c *card_t) Systemic() []byte     { return c.systemicsBah } // REVU return copy?
-func (c *card_t) Paths() []string      { return c.paths }        // REVU return copy?
+func (c *card_t) Tags() []byte         { return c.tags }      // REVU return copy?
+func (c *card_t) Systemic() []byte     { return c.systemics } // REVU return copy?
+func (c *card_t) Paths() []string      { return c.paths }     // REVU return copy?
 
 func (c *card_t) AddPath(path string) (bool, error) {
 	if path == "" {
@@ -355,9 +355,9 @@ func (c *card_t) encode(buf []byte) error {
 	*(*[4]byte)(unsafe.Pointer(&buf[28])) = c.reserved
 	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 	var offset = 64
-	copy(buf[offset:], c.tagsBah)
+	copy(buf[offset:], c.tags)
 	offset += int(c.tbahlen)
-	copy(buf[offset:], c.systemicsBah)
+	copy(buf[offset:], c.systemics)
 	offset += int(c.sbahlen)
 	for _, path := range c.paths {
 		copy(buf[offset:], []byte(path))
@@ -437,8 +437,8 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 func (c *card_t) bufsize() int {
 	n := headerBytes
 	n += OidBytes
-	n += len(c.tagsBah)
-	n += len(c.systemicsBah)
+	n += len(c.tags)
+	n += len(c.systemics)
 	// each path is len of the []byte of path + \n
 	for _, p := range c.paths {
 		n += len([]byte(p)) + 1
