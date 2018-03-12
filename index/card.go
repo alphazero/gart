@@ -2,9 +2,6 @@
 
 package index
 
-// ? REVU if only a single fs object is associated with this card, return an error.
-// TODO RemoveObject(oid)
-
 import (
 	"fmt"
 	"os"
@@ -13,8 +10,34 @@ import (
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
-	//	"github.com/alphazero/gart/index"
 )
+
+/// Object Index Card //////////////////////////////////////////////////////////
+
+type Card interface {
+	CreatedOn() time.Time // unix seconds precision
+	UpdatedOn() time.Time // unix seconds precision
+	Flags() byte          // REVU: use semantic flags e.g. Card.HasDups() bool, etc.
+
+	// Object ID is the Card entry's content hash
+	Oid() OID
+	//
+	Tags() []byte // REVU this should be bitmap.Bitmap
+	//
+	Systemic() []byte // REVU also bitmap.Bitmap
+	//
+	Paths() []string
+	//
+	AddPath(fpath string) (bool, error)
+	//
+	RemovePath(fpath string) (bool, error)
+	//
+	UpdateTags(bitmap []byte)
+	//
+	Save(fname string) error
+	// XXX
+	DebugStr() string
+}
 
 /// Card support types ///////////////////////////////////////////////////
 
@@ -204,9 +227,12 @@ func ReadCard(fname string) (Card, error) {
 
 /// interface: Card /////////////////////////////////////////////////////
 
-// REVU this 'bah' business is silly. Again, this is not a library!
-func (c *card_t) UpdateUserTagBah(bitmap []byte) {
-	panic("card_t: Card method not implemented")
+// REVU should this return a bool indicating it changed?
+func (c *card_t) UpdateTags(bm []byte) {
+	if len(bm) == 0 {
+		panic("bug - card_t.UpdateTags: bm is zerolen")
+	}
+	c.tagsBah = bm
 }
 
 // Save writes the card to a swap file and then rename to file 'fname' as given.
@@ -252,13 +278,13 @@ func (c *card_t) Save(fname string) error {
 	return nil
 }
 
-func (c *card_t) CreatedOn() time.Time   { return time.Unix(c.created, 0) }
-func (c *card_t) UpdatedOn() time.Time   { return time.Unix(c.updated, 0) }
-func (c *card_t) Flags() byte            { return c.flags }
-func (c *card_t) Oid() OID               { return c.oid }
-func (c *card_t) TagsBitmap() []byte     { return c.tagsBah }      // REVU return copy?
-func (c *card_t) SystemicBitmap() []byte { return c.systemicsBah } // REVU return copy?
-func (c *card_t) Paths() []string        { return c.paths }        // REVU return copy?
+func (c *card_t) CreatedOn() time.Time { return time.Unix(c.created, 0) }
+func (c *card_t) UpdatedOn() time.Time { return time.Unix(c.updated, 0) }
+func (c *card_t) Flags() byte          { return c.flags }
+func (c *card_t) Oid() OID             { return c.oid }
+func (c *card_t) Tags() []byte         { return c.tagsBah }      // REVU return copy?
+func (c *card_t) Systemic() []byte     { return c.systemicsBah } // REVU return copy?
+func (c *card_t) Paths() []string      { return c.paths }        // REVU return copy?
 
 func (c *card_t) AddPath(path string) (bool, error) {
 	if path == "" {
@@ -307,8 +333,6 @@ found:
 
 	return true, nil
 }
-
-func Exists(oid []byte) bool { panic("card_t.Exists: not implemented") }
 
 /// internal ops ///////////////////////////////////////////////////////////////
 
