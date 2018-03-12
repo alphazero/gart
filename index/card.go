@@ -8,6 +8,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
 )
@@ -22,17 +23,17 @@ type Card interface {
 	// Object ID is the Card entry's content hash
 	Oid() OID
 	//
-	Tags() []byte // REVU this should be bitmap.Bitmap
+	Tags() bitmap.Bitmap
 	//
-	Systemic() []byte // REVU also bitmap.Bitmap
+	Systemic() bitmap.Bitmap
 	//
 	Paths() []string
 	//
 	AddPath(fpath string) (bool, error)
 	//
 	RemovePath(fpath string) (bool, error)
-	//
-	UpdateTags(bitmap []byte)
+	// REVU asssert it is Compressed.
+	UpdateTags(cpm bitmap.Bitmap)
 	//
 	Save(fname string) error
 	// XXX
@@ -82,11 +83,11 @@ func (p *header) DebugStr() string {
 // and a variable number of associated paths and tags.
 // Not all elements of this structure are persisted in the binary image.
 type card_t struct {
-	header             // serialized
-	oid       OID      // 32 bytes TODO assert this on init
-	tags      []byte   // serialized user tags' bah bitmap - can change
-	systemics []byte   // serialized systemic tags' bah bitmap - write once
-	paths     []string // serialized associated fs object paths
+	header                  // serialized
+	oid       OID           // 32 bytes TODO assert this on init
+	tags      bitmap.Bitmap // serialized user tags' bah bitmap - can change
+	systemics bitmap.Bitmap // serialized systemic tags' bah bitmap - write once
+	paths     []string      // serialized associated fs object paths
 
 	/* not persisted */
 	source   string // only set on LoadOrCreate()
@@ -124,28 +125,34 @@ func (p *card_t) DebugStr() string {
 
 // Creates a new card. card_t file is assigned on Card.Save().
 // REVU consider deprecating New and Save. Use only Load(filename, create) & Sync()
-func NewCard(oid *OID, path string, tags, systemics []byte) (Card, error) {
+func NewCard(oid *OID, path string, tags, systemics bitmap.Bitmap) (Card, error) {
 	// accept any value for an oid except all zero bytes.
 	if !oid.IsValid() {
 		return nil, fmt.Errorf("err - card.New: oid is invalid")
 	}
+
 	if len(path) == 0 { // REVU not a library! do not verify path
 		return nil, fmt.Errorf("bug - card.New: path is zero-len")
 	}
-	if len(tags) == 0 {
+
+	if len(tags.Bytes()) == 0 {
 		return nil, fmt.Errorf("bug - card.New: tags is zero-len")
 	}
-	if len(systemics) == 0 {
+	tags.Compress() // NOP if already compressed
+
+	if len(systemics.Bytes()) == 0 {
 		return nil, fmt.Errorf("bug - card.New: systemics is zero-len")
 	}
+	systemics.Compress()
+
 	// header.crc32 is computed and set at save.
 	hdr := header{
 		ftype:   card_file_code,
 		created: time.Now().Unix(),
 		updated: time.Now().Unix(),
 		pathcnt: 1,
-		tbahlen: uint8(len(tags)),
-		sbahlen: uint8(len(systemics)),
+		tbahlen: uint8(len(tags.Bytes())),
+		sbahlen: uint8(len(systemics.Bytes())),
 	}
 
 	card := &card_t{
@@ -193,10 +200,10 @@ func ReadCard(fname string) (Card, error) {
 	offset += len(oid)
 
 	// read user-tags and systemics-tags BAHs
-	tags := buf[offset : offset+int(hdr.tbahlen)]
+	tagBytes := buf[offset : offset+int(hdr.tbahlen)]
 	offset += int(hdr.tbahlen)
 
-	systemics := buf[offset : offset+int(hdr.sbahlen)]
+	systemicsBytes := buf[offset : offset+int(hdr.sbahlen)]
 	offset += int(hdr.sbahlen)
 
 	// read (all) path(s)
@@ -217,8 +224,8 @@ func ReadCard(fname string) (Card, error) {
 	return &card_t{
 		header:    *hdr,
 		oid:       oid,
-		tags:      tags,
-		systemics: systemics,
+		tags:      bitmap.NewCompressed(tagBytes),
+		systemics: bitmap.NewCompressed(systemicsBytes),
 		paths:     paths,
 		modified:  false,
 		source:    fname,
@@ -228,8 +235,8 @@ func ReadCard(fname string) (Card, error) {
 /// interface: Card /////////////////////////////////////////////////////
 
 // REVU should this return a bool indicating it changed?
-func (c *card_t) UpdateTags(bm []byte) {
-	if len(bm) == 0 {
+func (c *card_t) UpdateTags(bm bitmap.Bitmap) {
+	if len(bm.Bytes()) == 0 {
 		panic("bug - card_t.UpdateTags: bm is zerolen")
 	}
 	c.tags = bm
@@ -278,13 +285,13 @@ func (c *card_t) Save(fname string) error {
 	return nil
 }
 
-func (c *card_t) CreatedOn() time.Time { return time.Unix(c.created, 0) }
-func (c *card_t) UpdatedOn() time.Time { return time.Unix(c.updated, 0) }
-func (c *card_t) Flags() byte          { return c.flags }
-func (c *card_t) Oid() OID             { return c.oid }
-func (c *card_t) Tags() []byte         { return c.tags }      // REVU return copy?
-func (c *card_t) Systemic() []byte     { return c.systemics } // REVU return copy?
-func (c *card_t) Paths() []string      { return c.paths }     // REVU return copy?
+func (c *card_t) CreatedOn() time.Time    { return time.Unix(c.created, 0) }
+func (c *card_t) UpdatedOn() time.Time    { return time.Unix(c.updated, 0) }
+func (c *card_t) Flags() byte             { return c.flags }
+func (c *card_t) Oid() OID                { return c.oid }
+func (c *card_t) Tags() bitmap.Bitmap     { return c.tags }      // REVU return copy?
+func (c *card_t) Systemic() bitmap.Bitmap { return c.systemics } // REVU return copy?
+func (c *card_t) Paths() []string         { return c.paths }     // REVU return copy?
 
 func (c *card_t) AddPath(path string) (bool, error) {
 	if path == "" {
@@ -355,9 +362,9 @@ func (c *card_t) encode(buf []byte) error {
 	*(*[4]byte)(unsafe.Pointer(&buf[28])) = c.reserved
 	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 	var offset = 64
-	copy(buf[offset:], c.tags)
+	copy(buf[offset:], c.tags.Bytes())
 	offset += int(c.tbahlen)
-	copy(buf[offset:], c.systemics)
+	copy(buf[offset:], c.systemics.Bytes())
 	offset += int(c.sbahlen)
 	for _, path := range c.paths {
 		copy(buf[offset:], []byte(path))
@@ -437,8 +444,8 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 func (c *card_t) bufsize() int {
 	n := headerBytes
 	n += OidBytes
-	n += len(c.tags)
-	n += len(c.systemics)
+	n += len(c.tags.Bytes())
+	n += len(c.systemics.Bytes())
 	// each path is len of the []byte of path + \n
 	for _, p := range c.paths {
 		n += len([]byte(p)) + 1

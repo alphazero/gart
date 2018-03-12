@@ -18,7 +18,7 @@ type Bitmap interface {
 	// IFF compressed returns a decompressed version, otherwise returns itself
 	Decompress() Bitmap
 	// Returns true if Bitmap is compressed
-	Compressed() bool
+	IsCompressed() bool
 	// Convenience method
 	Bytes() []byte
 	// Returns true if any of the bits are set
@@ -72,7 +72,7 @@ func (v bitmap_t) Bytes() []byte { return v }
 
 func (v bitmap_t) Decompress() Bitmap { return v }
 
-func (v bitmap_t) Compressed() bool { return false }
+func (v bitmap_t) IsCompressed() bool { return false }
 
 // byte aligned variant of WAH
 func (v bitmap_t) Compress() Bitmap {
@@ -119,7 +119,7 @@ func NewCompressed(buf []byte) Bitmap {
 
 func (v compressed_t) Bytes() []byte { return v }
 
-func (v compressed_t) Compressed() bool { return false }
+func (v compressed_t) IsCompressed() bool { return false }
 
 func (v compressed_t) Compress() Bitmap { return v }
 

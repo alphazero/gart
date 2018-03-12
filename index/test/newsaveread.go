@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/digest"
-	//	"github.com/alphazero/gart/gart"
 	"github.com/alphazero/gart/index"
 )
 
@@ -34,8 +34,8 @@ func main() {
 		exitOnError(e)
 	}
 
-	var tags = []byte{0x7f, 0x81, 0x02}
-	var systemics = []byte{0x7f}
+	var tags = bitmap.NewCompressed([]byte{0x7f, 0x81, 0x02})
+	var systemics = bitmap.NewCompressed([]byte{0x7f})
 
 	crd, e := index.NewCard(oid, fname, tags, systemics)
 	if e != nil {
