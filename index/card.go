@@ -1,9 +1,9 @@
 // Doost!
 
-package card
+package index
 
 // ? REVU if only a single fs object is associated with this card, return an error.
-// TODO index.RemoveObject(oid)
+// TODO RemoveObject(oid)
 
 import (
 	"fmt"
@@ -13,10 +13,10 @@ import (
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
-	"github.com/alphazero/gart/index"
+	//	"github.com/alphazero/gart/index"
 )
 
-/// index.Card support types ///////////////////////////////////////////////////
+/// Card support types ///////////////////////////////////////////////////
 
 // card file header related consts
 const (
@@ -55,15 +55,15 @@ func (p *header) DebugStr() string {
 	return s
 }
 
-// card type supports the index.Card interface. It has a fixed width header
+// card type supports the Card interface. It has a fixed width header
 // and a variable number of associated paths and tags.
 // Not all elements of this structure are persisted in the binary image.
 type card_t struct {
-	header                 // serialized
-	oid          index.OID // 32 bytes TODO assert this on init
-	tagsBah      []byte    // serialized user tags' bah bitmap - can change
-	systemicsBah []byte    // serialized systemic tags' bah bitmap - write once
-	paths        []string  // serialized associated fs object paths
+	header                // serialized
+	oid          OID      // 32 bytes TODO assert this on init
+	tagsBah      []byte   // serialized user tags' bah bitmap - can change
+	systemicsBah []byte   // serialized systemic tags' bah bitmap - write once
+	paths        []string // serialized associated fs object paths
 
 	/* not persisted */
 	source   string // only set on LoadOrCreate()
@@ -101,7 +101,7 @@ func (p *card_t) DebugStr() string {
 
 // Creates a new card. card_t file is assigned on Card.Save().
 // REVU consider deprecating New and Save. Use only Load(filename, create) & Sync()
-func New(oid *index.OID, path string, tagsBah, systemicsBah []byte) (index.Card, error) {
+func NewCard(oid *OID, path string, tagsBah, systemicsBah []byte) (Card, error) {
 	// accept any value for an oid except all zero bytes.
 	if !oid.IsValid() {
 		return nil, fmt.Errorf("err - card.New: oid is invalid")
@@ -138,9 +138,9 @@ func New(oid *index.OID, path string, tagsBah, systemicsBah []byte) (index.Card,
 }
 
 // Read an existing card file. File is read in RDONLY mode and immediately closed.
-// Use index.Card.Sync() to update the file (if modified).
+// Use Card.Sync() to update the file (if modified).
 // TODO rename Load(fname string, create bool) ..
-func Read(fname string) (index.Card, error) {
+func ReadCard(fname string) (Card, error) {
 	finfo, e := os.Stat(fname)
 	if e != nil {
 		return nil, e
@@ -162,7 +162,7 @@ func Read(fname string) (index.Card, error) {
 	}
 
 	// read & verify the OID - 32 bytes
-	var oid index.OID
+	var oid OID
 	copy(oid[:], buf[offset:offset+len(oid)])
 	if !oid.IsValid() {
 		return nil, fmt.Errorf("bug - card_t:Read - invalid OID %02x: %d", oid)
@@ -202,11 +202,11 @@ func Read(fname string) (index.Card, error) {
 	}, nil
 }
 
-/// interface: index.Card /////////////////////////////////////////////////////
+/// interface: Card /////////////////////////////////////////////////////
 
 // REVU this 'bah' business is silly. Again, this is not a library!
 func (c *card_t) UpdateUserTagBah(bitmap []byte) {
-	panic("card_t: index.Card method not implemented")
+	panic("card_t: Card method not implemented")
 }
 
 // Save writes the card to a swap file and then rename to file 'fname' as given.
@@ -255,7 +255,7 @@ func (c *card_t) Save(fname string) error {
 func (c *card_t) CreatedOn() time.Time   { return time.Unix(c.created, 0) }
 func (c *card_t) UpdatedOn() time.Time   { return time.Unix(c.updated, 0) }
 func (c *card_t) Flags() byte            { return c.flags }
-func (c *card_t) Oid() index.OID         { return c.oid }
+func (c *card_t) Oid() OID               { return c.oid }
 func (c *card_t) TagsBitmap() []byte     { return c.tagsBah }      // REVU return copy?
 func (c *card_t) SystemicBitmap() []byte { return c.systemicsBah } // REVU return copy?
 func (c *card_t) Paths() []string        { return c.paths }        // REVU return copy?
@@ -329,7 +329,7 @@ func (c *card_t) encode(buf []byte) error {
 	buf[26] = c.tbahlen
 	buf[27] = c.sbahlen
 	*(*[4]byte)(unsafe.Pointer(&buf[28])) = c.reserved
-	*(*index.OID)(unsafe.Pointer(&buf[32])) = c.oid
+	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 	var offset = 64
 	copy(buf[offset:], c.tagsBah)
 	offset += int(c.tbahlen)
@@ -412,7 +412,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 
 func (c *card_t) bufsize() int {
 	n := headerBytes
-	n += index.OidBytes
+	n += OidBytes
 	n += len(c.tagsBah)
 	n += len(c.systemicsBah)
 	// each path is len of the []byte of path + \n

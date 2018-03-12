@@ -107,6 +107,7 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 
 	// fingerprint ______________________
 
+	// HERE use gart.AddObject(fds.Path)
 	md, e := digest.SumFile(fds.Path)
 	if e != nil {
 		// if PathError and ErrPermission skip this item but don't abort

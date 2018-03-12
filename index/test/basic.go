@@ -10,13 +10,13 @@ import (
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/index"
-	"github.com/alphazero/gart/index/card"
+	//	"github.com/alphazero/gart/index/card"
 )
 
 const fname = "/Users/alphazero/Code/go/src/gart/process.go"
 const fname1 = "/Users/alphazero/Code/go/src/github.com/alphazero/gart/process.go"
 const fname2 = "/usr/local/go/src/alphazero/gart/process.go"
-const path = "/Users/alphazero/Code/go/src/gart/index/card/test"
+const path = "/Users/alphazero/Code/go/src/gart/index/test"
 
 func cardfile(oid *index.OID) string {
 	s := fmt.Sprintf("%x.card", *oid)
@@ -41,7 +41,7 @@ func main() {
 	var systemics = []byte{0x7f}
 
 	//	var cfile = cardfile(oid)
-	crd, e := card.New(oid, fname, tags, systemics)
+	crd, e := index.NewCard(oid, fname, tags, systemics)
 	if e != nil {
 		exitOnError(e)
 	}
@@ -74,7 +74,7 @@ func main() {
 func doRead(oid index.OID) index.Card {
 
 	cfile := cardfile(&oid)
-	crd, e := card.Read(cfile)
+	crd, e := index.ReadCard(cfile)
 	if e != nil {
 		exitOnError(e)
 	}
