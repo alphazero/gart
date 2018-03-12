@@ -7,16 +7,20 @@ import (
 	"sort"
 )
 
-/// bitmap_t ////////////////////////////////////////////////////////////////////
-
-type bitmap_t []byte
+/// Bitmap //////////////////////////////////////////////////////////////////////
 
 // Generalized bitmap ops (compressed or not).
 // For all functions in this interface, the in-arg bits array
 // must be in ascending sort order.
 type Bitmap interface {
+	// IFF uncompressed returns a compressed version, otherwise returns itself
+	Compress() Bitmap
+	// IFF compressed returns a decompressed version, otherwise returns itself
+	Decompress() Bitmap
+	// Returns true if Bitmap is compressed
+	Compressed() bool
 	// Convenience method
-	//	Bytes() []byte
+	Bytes() []byte
 	// Returns true if any of the bits are set
 	AnySet(bits ...int) bool
 	// Returns true if all of the bits set
@@ -54,10 +58,24 @@ func Build(bits ...int) bitmap_t {
 	return bitmap
 }
 
+/// bitmap_t ////////////////////////////////////////////////////////////////////
+
+type bitmap_t []byte
+
+func New(buf []byte) bitmap_t {
+	var bm = make([]byte, len(buf))
+	copy(bm, buf)
+	return bitmap_t(bm)
+}
+
 func (v bitmap_t) Bytes() []byte { return v }
 
+func (v bitmap_t) Decompress() Bitmap { return v }
+
+func (v bitmap_t) Compressed() bool { return false }
+
 // byte aligned variant of WAH
-func (v bitmap_t) Compress() compressed_t {
+func (v bitmap_t) Compress() Bitmap {
 	return compressed_t(compress(v))
 }
 
@@ -93,9 +111,19 @@ func (v bitmap_t) Debug() {
 // Byte aligned variant of WAH bitmap compression
 type compressed_t []byte
 
+func NewCompressed(buf []byte) Bitmap {
+	var bm = make([]byte, len(buf))
+	copy(bm, buf)
+	return compressed_t(bm)
+}
+
 func (v compressed_t) Bytes() []byte { return v }
 
-func (v compressed_t) Decompress() bitmap_t {
+func (v compressed_t) Compressed() bool { return false }
+
+func (v compressed_t) Compress() Bitmap { return v }
+
+func (v compressed_t) Decompress() Bitmap {
 	return bitmap_t(decompress(v))
 }
 
