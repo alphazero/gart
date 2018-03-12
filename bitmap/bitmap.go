@@ -15,9 +15,18 @@ type bitmap_t []byte
 // For all functions in this interface, the in-arg bits array
 // must be in ascending sort order.
 type Bitmap interface {
+	// Convenience method
+	//	Bytes() []byte
+	// Returns true if any of the bits are set
 	AnySet(bits ...int) bool
+	// Returns true if all of the bits set
 	AllSet(bits ...int) bool
+	// Returns true if none of the bits are set
 	NoneSet(bits ...int) bool
+	// Returns true if bitmap changed
+	Set(bits ...int) bool
+	// String rep
+	String() string
 }
 
 //    0        1        2        3        4      ... byte
@@ -45,6 +54,8 @@ func Build(bits ...int) bitmap_t {
 	return bitmap
 }
 
+func (v bitmap_t) Bytes() []byte { return v }
+
 // byte aligned variant of WAH
 func (v bitmap_t) Compress() compressed_t {
 	return compressed_t(compress(v))
@@ -65,18 +76,24 @@ func (v bitmap_t) AnySet(bits ...int) bool {
 	return anySet(v, bits...)
 }
 
-func (v bitmap_t) String() (s string) {
-	return SprintBuf([]byte(v))
+func (v bitmap_t) Set(bits ...int) bool {
+	return set(v, bits...)
+}
+
+func (v bitmap_t) String() string {
+	return SprintBuf(v)
 }
 
 func (v bitmap_t) Debug() {
-	DisplayBuf("bitmap", []byte(v))
+	DisplayBuf("bitmap", v)
 }
 
 /// compressed_t //////////////////////////////////////////////////////////
 
 // Byte aligned variant of WAH bitmap compression
 type compressed_t []byte
+
+func (v compressed_t) Bytes() []byte { return v }
 
 func (v compressed_t) Decompress() bitmap_t {
 	return bitmap_t(decompress(v))
@@ -97,8 +114,12 @@ func (v compressed_t) NoneSet(bits ...int) bool {
 	return noneSet(v, bits...)
 }
 
+func (v compressed_t) Set(bits ...int) bool {
+	return set(v, bits...)
+}
+
 func (v compressed_t) String() (s string) {
-	return SprintBuf([]byte(v))
+	return SprintBuf(v)
 }
 
 func (v compressed_t) Debug() {

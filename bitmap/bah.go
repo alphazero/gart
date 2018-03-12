@@ -253,22 +253,20 @@ func noneSet(bitmap []byte, bits ...int) bool {
 	bitvals := getBitvals(bitmap, bits...)
 	fmt.Printf("DEBUG - bits  s: %d\n", bits)
 	fmt.Printf("DEBUG - bitvals: %t\n", bitvals)
-	for i, b := range bitvals {
+	for _, b := range bitvals {
 		if b {
-			println(i)
+			//			println(i) // XXX
 			return false
 		}
 	}
 	return true
 }
 
-// XXX
-// REVU this really should be an object (since it needs state)
-// and then the if/then statements in allSet/getBitvals are actually
-// in that object. The iterator simply walks the compressed array and
-// switched on block type. So we basically save a loop and switch
-// code de-dup at the cost of possible inefficiencies and less strightforward
-// code.
+func set(bitmap []byte, bits ...int) bool {
+	panic("bah.go - set: not implemented!")
+}
+
+// TODO try the visitor pattern
 type application func(b bool) (halt bool, result interface{})
 
 func apply(b []byte, fn application) interface{} {
