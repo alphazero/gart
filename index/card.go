@@ -19,24 +19,24 @@ type Card interface {
 	CreatedOn() time.Time // unix seconds precision
 	UpdatedOn() time.Time // unix seconds precision
 	Flags() byte          // REVU: use semantic flags e.g. Card.HasDups() bool, etc.
+	Revision() int        // 0 indicates new card
 
-	// Object ID is the Card entry's content hash
 	Oid() OID
-	//
+
 	Tags() bitmap.Bitmap
-	//
+	SetTags(cpm bitmap.Bitmap) error
+	UpdateTags(cpm bitmap.Bitmap) (bool, error)
+
 	Systemic() bitmap.Bitmap
-	//
-	Paths() []string
-	//
+	SetSystemics(cpm bitmap.Bitmap) error
+	UpdateSystemics(cpm bitmap.Bitmap) (bool, error)
+
+	Paths() []string // REVU len(card.Paths()) > 1 => dup files
 	AddPath(fpath string) (bool, error)
-	//
 	RemovePath(fpath string) (bool, error)
-	// REVU asssert it is Compressed.
-	UpdateTags(cpm bitmap.Bitmap)
-	//
-	Save(fname string) error
-	// XXX
+
+	Save() (bool, error)
+
 	DebugStr() string
 }
 
@@ -51,14 +51,15 @@ const (
 // Every card has a fixed width binary header of 64 bytes
 type header struct {
 	ftype    uint32
-	crc32    uint32  // of card file buffer [8:] so no ftype & crc
-	created  int64   // unix seconds not nanos
-	updated  int64   // unix seconds not nanos
-	flags    byte    // 8bits should be fine
-	pathcnt  uint8   // 255 instances of an obj should be sufficient
-	tbahlen  uint8   // user-tags bah buflen TODO fix read
-	sbahlen  uint8   // systemic-tags bah buflen
-	reserved [4]byte // TODO 1B for pathcnt -
+	crc32    uint32 // of card file buffer [8:] so no ftype & crc
+	created  int64  // unix seconds not nanos
+	updated  int64  // unix seconds not nanos
+	flags    byte   // 8bits should be fine
+	pathcnt  uint8  // 255 instances of an obj should be sufficient
+	tbahlen  uint8  // user-tags bah buflen TODO fix read
+	sbahlen  uint8  // systemic-tags bah buflen
+	revision uint16 // new is revision 0
+	reserved [2]byte
 }
 
 func (p *header) DebugStr() string {
@@ -75,6 +76,7 @@ func (p *header) DebugStr() string {
 	s += fp("\tpathcnt:   %d\n", p.pathcnt)
 	s += fp("\ttbahlen:   %d\n", p.tbahlen)
 	s += fp("\tsbahlen:   %d\n", p.sbahlen)
+	s += fp("\trevision:  %d\n", p.revision)
 	s += fp("\treserved:  %d\n", p.reserved)
 	return s
 }
@@ -114,6 +116,8 @@ func (p *card_t) DebugStr() string {
 
 /// life-cycle ops /////////////////////////////////////////////////////////////
 
+// TODO deprecated
+/*
 // Card files are created and occasionally modified. the read/write pattern is
 // expected to be a quick load, read, and then possibly update and sync.
 //
@@ -166,6 +170,27 @@ func NewCard(oid *OID, path string, tags, systemics bitmap.Bitmap) (Card, error)
 
 	return card, nil
 }
+*/
+// REVU: this should be the only way to create a new card.
+// internal use only
+func newCard0(oid *OID, source string) Card {
+	// header.crc32 is computed and set at save.
+	hdr := header{
+		ftype:   card_file_code,
+		created: time.Now().Unix(),
+		updated: 0,
+		pathcnt: 0,
+		tbahlen: 0,
+		sbahlen: 0,
+	}
+
+	return &card_t{
+		header:   hdr,
+		oid:      *oid,
+		modified: false, // so it can't be saved unless initialized
+		source:   source,
+	}
+}
 
 // Read an existing card file. File is read in RDONLY mode and immediately closed.
 // Use Card.Sync() to update the file (if modified).
@@ -193,11 +218,12 @@ func ReadCard(fname string) (Card, error) {
 
 	// read & verify the OID - 32 bytes
 	var oid OID
-	copy(oid[:], buf[offset:offset+len(oid)])
-	if !oid.IsValid() {
-		return nil, fmt.Errorf("bug - card_t:Read - invalid OID %02x: %d", oid)
+	var oidDat = buf[offset : offset+OidBytes]
+	if e := validateOidBytes(oidDat); e != nil {
+		return nil, fmt.Errorf("bug - card_t:Read - %s", e)
 	}
-	offset += len(oid)
+	copy(oid.dat[:], oidDat)
+	offset += OidBytes
 
 	// read user-tags and systemics-tags BAHs
 	tagBytes := buf[offset : offset+int(hdr.tbahlen)]
@@ -234,19 +260,105 @@ func ReadCard(fname string) (Card, error) {
 
 /// interface: Card /////////////////////////////////////////////////////
 
-// REVU should this return a bool indicating it changed?
-func (c *card_t) UpdateTags(bm bitmap.Bitmap) {
-	if len(bm.Bytes()) == 0 {
-		panic("bug - card_t.UpdateTags: bm is zerolen")
+func (c *card_t) UpdateTags(bm bitmap.Bitmap) (bool, error) {
+	panic("card_t.UpdateTags: not implemented")
+	//	return false, nil
+}
+
+func (c *card_t) SetTags(bm bitmap.Bitmap) error {
+	bmlen := len(bm.Bytes())
+	if bmlen == 0 {
+		fmt.Errorf("bug - card_t.UpdateTags: bm is zerolen")
+	}
+	if bmlen > 255 {
+		fmt.Errorf("oops - card_t.UpdateTags: bm is larger than conceived")
 	}
 	c.tags = bm
+	c.tbahlen = uint8(bmlen)
+	c.updated = time.Now().Unix()
+	c.modified = true
+
+	return nil
+}
+
+func (c *card_t) UpdateSystemics(bm bitmap.Bitmap) (bool, error) {
+	panic("card_t.UpdateSystemics: not implemented")
+	//	return false, nil
+}
+
+func (c *card_t) SetSystemics(bm bitmap.Bitmap) error {
+	bmlen := len(bm.Bytes())
+	if bmlen == 0 {
+		fmt.Errorf("bug - card_t.UpdateTags: bm is zerolen")
+	}
+	if bmlen > 255 {
+		fmt.Errorf("oops - card_t.UpdateTags: bm is larger than conceived")
+	}
+	c.systemics = bm
+	c.sbahlen = uint8(bmlen)
+	c.updated = time.Now().Unix()
+	c.modified = true
+
+	return nil
+}
+
+// Saves the card. Returns (true, nil) if successful and cardfile was actually written.
+// If card was not modified, save is a NOP and returns (false, nil).
+//
+// panics if Save is called and card_t does not have a 'source' assigned.
+func (c *card_t) Save() (bool, error) {
+
+	if c.source == "" {
+		panic("bug - card_t.Save: source is zerolen")
+	}
+
+	if !c.modified {
+		return false, nil
+	}
+
+	// TODO use the same fs func for tagmap
+	swapfile := fs.SwapfileName(c.source)
+
+	// pass 'true' for abort - for now, treat dangling swaps as system bugs
+	sfile, existing, e := fs.OpenNewSwapfile(swapfile, true)
+	if e != nil {
+		return false, fmt.Errorf("bug - card_t.Save: on OpenNewSwapfile - existing:%t - %s", existing, e)
+	}
+	defer sfile.Close()
+
+	var bufsize = c.bufsize()
+	var buf = make([]byte, bufsize)
+
+	if e := c.encode(buf); e != nil {
+		return false, e // can only be a bug
+	}
+
+	// write buf to file
+	_, e = sfile.Write(buf)
+	if e != nil {
+		return false, e
+	}
+
+	// fsync the swap file
+	if e := sfile.Sync(); e != nil {
+		return false, fmt.Errorf("bug - card_t.Save: sfile.Sync - %s", e)
+	}
+	// rename to actual card file
+	if e := os.Rename(swapfile, c.source); e != nil {
+		return false, fmt.Errorf("bug - card_t.Save: os.Rename swp:%q dst:%q - %s",
+			swapfile, c.source, e)
+	}
+
+	c.modified = false
+
+	return true, nil
 }
 
 // Save writes the card to a swap file and then rename to file 'fname' as given.
 // Save always writes the file, even if card file has not changed. Use Sync in
 // conjunction with card.Load(cardfile) if io is to be limited to the case of
 // changed cards.
-func (c *card_t) Save(fname string) error {
+func (c *card_t) Save_deprecated(fname string) error {
 
 	// TODO use the same fs func for tagmap
 	swapfile := fs.SwapfileName(fname)
@@ -292,6 +404,7 @@ func (c *card_t) Oid() OID                { return c.oid }
 func (c *card_t) Tags() bitmap.Bitmap     { return c.tags }      // REVU return copy?
 func (c *card_t) Systemic() bitmap.Bitmap { return c.systemics } // REVU return copy?
 func (c *card_t) Paths() []string         { return c.paths }     // REVU return copy?
+func (c *card_t) Revision() int           { return int(c.revision) }
 
 func (c *card_t) AddPath(path string) (bool, error) {
 	if path == "" {
@@ -328,8 +441,6 @@ func (c *card_t) RemovePath(path string) (bool, error) {
 	return false, nil // not found
 
 found:
-	//	var paths = make([]string, len(c.paths)-1)
-	//	copy(paths, c.paths[:i])
 	if i != len(c.paths) {
 		copy(c.paths[i:], c.paths[i+1:])
 	}
@@ -359,7 +470,8 @@ func (c *card_t) encode(buf []byte) error {
 	buf[25] = c.pathcnt
 	buf[26] = c.tbahlen
 	buf[27] = c.sbahlen
-	*(*[4]byte)(unsafe.Pointer(&buf[28])) = c.reserved
+	*(*uint16)(unsafe.Pointer(&buf[28])) = c.revision
+	*(*[2]byte)(unsafe.Pointer(&buf[30])) = c.reserved
 	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 	var offset = 64
 	copy(buf[offset:], c.tags.Bytes())

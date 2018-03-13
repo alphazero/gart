@@ -5,13 +5,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"sort"
+	//	"os"
+	//	"sort"
 	"strings"
 
-	"github.com/alphazero/gart/bitmap"
-	"github.com/alphazero/gart/digest"
+	//	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/fs"
+	"github.com/alphazero/gart/gart"
 	"github.com/alphazero/gart/tag"
 )
 
@@ -42,6 +42,7 @@ func processMode() Mode {
 /// command specific state ////////////////////////////////////////////////////
 
 // struct encapsulates mutable and immutable process values.
+// TODO replace with gart.AddOpContext
 type State struct {
 	pi processInfo
 	/* gart-add specific */
@@ -92,31 +93,26 @@ volumes:
 
 // command gart-add
 // Returns output, error if any, and abort
-func process(ctx context.Context, b []byte) (output []byte, err error, abort bool) {
+func process(ctx context.Context, buf []byte) (output []byte, err error, abort bool) {
 
 	state := getState(ctx)
 	defer func() { state.items++ }()
 
-	fds, e := fs.GetFileDetails(string(b))
-	if e != nil {
-		if fds.Fstat.IsDir() {
-			return
-		}
-		return nil, e, false // unexpected err - we don't abort - next file may be ok
+	// TODO: address gart.Context - should be in State?
+	var gartCtx gart.OpContext
+	gartCtx.Tagmap = state.tagmap
+
+	// REVU: better if it returns a gart.AddStat struct
+	res := gart.AddObject(&gartCtx, string(buf), state.tags)
+	opResult, ok := res.(*gart.AddOpResult)
+	if !ok {
+		panic("bug - gart.AddObject did not return *gart.AddOpResult - do output & abort")
 	}
-
-	// fingerprint ______________________
-
-	// HERE use gart.AddObject(fds.Path)
-	md, e := digest.SumFile(fds.Path)
-	if e != nil {
-		// if PathError and ErrPermission skip this item but don't abort
-		if pe, ok := e.(*os.PathError); ok && pe.Err == os.ErrPermission {
-			output = fmtOutput("warn - gart-add: skipping %q - %s", pe.Path, pe.Err)
-			return
-		}
-		// anything else (?) well, let's treat it as a bug for now.
-		panic(fmt.Errorf("bug - digest.Compute returned error - %s", e))
+	if opResult.Fault() {
+		panic("on process fault - do output & abort")
+	}
+	if opResult.Err() != nil {
+		panic("on process err - do output = ... do not abort")
 	}
 
 	// index:card _______________________
@@ -145,61 +141,9 @@ func process(ctx context.Context, b []byte) (output []byte, err error, abort boo
 	// 		- append to index/TAGS
 	//		  REVU state should have this file open in APPEND mode already.
 
-	// tags _____________________________
-
-	// Get user (utids) & systemic (stids) tag ids.
-	ids, e := UpdateTagsForFile(state, &fds)
-	if e != nil {
-		panic(e) // TODO emit fatal error and return abort
-	}
-	bm := bitmap.Build(ids...).Compress()
-
-	output = fmtOutput("%08x %08b %q", md[:4], bm, fds.Name)
+	output = fmtOutput("added %v", opResult.Card)
 
 	return
-}
-
-// this should be in tag
-// returns tags, ids, and error
-func UpdateTagsForFile(state *State, fds *fs.FileDetails) ([]int, error) {
-	// REVU do we need systemics (names) returned here?
-	var ids []int
-	_, stids, e := addSystemicTags(state.tagmap, fds)
-	if e != nil {
-		return ids, e
-	}
-	utids, e := addTags(state.tagmap, state.tags...)
-	if e != nil {
-		return ids, e
-	}
-
-	ids = append(utids, stids...)
-	sort.IntSlice(ids).Sort()
-
-	return ids, nil
-}
-
-func addSystemicTags(tagmap tag.Map, fds *fs.FileDetails) ([]string, []int, error) {
-	systemics := tag.AllSystemic(fds)
-	ids, e := addTags(tagmap, systemics...)
-	return systemics, ids, e
-}
-
-func addTags(tagmap tag.Map, tags ...string) ([]int, error) {
-
-	var ids = make([]int, len(tags))
-
-	for i, name := range tags {
-		_, id, e := tagmap.Add(name)
-		if e != nil {
-			return nil, fmt.Errorf("bug - gart-add: addFileTags: on Add %q - %v", name, e)
-		}
-		if _, _, e := tagmap.IncrRefcnt(name); e != nil {
-			return nil, fmt.Errorf("bug - gart-add: addFileTags: on IncrRefCnt %q - %v", name, e)
-		}
-		ids[i] = id
-	}
-	return ids, nil
 }
 
 // post:

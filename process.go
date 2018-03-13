@@ -43,6 +43,7 @@ func processPrepare(in io.Reader, out, meta io.Writer) (context.Context, error) 
 	}
 
 	// setup command context & state
+	// Note all state structs must have a *processInfo field.
 	var state State
 	ctx := context.WithValue(context.Background(), "state", &state)
 	state.pi = pi
