@@ -4,3 +4,5 @@ bin/
 *.card
 *.dat
 .*.swp
+.DS_Store
+*.big
