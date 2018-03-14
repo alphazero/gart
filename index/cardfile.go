@@ -119,12 +119,18 @@ func newCard0(oid *OID, key uint64, source string) Card {
 // Use Card.Sync() to update the file (if modified).
 // Returns (card, nil) on success. Card is nil on errors.
 // HERE shouldn't this return index.ErrCardNotFound?
-func readCard(fname string) (Card, error) {
-	finfo, e := os.Stat(fname)
-	if e != nil {
-		return nil, e
+func readCard(garthome string, oid *OID) (Card, error) {
+
+	var cardfile = cardfilePath(garthome, oid)
+
+	finfo, e := os.Stat(cardfile)
+	if e != nil && os.IsNotExist(e) {
+		return nil, ErrCardNotFound
+	} else if e != nil {
+		return nil, fmt.Errorf("bug - card_t.readCard: %s", e)
 	}
-	buf, e := fs.ReadFull(fname)
+
+	buf, e := fs.ReadFull(cardfile)
 	if e != nil {
 		return nil, e
 	}
@@ -137,16 +143,20 @@ func readCard(fname string) (Card, error) {
 	/// create in-mem card rep ---------------------------------------------------
 	var offset = headerBytes
 	if offset == len(buf) {
-		return nil, fmt.Errorf("bug - card_t.Read: card has no data - fname: %q", fname)
+		return nil, fmt.Errorf("bug - card_t.Read: card has no data - cardfile: %q", cardfile)
 	}
 
 	// read & verify the OID - 32 bytes
-	var oid OID
+	var card_oid OID
 	var oidDat = buf[offset : offset+oidBytesLen]
-	if e := validateoidBytesLen(oidDat); e != nil {
+	if e := validateOidBytes(oidDat); e != nil {
 		return nil, fmt.Errorf("bug - card_t:Read - %s", e)
 	}
-	copy(oid.dat[:], oidDat)
+	copy(card_oid.dat[:], oidDat)
+	if !oid.isEqual(&card_oid) {
+		return nil, fmt.Errorf("bug - card_t:Read - cardfile OID - have::%v should-be:%v", card_oid, oid)
+	}
+
 	offset += oidBytesLen
 
 	// read user-tags and systemics-tags BAHs
@@ -167,18 +177,18 @@ func readCard(fname string) (Card, error) {
 	}
 
 	if pathcnt != int(hdr.pathcnt) {
-		return nil, fmt.Errorf("bug - card_t.Read: pathcnt exp:%d have:%d - fname: %q",
-			hdr.pathcnt, pathcnt, fname)
+		return nil, fmt.Errorf("bug - card_t.Read: pathcnt exp:%d have:%d - cardfile: %q",
+			hdr.pathcnt, pathcnt, cardfile)
 	}
 
 	return &card_t{
 		header:    *hdr,
-		oid:       oid,
+		oid:       card_oid,
 		tags:      bitmap.NewCompressed(tagBytes),
 		systemics: bitmap.NewCompressed(systemicsBytes),
 		paths:     paths,
 		modified:  false,
-		source:    fname,
+		source:    cardfile,
 	}, nil
 }
 

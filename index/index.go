@@ -87,7 +87,7 @@ func ObjectId(fpath string) (*OID, error) {
 // internal func panics on errors
 func newOid(bytes []byte) *OID {
 
-	if bug := validateoidBytesLen(bytes); bug != nil {
+	if bug := validateOidBytes(bytes); bug != nil {
 		panic(fmt.Errorf("bug - index.newOid: invalid arg - %s", bug))
 	}
 	var oid OID
@@ -96,7 +96,7 @@ func newOid(bytes []byte) *OID {
 	return &oid
 }
 
-func validateoidBytesLen(bytes []byte) error {
+func validateOidBytes(bytes []byte) error {
 	if len(bytes) < oidBytesLen {
 		return fmt.Errorf("bug - invalid OID bytes - len: %d", len(bytes))
 	}
@@ -106,6 +106,15 @@ func validateoidBytesLen(bytes []byte) error {
 		}
 	}
 	return fmt.Errorf("bug - invalid OID bytes - all 0x00")
+}
+
+func (this *OID) isEqual(that *OID) bool {
+	for i := 0; i < oidBytesLen; i++ {
+		if this.dat[i] != that.dat[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (oid *OID) String() string { return fmt.Sprintf("%x", oid.dat) }
@@ -156,14 +165,10 @@ func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap)
 // Read only - gets the card.
 // Returns (nil, ErrCardNotFound) if card not found.
 func GetCard(path string, oid *OID) (Card, error) {
-	// HERE should just return readCard (via Cards interface)
-	var cardfile = cardfilePath(path, oid)
-	if !cardfileExists(cardfile) {
-		return nil, ErrCardNotFound
-	}
-	return readCard(cardfile) // HERE this should be via Cards interface
+	return readCard(path, oid) // HERE this should be via Cards interface
 }
 
+// HERE this should be just readCard, if ErrCardNotFound then create it.
 // returns (Card, newCard, e)
 func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 
@@ -181,7 +186,7 @@ func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 		//		return newCard0(oid, cardfile), true, nil
 		return newCard0(oid, notIndexed, cardfile), true, nil // TODO need CardInternal to set oid64 later
 	}
-	card, e := readCard(cardfile) // HERE this should be via Cards interface
+	card, e := readCard(cardfile, oid) // HERE this should be via Cards interface
 	return card, false, e
 }
 
