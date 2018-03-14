@@ -28,7 +28,7 @@ const (
 type header struct {
 	ftype    uint32
 	crc32    uint32        // of card file buffer [8:] so no ftype & crc
-	oid64    uint64        // 64 bit hash of the OID - likely used as offset
+	key      uint64        // 64 bit hash of the OID - likely used as offset
 	created  unixtime.Time // unsigned 32bits
 	updated  unixtime.Time // unsigned 32bits
 	flags    byte          // 8bits should be fine
@@ -47,7 +47,7 @@ func (p *header) DebugStr() string {
 	s += fp("card.header:\n")
 	s += fp("\tftype:     %08x\n", p.ftype)
 	s += fp("\tcrc32:     %08x\n", p.crc32)
-	s += fp("\toid64:     %08x\n", p.oid64)
+	s += fp("\tkey:     %08x\n", p.key)
 	s += fp("\tcreated-on:%08x (%s) \n", p.created, p.created.Date())
 	s += fp("\tupdated-on:%08x (%s) \n", p.updated, p.updated.Date())
 	s += fp("\tflags:     %08b\n", p.flags)
@@ -95,12 +95,12 @@ func (p *card_t) DebugStr() string {
 /// life-cycle ops /////////////////////////////////////////////////////////////
 
 // internal use only
-func newCard0(oid *OID, oid64 uint64, source string) Card {
+func newCard0(oid *OID, key uint64, source string) Card {
 	// header.crc32 is computed and set at save.
 	hdr := header{
 		ftype:   card_file_code,
 		created: unixtime.Now(),
-		oid64:   oid64,
+		key:     key,
 		updated: 0,
 		pathcnt: 0,
 		tbahlen: 0,
@@ -191,13 +191,13 @@ func (c *card_t) onUpdate() {
 
 /// interface: indexedCard ///////////////////////////////////////////////
 
-func (c *card_t) Key() uint64 { return c.oid64 }
-func (c *card_t) SetKey(oid64 uint64) {
-	c.oid64 = oid64
-
+func (c *card_t) Key() uint64 { return c.key }
+func (c *card_t) SetKey(key uint64) {
+	if c.key == key {
+		return
+	}
+	c.key = key
 	c.onUpdate()
-	//	c.updated = unixtime.Now()
-	//	c.modified = true
 }
 
 /// interface: Card //////////////////////////////////////////////////////
@@ -363,10 +363,7 @@ func (c *card_t) AddPath(path string) (bool, error) {
 	}
 	c.paths = append(c.paths, path)
 	c.pathcnt++
-	// HERE
 	c.onUpdate()
-	//	c.updated = unixtime.Now()
-	//	c.modified = true
 
 	return true, nil // REVU return true regardless of onUpdate() effects
 }
@@ -394,10 +391,7 @@ found:
 	}
 	c.pathcnt--
 	c.paths = c.paths[:c.pathcnt]
-	// HERE
 	c.onUpdate()
-	//	c.updated = unixtime.Now()
-	//	c.modified = true
 
 	return true, nil
 }
@@ -415,7 +409,7 @@ func (c *card_t) encode(buf []byte) error {
 
 	// header's fields
 	*(*uint32)(unsafe.Pointer(&buf[0])) = c.ftype
-	*(*uint64)(unsafe.Pointer(&buf[8])) = c.oid64
+	*(*uint64)(unsafe.Pointer(&buf[8])) = c.key
 	*(*uint32)(unsafe.Pointer(&buf[16])) = c.created.Timestamp()
 	*(*uint32)(unsafe.Pointer(&buf[20])) = c.updated.Timestamp()
 	buf[24] = c.flags
@@ -425,7 +419,7 @@ func (c *card_t) encode(buf []byte) error {
 	*(*uint16)(unsafe.Pointer(&buf[28])) = c.revision
 	*(*[2]byte)(unsafe.Pointer(&buf[30])) = c.reserved
 
-	// HERE
+	// HERE REVU should be part of header ?
 	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 
 	// card_t's persisted fields

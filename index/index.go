@@ -41,10 +41,17 @@ type Card interface {
 	DebugStr() string
 }
 
+const (
+	// key value for unindexed cards
+	notIndexed = uint64(0xffffffffffffffff)
+)
+
 // indexedCard is a package private interface encapsulating card indexing related
 // features that should not be exposed via Card.
 type indexedCard interface {
+	// returns 64bit index key for card
 	Key() uint64
+	// sets the index key for the card
 	SetKey(uint64)
 }
 
@@ -53,13 +60,12 @@ type indexedCard interface {
 // It is a sort of entity mamanager.
 type Cards interface {
 	// REVU card life-cycle per gart operations. Below is tentative as of now.
-
 }
 
 /// Object IDs /////////////////////////////////////////////////////////////////
 
 const (
-	OidBytes = 32 // REVU why export this?
+	OidBytes = 32 //HERE  REVU why export this?
 )
 
 // export the type but keep internals private to index package
@@ -111,7 +117,8 @@ var (
 	ErrCardNotFound = fmt.Errorf("index.Card: card for oid not found.")
 )
 
-// returns (Card, updated, e)
+// returns (Card, newCard, updated, e)
+// Card is always saved on success.
 func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap) (Card, bool, bool, error) {
 
 	card, newCard, e := getOrCreateCard(path, oid)
@@ -157,8 +164,7 @@ func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 			return nil, false, fmt.Errorf("bug - index.GetOrCreateCard: os.Mkdirall: %s", e)
 		}
 		//		return newCard0(oid, cardfile), true, nil
-		var undefinedKey = uint64(0xffffffffffffffff)
-		return newCard0(oid, undefinedKey, cardfile), true, nil // TODO need CardInternal to set oid64 later
+		return newCard0(oid, notIndexed, cardfile), true, nil // TODO need CardInternal to set oid64 later
 	}
 	card, e := ReadCard(cardfile)
 	return card, false, e
