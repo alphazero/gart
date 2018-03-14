@@ -63,8 +63,8 @@ func (p *header) DebugStr() string {
 // and a variable number of associated paths and tags.
 // Not all elements of this structure are persisted in the binary image.
 type card_t struct {
-	header // serialized
-	//	oid       OID           // 32 bytes TODO assert this on init
+	header                  // serialized
+	oid       OID           // 32 bytes TODO assert this on init
 	tags      bitmap.Bitmap // serialized user tags' bah bitmap - can change
 	systemics bitmap.Bitmap // serialized systemic tags' bah bitmap - write once
 	paths     []string      // serialized associated fs object paths
@@ -80,7 +80,7 @@ func (p *card_t) DebugStr() string {
 	}
 	var s string = p.header.DebugStr()
 	s += fp("------------\n")
-	//	s += fp("\toid:      %x\n", p.oid)
+	s += fp("\toid:      %x\n", p.oid)
 	s += fp("\ttags:     %08b\n", p.tags)
 	s += fp("\tsystemics:%08b\n", p.systemics)
 	for i, path := range p.paths {
@@ -95,7 +95,7 @@ func (p *card_t) DebugStr() string {
 /// life-cycle ops /////////////////////////////////////////////////////////////
 
 // internal use only
-func newCard0(oid64 uint64, source string) Card {
+func newCard0(oid *OID, oid64 uint64, source string) Card {
 	// header.crc32 is computed and set at save.
 	hdr := header{
 		ftype:   card_file_code,
@@ -109,6 +109,7 @@ func newCard0(oid64 uint64, source string) Card {
 
 	return &card_t{
 		header:   hdr,
+		oid:      *oid,
 		modified: false, // so it can't be saved unless initialized
 		source:   source,
 	}
@@ -118,7 +119,6 @@ func newCard0(oid64 uint64, source string) Card {
 // Use Card.Sync() to update the file (if modified).
 // TODO rename Load(fname string, create bool) ..
 func ReadCard(fname string) (Card, error) {
-	println("DEBUG - ReadCard")
 	finfo, e := os.Stat(fname)
 	if e != nil {
 		return nil, e
@@ -140,13 +140,13 @@ func ReadCard(fname string) (Card, error) {
 	}
 
 	// read & verify the OID - 32 bytes
-	//	var oid OID
-	//	var oidDat = buf[offset : offset+OidBytes]
-	//	if e := validateOidBytes(oidDat); e != nil {
-	//		return nil, fmt.Errorf("bug - card_t:Read - %s", e)
-	//	}
-	//	copy(oid.dat[:], oidDat)
-	//  offset += OidBytes
+	var oid OID
+	var oidDat = buf[offset : offset+OidBytes]
+	if e := validateOidBytes(oidDat); e != nil {
+		return nil, fmt.Errorf("bug - card_t:Read - %s", e)
+	}
+	copy(oid.dat[:], oidDat)
+	offset += OidBytes
 
 	// read user-tags and systemics-tags BAHs
 	tagBytes := buf[offset : offset+int(hdr.tbahlen)]
@@ -171,8 +171,8 @@ func ReadCard(fname string) (Card, error) {
 	}
 
 	return &card_t{
-		header: *hdr,
-		//		oid:       oid,
+		header:    *hdr,
+		oid:       oid,
 		tags:      bitmap.NewCompressed(tagBytes),
 		systemics: bitmap.NewCompressed(systemicsBytes),
 		paths:     paths,
@@ -346,7 +346,7 @@ func (c *card_t) Save_deprecated(fname string) error {
 func (c *card_t) CreatedOn() time.Time    { return c.created.StdTime() }
 func (c *card_t) UpdatedOn() time.Time    { return c.updated.StdTime() }
 func (c *card_t) Flags() byte             { return c.flags }
-func (c *card_t) Oid() uint64             { return c.oid64 }
+func (c *card_t) Oid() OID                { return c.oid }
 func (c *card_t) Tags() bitmap.Bitmap     { return c.tags }      // REVU return copy?
 func (c *card_t) Systemic() bitmap.Bitmap { return c.systemics } // REVU return copy?
 func (c *card_t) Paths() []string         { return c.paths }     // REVU return copy?
@@ -363,10 +363,12 @@ func (c *card_t) AddPath(path string) (bool, error) {
 	}
 	c.paths = append(c.paths, path)
 	c.pathcnt++
-	c.updated = unixtime.Now()
-	c.modified = true
+	// HERE
+	c.onUpdate()
+	//	c.updated = unixtime.Now()
+	//	c.modified = true
 
-	return true, nil
+	return true, nil // REVU return true regardless of onUpdate() effects
 }
 
 func (c *card_t) RemovePath(path string) (bool, error) {
@@ -392,8 +394,10 @@ found:
 	}
 	c.pathcnt--
 	c.paths = c.paths[:c.pathcnt]
-	c.updated = unixtime.Now()
-	c.modified = true
+	// HERE
+	c.onUpdate()
+	//	c.updated = unixtime.Now()
+	//	c.modified = true
 
 	return true, nil
 }
@@ -421,10 +425,11 @@ func (c *card_t) encode(buf []byte) error {
 	*(*uint16)(unsafe.Pointer(&buf[28])) = c.revision
 	*(*[2]byte)(unsafe.Pointer(&buf[30])) = c.reserved
 
-	//	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
+	// HERE
+	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 
 	// card_t's persisted fields
-	var offset = headerBytes //64
+	var offset = headerBytes + OidBytes //64
 	copy(buf[offset:], c.tags.Bytes())
 	offset += int(c.tbahlen)
 	copy(buf[offset:], c.systemics.Bytes())
@@ -506,7 +511,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 
 func (c *card_t) bufsize() int {
 	n := headerBytes
-	//	n += OidBytes
+	n += OidBytes
 	n += len(c.tags.Bytes())
 	n += len(c.systemics.Bytes())
 	// each path is len of the []byte of path + \n

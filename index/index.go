@@ -22,7 +22,7 @@ type Card interface {
 	Flags() byte          // REVU use semantic flags e.g. Card.HasDups() bool, etc.
 	Revision() int        // 0 indicates new card
 
-	Oid() uint64 // 64bit oid index reference. Used for offseting the index file.
+	Oid() OID //
 
 	Tags() bitmap.Bitmap
 	SetTags(cpm bitmap.Bitmap) error
@@ -111,43 +111,46 @@ var (
 	ErrCardNotFound = fmt.Errorf("index.Card: card for oid not found.")
 )
 
-func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap) (Card, bool, error) {
+// returns (Card, updated, e)
+func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap) (Card, bool, bool, error) {
 
 	card, newCard, e := getOrCreateCard(path, oid)
 	if e != nil {
-		return nil, false, e
+		return nil, false, false, e
 	}
 
+	var rev0 = card.Revision()
+
 	if ok, e := card.AddPath(file); e != nil {
-		return card, newCard, e
+		return nil, false, false, e
 	} else if newCard && !ok {
-		return card, newCard, fmt.Errorf("bug - index.AddOrUpdateCard: path not added on new card")
+		return nil, false, false, fmt.Errorf("bug - index.AddOrUpdateCard: path not added on new card.")
 	}
 
 	if e := card.SetTags(tbm); e != nil {
-		return card, newCard, e
+		return nil, false, false, e
 	}
 
 	if e := card.SetSystemics(sbm); e != nil {
-		return card, newCard, e
+		return nil, false, false, e
 	}
 
-	// REVU ok can serve as 'updated' for returning to gart/add.
-	//      a new card certainly will return true
-	//      a modified existing will also return true
+	var updated = card.Revision() > rev0
 	if ok, e := card.Save(); e != nil {
-		return card, newCard, e
+		return nil, false, false, e
 	} else if newCard && !ok {
-		return nil, false, fmt.Errorf("bug - index.AddOrUpdateCard: path not added on new card")
+		return nil, false, false, fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok new card.")
+	} else if updated && !ok {
+		return nil, false, false, fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok on revision change.")
 	}
-
-	return card, newCard, nil
+	return card, newCard, updated, nil
 }
 
+// returns (Card, newCard, e)
 func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 
 	var cardfile = cardfilePath(path, oid)
-	fmt.Printf("DEBUG - index.getOrCreateCard: \n\tgart-path: %q\n\toid:       %s\n\tcardfile:  %q\n", path, oid, cardfile)
+	//	fmt.Printf("DEBUG - index.getOrCreateCard: \n\tgart-path: %q\n\toid:       %s\n\tcardfile:  %q\n", path, oid, cardfile)
 	if !cardfileExists(cardfile) {
 		dir := filepath.Dir(cardfile)
 		if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
@@ -155,7 +158,7 @@ func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 		}
 		//		return newCard0(oid, cardfile), true, nil
 		var undefinedKey = uint64(0xffffffffffffffff)
-		return newCard0(undefinedKey, cardfile), true, nil // TODO need CardInternal to set oid64 later
+		return newCard0(oid, undefinedKey, cardfile), true, nil // TODO need CardInternal to set oid64 later
 	}
 	card, e := ReadCard(cardfile)
 	return card, false, e

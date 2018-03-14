@@ -27,12 +27,14 @@ func main() {
 	var tags = bitmap.NewCompressed([]byte{0x7f, 0x81, 0x02})
 	var systemics = bitmap.NewCompressed([]byte{0x7f})
 
-	//	var cfile = cardfile(oid)
-	card, updated, e := index.AddOrUpdateCard(garthome, oid, file, tags, systemics)
+	card, newCard, updated, e := index.AddOrUpdateCard(garthome, oid, file, tags, systemics)
 	if e != nil {
 		exitOnError(e)
 	}
-	fmt.Printf("updated: %t\n", updated)
+	if newCard {
+		fmt.Printf("test: new card - revision: %d\n", card.Revision())
+	}
+	fmt.Printf("test: updated: %t\n", updated)
 	fmt.Printf("%s\n", card.DebugStr())
 
 	doSave(card)
@@ -44,8 +46,8 @@ func doSave(card index.Card) {
 	if e != nil {
 		exitOnError(e)
 	}
-	fmt.Printf("wrote: %t\n", ok)
-	fmt.Printf("%s\n", card.DebugStr())
+	fmt.Printf("test: wrote: %t\n", ok)
+	//	fmt.Printf("%s\n", card.DebugStr())
 }
 
 func exitOnError(e error) {
