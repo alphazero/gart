@@ -78,7 +78,7 @@ func ObjectId(fpath string) (*OID, error) {
 
 	md, e := digest.SumFile(fpath)
 	if e != nil {
-		return nil, e
+		return nil, fmt.Errorf("index.ObjectId: digest.SumFile: err: %s", e)
 	}
 
 	return newOid(md), nil
