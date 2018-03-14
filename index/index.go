@@ -140,7 +140,8 @@ func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap)
 	if ok, e := card.AddPath(file); e != nil {
 		return nil, false, false, e
 	} else if newCard && !ok {
-		return nil, false, false, fmt.Errorf("bug - index.AddOrUpdateCard: path not added on new card.")
+		err := fmt.Errorf("bug - index.AddOrUpdateCard: path not added on new card.")
+		return nil, false, false, err
 	}
 
 	if e := card.SetTags(tbm); e != nil {
@@ -155,9 +156,11 @@ func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap)
 	if ok, e := card.Save(); e != nil {
 		return nil, false, false, e
 	} else if newCard && !ok {
-		return nil, false, false, fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok new card.")
+		err := fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok new card.")
+		return nil, false, false, err
 	} else if updated && !ok {
-		return nil, false, false, fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok on revision change.")
+		err := fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok on revision change.")
+		return nil, false, false, err
 	}
 	return card, newCard, updated, nil
 }
@@ -178,14 +181,14 @@ func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 
 	card, e := GetCard(path, oid)
 	if e != nil && e == ErrCardNotFound {
-		// HERE this also belongs to the cardfile.go file.
-		//      for both readCard and 'newCard0' pass 'gart-home' and 'oid'
-		var cardfile = cardfilePath(path, oid) // HERE modify newCard0 << and rename it!
+		// HERE modify newCard0 << and rename it!
+		var cardfile = cardfilePath(path, oid)
 		dir := filepath.Dir(cardfile)
 		if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
-			return nil, false, fmt.Errorf("bug - index.GetOrCreateCard: os.Mkdirall: %s", e)
+			err := fmt.Errorf("bug - index.GetOrCreateCard: os.Mkdirall: %s", e)
+			return nil, false, err
 		}
-		return newCard0(oid, notIndexed, cardfile), true, nil // TODO need CardInternal to set oid64 later
+		return newCard0(oid, notIndexed, cardfile), true, nil
 	} else if e != nil {
 		return nil, false, e
 	}
