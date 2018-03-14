@@ -13,6 +13,7 @@ import (
 	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
+	"github.com/alphazero/gart/unixtime"
 )
 
 /// Card support types ///////////////////////////////////////////////////
@@ -26,14 +27,15 @@ const (
 // Every card has a fixed width binary header of 64 bytes
 type header struct {
 	ftype    uint32
-	crc32    uint32 // of card file buffer [8:] so no ftype & crc
-	created  int64  // unix seconds not nanos
-	updated  int64  // unix seconds not nanos
-	flags    byte   // 8bits should be fine
-	pathcnt  uint8  // 255 instances of an obj should be sufficient
-	tbahlen  uint8  // user-tags bah buflen TODO fix read
-	sbahlen  uint8  // systemic-tags bah buflen
-	revision uint16 // new is revision 0
+	crc32    uint32        // of card file buffer [8:] so no ftype & crc
+	oid64    uint64        // 64 bit hash of the OID - likely used as offset
+	created  unixtime.Time // unsigned 32bits
+	updated  unixtime.Time // unsigned 32bits
+	flags    byte          // 8bits should be fine
+	pathcnt  uint8         // 255 instances of an obj should be sufficient
+	tbahlen  uint8         // user-tags bah buflen TODO fix read
+	sbahlen  uint8         // systemic-tags bah buflen
+	revision uint16        // new is revision 0
 	reserved [2]byte
 }
 
@@ -45,8 +47,9 @@ func (p *header) DebugStr() string {
 	s += fp("card.header:\n")
 	s += fp("\tftype:     %08x\n", p.ftype)
 	s += fp("\tcrc32:     %08x\n", p.crc32)
-	s += fp("\tcreated-on:%016x\n", p.created)
-	s += fp("\tupdated-on:%016x\n", p.updated)
+	s += fp("\toid64:     %08x\n", p.oid64)
+	s += fp("\tcreated-on:%08x (%s) \n", p.created, p.created.Date())
+	s += fp("\tupdated-on:%08x (%s) \n", p.updated, p.updated.Date())
 	s += fp("\tflags:     %08b\n", p.flags)
 	s += fp("\tpathcnt:   %d\n", p.pathcnt)
 	s += fp("\ttbahlen:   %d\n", p.tbahlen)
@@ -152,7 +155,7 @@ func newCard0(oid *OID, source string) Card {
 	// header.crc32 is computed and set at save.
 	hdr := header{
 		ftype:   card_file_code,
-		created: time.Now().Unix(),
+		created: unixtime.Now(),
 		updated: 0,
 		pathcnt: 0,
 		tbahlen: 0,
@@ -250,7 +253,7 @@ func (c *card_t) SetTags(bm bitmap.Bitmap) error {
 	}
 	c.tags = bm
 	c.tbahlen = uint8(bmlen)
-	c.updated = time.Now().Unix()
+	c.updated = unixtime.Now()
 	c.modified = true
 
 	return nil
@@ -271,7 +274,7 @@ func (c *card_t) SetSystemics(bm bitmap.Bitmap) error {
 	}
 	c.systemics = bm
 	c.sbahlen = uint8(bmlen)
-	c.updated = time.Now().Unix()
+	c.updated = unixtime.Now()
 	c.modified = true
 
 	return nil
@@ -372,8 +375,8 @@ func (c *card_t) Save_deprecated(fname string) error {
 	return nil
 }
 
-func (c *card_t) CreatedOn() time.Time    { return time.Unix(c.created, 0) }
-func (c *card_t) UpdatedOn() time.Time    { return time.Unix(c.updated, 0) }
+func (c *card_t) CreatedOn() time.Time    { return c.created.StdTime() }
+func (c *card_t) UpdatedOn() time.Time    { return c.updated.StdTime() }
 func (c *card_t) Flags() byte             { return c.flags }
 func (c *card_t) Oid() OID                { return c.oid }
 func (c *card_t) Tags() bitmap.Bitmap     { return c.tags }      // REVU return copy?
@@ -392,7 +395,7 @@ func (c *card_t) AddPath(path string) (bool, error) {
 	}
 	c.paths = append(c.paths, path)
 	c.pathcnt++
-	c.updated = time.Now().Unix()
+	c.updated = unixtime.Now()
 	c.modified = true
 
 	return true, nil
@@ -421,7 +424,7 @@ found:
 	}
 	c.pathcnt--
 	c.paths = c.paths[:c.pathcnt]
-	c.updated = time.Now().Unix()
+	c.updated = unixtime.Now()
 	c.modified = true
 
 	return true, nil
@@ -439,8 +442,9 @@ func (c *card_t) encode(buf []byte) error {
 	}
 
 	*(*uint32)(unsafe.Pointer(&buf[0])) = c.ftype
-	*(*int64)(unsafe.Pointer(&buf[8])) = c.created
-	*(*int64)(unsafe.Pointer(&buf[16])) = c.updated
+	*(*uint64)(unsafe.Pointer(&buf[8])) = c.oid64
+	*(*uint32)(unsafe.Pointer(&buf[16])) = c.created.Timestamp()
+	*(*uint32)(unsafe.Pointer(&buf[20])) = c.updated.Timestamp()
 	buf[24] = c.flags
 	buf[25] = c.pathcnt
 	buf[26] = c.tbahlen

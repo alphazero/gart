@@ -95,6 +95,8 @@ func validateOidBytes(bytes []byte) error {
 	return fmt.Errorf("bug - invalid OID bytes - all 0x00")
 }
 
+func (oid *OID) String() string { return fmt.Sprintf("%x", oid.dat) }
+
 /// Card ops ///////////////////////////////////////////////////////////////////
 
 var (
@@ -138,6 +140,7 @@ func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap)
 func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 
 	var cardfile = cardfilePath(path, oid)
+	fmt.Printf("DEBUG - index.getOrCreateCard: \n\tgart-path: %q\n\toid:       %s\n\tcardfile:  %q\n", path, oid, cardfile)
 	if !cardfileExists(cardfile) {
 		dir := filepath.Dir(cardfile)
 		if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
@@ -162,5 +165,6 @@ func cardfileExists(cardfile string) bool {
 	} else if e != nil {
 		panic(fmt.Errorf("bug - index.CardExists: %e", e))
 	}
+
 	return true
 }
