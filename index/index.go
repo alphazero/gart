@@ -65,12 +65,12 @@ type Cards interface {
 /// Object IDs /////////////////////////////////////////////////////////////////
 
 const (
-	OidBytes = 32 //HERE  REVU why export this?
+	oidBytesLen = 32
 )
 
 // export the type but keep internals private to index package
 type OID struct {
-	dat [OidBytes]byte
+	dat [oidBytesLen]byte
 }
 
 // REVU: this should be the only way to get an OID
@@ -87,17 +87,17 @@ func ObjectId(fpath string) (*OID, error) {
 // internal func panics on errors
 func newOid(bytes []byte) *OID {
 
-	if bug := validateOidBytes(bytes); bug != nil {
+	if bug := validateoidBytesLen(bytes); bug != nil {
 		panic(fmt.Errorf("bug - index.newOid: invalid arg - %s", bug))
 	}
 	var oid OID
-	copy(oid.dat[:], bytes[:OidBytes])
+	copy(oid.dat[:], bytes[:oidBytesLen])
 
 	return &oid
 }
 
-func validateOidBytes(bytes []byte) error {
-	if len(bytes) < OidBytes {
+func validateoidBytesLen(bytes []byte) error {
+	if len(bytes) < oidBytesLen {
 		return fmt.Errorf("bug - invalid OID bytes - len: %d", len(bytes))
 	}
 	for _, b := range bytes {
