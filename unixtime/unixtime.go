@@ -13,6 +13,9 @@ import (
 // Time just holds the unix seconds.
 type Time uint32
 
+// basically a semantic convenience method
+func (t Time) Timestamp() uint32 { return uint32(t) }
+
 // Returns the std-lib time.Time for this unixtime.Time.
 func (t Time) StdTime() time.Time { return time.Unix(int64(t), 0) }
 
