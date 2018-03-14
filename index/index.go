@@ -6,11 +6,48 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
 )
+
+/// Index Cards ////////////////////////////////////////////////////////////////
+
+// Card defines the interface of an Index-Card.
+type Card interface {
+	CreatedOn() time.Time // unix seconds precision
+	UpdatedOn() time.Time // unix seconds precision
+	Flags() byte          // REVU: use semantic flags e.g. Card.HasDups() bool, etc.
+	Revision() int        // 0 indicates new card
+
+	Oid() OID
+
+	Tags() bitmap.Bitmap
+	SetTags(cpm bitmap.Bitmap) error
+	UpdateTags(cpm bitmap.Bitmap) (bool, error)
+
+	Systemic() bitmap.Bitmap
+	SetSystemics(cpm bitmap.Bitmap) error
+	UpdateSystemics(cpm bitmap.Bitmap) (bool, error)
+
+	Paths() []string // REVU len(card.Paths()) > 1 => dup files
+	AddPath(fpath string) (bool, error)
+	RemovePath(fpath string) (bool, error)
+
+	Save() (bool, error)
+
+	DebugStr() string
+}
+
+// Cards defines the interface of an Index-Card manager. It is used to isolate
+// the index ops from changes in the implementation of Card persistence impl.
+// It is a sort of entity mamanager.
+type Cards interface {
+	// REVU card life-cycle per gart operations. Below is tentative as of now.
+
+}
 
 /// Object IDs /////////////////////////////////////////////////////////////////
 
