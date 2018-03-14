@@ -165,45 +165,29 @@ func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap)
 // Read only - gets the card.
 // Returns (nil, ErrCardNotFound) if card not found.
 func GetCard(path string, oid *OID) (Card, error) {
-	return readCard(path, oid) // HERE this should be via Cards interface
+	card, e := readCard(path, oid) // HERE this should be via Cards interface
+	if e != nil && e != ErrCardNotFound {
+		return nil, fmt.Errorf("err - index.GetCard: unexpected error - %v", e)
+	}
+	return card, e
 }
 
 // HERE this should be just readCard, if ErrCardNotFound then create it.
 // returns (Card, newCard, e)
 func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 
-	var cardfile = cardfilePath(path, oid)
-	// HERE should first try readCard (via Cards interface)
-	//      checking cardfileExists here is silly
-	//	fmt.Printf("DEBUG - index.getOrCreateCard: \n\tgart-path: %q\n\toid:       %s\n\tcardfile:  %q\n", path, oid, cardfile)
-	if !cardfileExists(cardfile) {
+	card, e := GetCard(path, oid)
+	if e != nil && e == ErrCardNotFound {
 		// HERE this also belongs to the cardfile.go file.
 		//      for both readCard and 'newCard0' pass 'gart-home' and 'oid'
+		var cardfile = cardfilePath(path, oid) // HERE modify newCard0 << and rename it!
 		dir := filepath.Dir(cardfile)
 		if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
 			return nil, false, fmt.Errorf("bug - index.GetOrCreateCard: os.Mkdirall: %s", e)
 		}
-		//		return newCard0(oid, cardfile), true, nil
 		return newCard0(oid, notIndexed, cardfile), true, nil // TODO need CardInternal to set oid64 later
-	}
-	card, e := readCard(cardfile, oid) // HERE this should be via Cards interface
-	return card, false, e
-}
-
-// REVU this expect a validated oid. Don't want to constantly verify.
-// cpath has the card path, cfile is the full card path, including
-func cardfilePath(path string, oid *OID) string {
-	cpath := filepath.Join(path, "index/cards", fmt.Sprintf("%x", oid.dat[0]))
-	return filepath.Join(cpath, fmt.Sprintf("%x.card", oid.dat[1:]))
-}
-
-// HERE move to cardfile.go -- index.go should have no knowledge of cardfiles
-func cardfileExists(cardfile string) bool {
-	if _, e := os.Stat(cardfile); e != nil && os.IsNotExist(e) {
-		return false
 	} else if e != nil {
-		panic(fmt.Errorf("bug - index.CardExists: %e", e))
+		return nil, false, e
 	}
-
-	return true
+	return card, false, e
 }

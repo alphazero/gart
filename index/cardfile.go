@@ -7,6 +7,7 @@ package index
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 	"unsafe"
 
@@ -190,6 +191,23 @@ func readCard(garthome string, oid *OID) (Card, error) {
 		modified:  false,
 		source:    cardfile,
 	}, nil
+}
+
+// REVU this expect a validated oid. Don't want to constantly verify.
+// cpath has the card path, cfile is the full card path, including
+func cardfilePath(path string, oid *OID) string {
+	cpath := filepath.Join(path, "index/cards", fmt.Sprintf("%x", oid.dat[0]))
+	return filepath.Join(cpath, fmt.Sprintf("%x.card", oid.dat[1:]))
+}
+
+// HERE is this necessary?
+func cardfileExists(cardfile string) bool {
+	if _, e := os.Stat(cardfile); e != nil && os.IsNotExist(e) {
+		return false
+	} else if e != nil {
+		panic(fmt.Errorf("bug - index.CardExists: %e", e))
+	}
+	return true
 }
 
 func (c *card_t) onUpdate() {
