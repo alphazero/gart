@@ -14,11 +14,11 @@ import (
 type Time uint32
 
 // Returns the std-lib time.Time for this unixtime.Time.
-func (t Time) Time() time.Time { return time.Unix(int64(t), 0) }
+func (t Time) StdTime() time.Time { return time.Unix(int64(t), 0) }
 
 // Returns the mmm-dd-yyyy (ex: mar-21-2018)
 func (t Time) Date() string {
-	y, m, d := t.Time().Date()
+	y, m, d := t.StdTime().Date()
 	return fmt.Sprintf("%s-%02d-%4d", strings.ToLower(m.String()[:3]), d, y)
 }
 
