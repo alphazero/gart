@@ -29,7 +29,6 @@ func timenow() time.Time {
 }
 
 // Returns unix Time for time.Now()
-func Now() (Time, time.Time) {
-	now := timenow()
-	return Time(uint32(now.Unix()) & 0xffffffff), now
+func Now() Time {
+	return Time(uint32(timenow().Unix()) & 0xffffffff)
 }
