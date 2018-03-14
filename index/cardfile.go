@@ -94,62 +94,6 @@ func (p *card_t) DebugStr() string {
 
 /// life-cycle ops /////////////////////////////////////////////////////////////
 
-// TODO deprecated
-/*
-// Card files are created and occasionally modified. the read/write pattern is
-// expected to be a quick load, read, and then possibly update and sync.
-//
-// Like tag.tagmap_t, on updates card_t will first write to a swap file and then
-// replace its source file with the updated card data.
-
-// REVU every other func is using fname. the OS FS dirs are a convenient index but
-//      should not be considered canonical.
-
-// Creates a new card. card_t file is assigned on Card.Save().
-// REVU consider deprecating New and Save. Use only Load(filename, create) & Sync()
-func NewCard(oid *OID, path string, tags, systemics bitmap.Bitmap) (Card, error) {
-	// accept any value for an oid except all zero bytes.
-	if !oid.IsValid() {
-		return nil, fmt.Errorf("err - card.New: oid is invalid")
-	}
-
-	if len(path) == 0 { // REVU not a library! do not verify path
-		return nil, fmt.Errorf("bug - card.New: path is zero-len")
-	}
-
-	if len(tags.Bytes()) == 0 {
-		return nil, fmt.Errorf("bug - card.New: tags is zero-len")
-	}
-	tags.Compress() // NOP if already compressed
-
-	if len(systemics.Bytes()) == 0 {
-		return nil, fmt.Errorf("bug - card.New: systemics is zero-len")
-	}
-	systemics.Compress()
-
-	// header.crc32 is computed and set at save.
-	hdr := header{
-		ftype:   card_file_code,
-		created: time.Now().Unix(),
-		updated: time.Now().Unix(),
-		pathcnt: 1,
-		tbahlen: uint8(len(tags.Bytes())),
-		sbahlen: uint8(len(systemics.Bytes())),
-	}
-
-	card := &card_t{
-		header:    hdr,
-		oid:       *oid,
-		tags:      tags,
-		systemics: systemics,
-		paths:     []string{path},
-		modified:  true,
-	}
-
-	return card, nil
-}
-*/
-// REVU: this should be the only way to create a new card.
 // internal use only
 func newCard0(oid *OID, source string) Card {
 	// header.crc32 is computed and set at save.
@@ -170,6 +114,7 @@ func newCard0(oid *OID, source string) Card {
 	}
 }
 
+// REVU is this still necessary?
 // Read an existing card file. File is read in RDONLY mode and immediately closed.
 // Use Card.Sync() to update the file (if modified).
 // TODO rename Load(fname string, create bool) ..
