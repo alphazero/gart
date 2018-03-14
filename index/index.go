@@ -22,7 +22,7 @@ type Card interface {
 	Flags() byte          // REVU use semantic flags e.g. Card.HasDups() bool, etc.
 	Revision() int        // 0 indicates new card
 
-	Oid() OID //
+	Oid() OID
 
 	Tags() bitmap.Bitmap
 	SetTags(cpm bitmap.Bitmap) error
@@ -153,12 +153,27 @@ func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap)
 	return card, newCard, updated, nil
 }
 
+// Read only - gets the card.
+// Returns (nil, ErrCardNotFound) if card not found.
+func GetCard(path string, oid *OID) (Card, error) {
+	// HERE should just return readCard (via Cards interface)
+	var cardfile = cardfilePath(path, oid)
+	if !cardfileExists(cardfile) {
+		return nil, ErrCardNotFound
+	}
+	return readCard(cardfile) // HERE this should be via Cards interface
+}
+
 // returns (Card, newCard, e)
 func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 
 	var cardfile = cardfilePath(path, oid)
+	// HERE should first try readCard (via Cards interface)
+	//      checking cardfileExists here is silly
 	//	fmt.Printf("DEBUG - index.getOrCreateCard: \n\tgart-path: %q\n\toid:       %s\n\tcardfile:  %q\n", path, oid, cardfile)
 	if !cardfileExists(cardfile) {
+		// HERE this also belongs to the cardfile.go file.
+		//      for both readCard and 'newCard0' pass 'gart-home' and 'oid'
 		dir := filepath.Dir(cardfile)
 		if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
 			return nil, false, fmt.Errorf("bug - index.GetOrCreateCard: os.Mkdirall: %s", e)
@@ -166,7 +181,7 @@ func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 		//		return newCard0(oid, cardfile), true, nil
 		return newCard0(oid, notIndexed, cardfile), true, nil // TODO need CardInternal to set oid64 later
 	}
-	card, e := ReadCard(cardfile)
+	card, e := readCard(cardfile) // HERE this should be via Cards interface
 	return card, false, e
 }
 
@@ -177,6 +192,7 @@ func cardfilePath(path string, oid *OID) string {
 	return filepath.Join(cpath, fmt.Sprintf("%x.card", oid.dat[1:]))
 }
 
+// HERE move to cardfile.go -- index.go should have no knowledge of cardfiles
 func cardfileExists(cardfile string) bool {
 	if _, e := os.Stat(cardfile); e != nil && os.IsNotExist(e) {
 		return false

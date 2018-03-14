@@ -117,8 +117,9 @@ func newCard0(oid *OID, key uint64, source string) Card {
 
 // Read an existing card file. File is read in RDONLY mode and immediately closed.
 // Use Card.Sync() to update the file (if modified).
-// TODO rename Load(fname string, create bool) ..
-func ReadCard(fname string) (Card, error) {
+// Returns (card, nil) on success. Card is nil on errors.
+// HERE shouldn't this return index.ErrCardNotFound?
+func readCard(fname string) (Card, error) {
 	finfo, e := os.Stat(fname)
 	if e != nil {
 		return nil, e
@@ -298,49 +299,6 @@ func (c *card_t) Save() (bool, error) {
 	c.modified = false
 
 	return true, nil
-}
-
-// Save writes the card to a swap file and then rename to file 'fname' as given.
-// Save always writes the file, even if card file has not changed. Use Sync in
-// conjunction with card.Load(cardfile) if io is to be limited to the case of
-// changed cards.
-func (c *card_t) Save_deprecated(fname string) error {
-
-	// TODO use the same fs func for tagmap
-	swapfile := fs.SwapfileName(fname)
-	var abort = true // REVU for now, treat dangling swaps as system bugs
-	sfile, existing, e := fs.OpenNewSwapfile(swapfile, abort)
-	if e != nil {
-		return fmt.Errorf("bug - card_t.Save: on OpenNewSwapfile - existing:%t - %s", existing, e)
-	}
-	defer sfile.Close()
-
-	var bufsize = c.bufsize()
-	var buf = make([]byte, bufsize)
-
-	if e := c.encode(buf); e != nil {
-		return e // only bugs
-	}
-
-	// write buf to file
-	_, e = sfile.Write(buf)
-	if e != nil {
-		return e
-	}
-
-	// fsync the swap file
-	if e := sfile.Sync(); e != nil {
-		return fmt.Errorf("bug - card_t.Save: sfile.Sync - %s", e)
-	}
-	// rename to actual card file
-	if e := os.Rename(swapfile, fname); e != nil {
-		return fmt.Errorf("bug - card_t.Save: os.Rename swp:%q dst:%q - %s",
-			swapfile, fname, e)
-	}
-
-	c.modified = false
-
-	return nil
 }
 
 func (c *card_t) CreatedOn() time.Time    { return c.created.StdTime() }

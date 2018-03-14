@@ -39,6 +39,7 @@ func main() {
 
 	// NOTE for newbasic.go card is always saved on 'index.AddOrUpdate' so
 	// card.Save always returns false
+	// keep this only to insure above is true
 	doSave(card)
 }
 
@@ -48,9 +49,9 @@ func doSave(card index.Card) {
 	if e != nil {
 		exitOnError(e)
 	}
-	fmt.Printf("test: wrote: %t\n", ok)
 	if ok {
 		fmt.Printf("%s\n", card.DebugStr())
+		panic(fmt.Sprintf("test: wrote: %t\n", ok))
 	}
 }
 
