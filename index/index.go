@@ -19,10 +19,10 @@ import (
 type Card interface {
 	CreatedOn() time.Time // unix seconds precision
 	UpdatedOn() time.Time // unix seconds precision
-	Flags() byte          // REVU: use semantic flags e.g. Card.HasDups() bool, etc.
+	Flags() byte          // REVU use semantic flags e.g. Card.HasDups() bool, etc.
 	Revision() int        // 0 indicates new card
 
-	Oid() OID
+	Oid() uint64 // 64bit oid index reference. Used for offseting the index file.
 
 	Tags() bitmap.Bitmap
 	SetTags(cpm bitmap.Bitmap) error
@@ -39,6 +39,13 @@ type Card interface {
 	Save() (bool, error)
 
 	DebugStr() string
+}
+
+// indexedCard is a package private interface encapsulating card indexing related
+// features that should not be exposed via Card.
+type indexedCard interface {
+	Key() uint64
+	SetKey(uint64)
 }
 
 // Cards defines the interface of an Index-Card manager. It is used to isolate
@@ -146,7 +153,9 @@ func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
 		if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
 			return nil, false, fmt.Errorf("bug - index.GetOrCreateCard: os.Mkdirall: %s", e)
 		}
-		return newCard0(oid, cardfile), true, nil
+		//		return newCard0(oid, cardfile), true, nil
+		var undefinedKey = uint64(0xffffffffffffffff)
+		return newCard0(undefinedKey, cardfile), true, nil // TODO need CardInternal to set oid64 later
 	}
 	card, e := ReadCard(cardfile)
 	return card, false, e

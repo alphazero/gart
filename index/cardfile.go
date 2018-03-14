@@ -63,14 +63,14 @@ func (p *header) DebugStr() string {
 // and a variable number of associated paths and tags.
 // Not all elements of this structure are persisted in the binary image.
 type card_t struct {
-	header                  // serialized
-	oid       OID           // 32 bytes TODO assert this on init
+	header // serialized
+	//	oid       OID           // 32 bytes TODO assert this on init
 	tags      bitmap.Bitmap // serialized user tags' bah bitmap - can change
 	systemics bitmap.Bitmap // serialized systemic tags' bah bitmap - write once
 	paths     []string      // serialized associated fs object paths
 
 	/* not persisted */
-	source   string // only set on LoadOrCreate()
+	source   string // REVU really belongs to header, only set on LoadOrCreate()
 	modified bool   // REVU on New, add/del tags, add/del paths
 }
 
@@ -80,7 +80,7 @@ func (p *card_t) DebugStr() string {
 	}
 	var s string = p.header.DebugStr()
 	s += fp("------------\n")
-	s += fp("\toid:      %x\n", p.oid)
+	//	s += fp("\toid:      %x\n", p.oid)
 	s += fp("\ttags:     %08b\n", p.tags)
 	s += fp("\tsystemics:%08b\n", p.systemics)
 	for i, path := range p.paths {
@@ -95,11 +95,12 @@ func (p *card_t) DebugStr() string {
 /// life-cycle ops /////////////////////////////////////////////////////////////
 
 // internal use only
-func newCard0(oid *OID, source string) Card {
+func newCard0(oid64 uint64, source string) Card {
 	// header.crc32 is computed and set at save.
 	hdr := header{
 		ftype:   card_file_code,
 		created: unixtime.Now(),
+		oid64:   oid64,
 		updated: 0,
 		pathcnt: 0,
 		tbahlen: 0,
@@ -108,17 +109,16 @@ func newCard0(oid *OID, source string) Card {
 
 	return &card_t{
 		header:   hdr,
-		oid:      *oid,
 		modified: false, // so it can't be saved unless initialized
 		source:   source,
 	}
 }
 
-// REVU is this still necessary?
 // Read an existing card file. File is read in RDONLY mode and immediately closed.
 // Use Card.Sync() to update the file (if modified).
 // TODO rename Load(fname string, create bool) ..
 func ReadCard(fname string) (Card, error) {
+	println("DEBUG - ReadCard")
 	finfo, e := os.Stat(fname)
 	if e != nil {
 		return nil, e
@@ -140,13 +140,13 @@ func ReadCard(fname string) (Card, error) {
 	}
 
 	// read & verify the OID - 32 bytes
-	var oid OID
-	var oidDat = buf[offset : offset+OidBytes]
-	if e := validateOidBytes(oidDat); e != nil {
-		return nil, fmt.Errorf("bug - card_t:Read - %s", e)
-	}
-	copy(oid.dat[:], oidDat)
-	offset += OidBytes
+	//	var oid OID
+	//	var oidDat = buf[offset : offset+OidBytes]
+	//	if e := validateOidBytes(oidDat); e != nil {
+	//		return nil, fmt.Errorf("bug - card_t:Read - %s", e)
+	//	}
+	//	copy(oid.dat[:], oidDat)
+	//  offset += OidBytes
 
 	// read user-tags and systemics-tags BAHs
 	tagBytes := buf[offset : offset+int(hdr.tbahlen)]
@@ -171,8 +171,8 @@ func ReadCard(fname string) (Card, error) {
 	}
 
 	return &card_t{
-		header:    *hdr,
-		oid:       oid,
+		header: *hdr,
+		//		oid:       oid,
 		tags:      bitmap.NewCompressed(tagBytes),
 		systemics: bitmap.NewCompressed(systemicsBytes),
 		paths:     paths,
@@ -181,7 +181,26 @@ func ReadCard(fname string) (Card, error) {
 	}, nil
 }
 
-/// interface: Card /////////////////////////////////////////////////////
+func (c *card_t) onUpdate() {
+	c.updated = unixtime.Now()
+	if !c.modified {
+		c.modified = true
+		c.revision++
+	}
+}
+
+/// interface: indexedCard ///////////////////////////////////////////////
+
+func (c *card_t) Key() uint64 { return c.oid64 }
+func (c *card_t) SetKey(oid64 uint64) {
+	c.oid64 = oid64
+
+	c.onUpdate()
+	//	c.updated = unixtime.Now()
+	//	c.modified = true
+}
+
+/// interface: Card //////////////////////////////////////////////////////
 
 func (c *card_t) UpdateTags(bm bitmap.Bitmap) (bool, error) {
 	panic("card_t.UpdateTags: not implemented")
@@ -198,8 +217,10 @@ func (c *card_t) SetTags(bm bitmap.Bitmap) error {
 	}
 	c.tags = bm
 	c.tbahlen = uint8(bmlen)
-	c.updated = unixtime.Now()
-	c.modified = true
+
+	c.onUpdate()
+	//	c.updated = unixtime.Now()
+	//	c.modified = true
 
 	return nil
 }
@@ -219,8 +240,10 @@ func (c *card_t) SetSystemics(bm bitmap.Bitmap) error {
 	}
 	c.systemics = bm
 	c.sbahlen = uint8(bmlen)
-	c.updated = unixtime.Now()
-	c.modified = true
+
+	c.onUpdate()
+	//	c.updated = unixtime.Now()
+	//	c.modified = true
 
 	return nil
 }
@@ -323,7 +346,7 @@ func (c *card_t) Save_deprecated(fname string) error {
 func (c *card_t) CreatedOn() time.Time    { return c.created.StdTime() }
 func (c *card_t) UpdatedOn() time.Time    { return c.updated.StdTime() }
 func (c *card_t) Flags() byte             { return c.flags }
-func (c *card_t) Oid() OID                { return c.oid }
+func (c *card_t) Oid() uint64             { return c.oid64 }
 func (c *card_t) Tags() bitmap.Bitmap     { return c.tags }      // REVU return copy?
 func (c *card_t) Systemic() bitmap.Bitmap { return c.systemics } // REVU return copy?
 func (c *card_t) Paths() []string         { return c.paths }     // REVU return copy?
@@ -386,6 +409,7 @@ func (c *card_t) encode(buf []byte) error {
 		return fmt.Errorf("bug - card_t.encode: buflen:%d required:%d", len(buf), bufsize)
 	}
 
+	// header's fields
 	*(*uint32)(unsafe.Pointer(&buf[0])) = c.ftype
 	*(*uint64)(unsafe.Pointer(&buf[8])) = c.oid64
 	*(*uint32)(unsafe.Pointer(&buf[16])) = c.created.Timestamp()
@@ -396,8 +420,11 @@ func (c *card_t) encode(buf []byte) error {
 	buf[27] = c.sbahlen
 	*(*uint16)(unsafe.Pointer(&buf[28])) = c.revision
 	*(*[2]byte)(unsafe.Pointer(&buf[30])) = c.reserved
-	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
-	var offset = 64
+
+	//	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
+
+	// card_t's persisted fields
+	var offset = headerBytes //64
 	copy(buf[offset:], c.tags.Bytes())
 	offset += int(c.tbahlen)
 	copy(buf[offset:], c.systemics.Bytes())
@@ -479,7 +506,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 
 func (c *card_t) bufsize() int {
 	n := headerBytes
-	n += OidBytes
+	//	n += OidBytes
 	n += len(c.tags.Bytes())
 	n += len(c.systemics.Bytes())
 	// each path is len of the []byte of path + \n
