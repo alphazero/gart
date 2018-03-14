@@ -4,13 +4,10 @@ package index
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/digest"
-	"github.com/alphazero/gart/fs"
 )
 
 /// Index Cards ////////////////////////////////////////////////////////////////
@@ -128,9 +125,9 @@ var (
 
 // returns (Card, newCard, updated, e)
 // Card is always saved on success.
-func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap) (Card, bool, bool, error) {
+func AddOrUpdateCard(garthome string, oid *OID, file string, tbm, sbm bitmap.Bitmap) (Card, bool, bool, error) {
 
-	card, newCard, e := getOrCreateCard(path, oid)
+	card, newCard, e := getOrCreateCard(garthome, oid)
 	if e != nil {
 		return nil, false, false, e
 	}
@@ -167,28 +164,23 @@ func AddOrUpdateCard(path string, oid *OID, file string, tbm, sbm bitmap.Bitmap)
 
 // Read only - gets the card.
 // Returns (nil, ErrCardNotFound) if card not found.
-func GetCard(path string, oid *OID) (Card, error) {
-	card, e := readCard(path, oid) // HERE this should be via Cards interface
+func GetCard(garthome string, oid *OID) (Card, error) {
+	card, e := readCard(garthome, oid) // HERE this should be via Cards interface
 	if e != nil && e != ErrCardNotFound {
 		return nil, fmt.Errorf("err - index.GetCard: unexpected error - %v", e)
 	}
 	return card, e
 }
 
-// HERE this should be just readCard, if ErrCardNotFound then create it.
+// either gets existing card or creats a new card.
 // returns (Card, newCard, e)
-func getOrCreateCard(path string, oid *OID) (Card, bool, error) {
+// TODO is to use Cards interface to create cards.
+func getOrCreateCard(garthome string, oid *OID) (Card, bool, error) {
 
-	card, e := GetCard(path, oid)
+	card, e := GetCard(garthome, oid)
 	if e != nil && e == ErrCardNotFound {
-		// HERE modify newCard0 << and rename it!
-		var cardfile = cardfilePath(path, oid)
-		dir := filepath.Dir(cardfile)
-		if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
-			err := fmt.Errorf("bug - index.GetOrCreateCard: os.Mkdirall: %s", e)
-			return nil, false, err
-		}
-		return newCard0(oid, notIndexed, cardfile), true, nil
+		card, e := newCard(garthome, oid, notIndexed)
+		return card, true, e
 	} else if e != nil {
 		return nil, false, e
 	}

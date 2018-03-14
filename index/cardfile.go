@@ -96,7 +96,13 @@ func (p *card_t) DebugStr() string {
 /// life-cycle ops /////////////////////////////////////////////////////////////
 
 // internal use only
-func newCard0(oid *OID, key uint64, source string) Card {
+func newCard(garthome string, oid *OID, key uint64) (Card, error) {
+	var cardfile = cardfilePath(garthome, oid)
+
+	dir := filepath.Dir(cardfile)
+	if e := os.MkdirAll(dir, fs.DirPerm); e != nil {
+		return nil, fmt.Errorf("bug - card_t.newCard: os.Mkdirall: %s", e)
+	}
 	// header.crc32 is computed and set at save.
 	hdr := header{
 		ftype:   card_file_code,
@@ -108,12 +114,13 @@ func newCard0(oid *OID, key uint64, source string) Card {
 		sbahlen: 0,
 	}
 
-	return &card_t{
+	card := &card_t{
 		header:   hdr,
 		oid:      *oid,
 		modified: false, // so it can't be saved unless initialized
-		source:   source,
+		source:   cardfile,
 	}
+	return card, nil
 }
 
 // Read an existing card file. File is read in RDONLY mode and immediately closed.
