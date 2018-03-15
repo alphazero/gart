@@ -238,48 +238,40 @@ func (c *card_t) SetKey(key uint64) {
 
 /// interface: Card //////////////////////////////////////////////////////
 
-func (c *card_t) UpdateTags(bm bitmap.Bitmap) (bool, error) {
+func (c *card_t) UpdateTags(tags bitmap.Bitmap) (bool, error) {
 	panic("card_t.UpdateTags: not implemented")
-	//	return false, nil
 }
 
-func (c *card_t) SetTags(bm bitmap.Bitmap) error {
-	bmlen := len(bm.Bytes())
-	if bmlen == 0 {
-		fmt.Errorf("bug - card_t.UpdateTags: bm is zerolen")
+func (c *card_t) SetTags(tags bitmap.Bitmap) error {
+	if e := tags.AssertSize(1, 255); e != nil {
+		return fmt.Errorf("bug - card_t.SetTags: %s", e)
 	}
-	if bmlen > 255 {
-		fmt.Errorf("oops - card_t.UpdateTags: bm is larger than conceived")
+	if c.tags != nil && c.tags.IsEqual(tags) {
+		return nil // nop
 	}
-	c.tags = bm
-	c.tbahlen = uint8(bmlen)
 
+	c.tags = tags
+	c.tbahlen = uint8(len(tags.Bytes()))
 	c.onUpdate()
-	//	c.updated = unixtime.Now()
-	//	c.modified = true
 
 	return nil
 }
 
-func (c *card_t) UpdateSystemics(bm bitmap.Bitmap) (bool, error) {
+func (c *card_t) UpdateSystemics(tags bitmap.Bitmap) (bool, error) {
 	panic("card_t.UpdateSystemics: not implemented")
-	//	return false, nil
 }
 
-func (c *card_t) SetSystemics(bm bitmap.Bitmap) error {
-	bmlen := len(bm.Bytes())
-	if bmlen == 0 {
-		fmt.Errorf("bug - card_t.UpdateTags: bm is zerolen")
+func (c *card_t) SetSystemics(systemics bitmap.Bitmap) error {
+	if e := systemics.AssertSize(1, 255); e != nil {
+		return fmt.Errorf("bug - card_t.SetTags: %s", e)
 	}
-	if bmlen > 255 {
-		fmt.Errorf("oops - card_t.UpdateTags: bm is larger than conceived")
+	if c.systemics != nil && c.systemics.IsEqual(systemics) {
+		return nil // nop
 	}
-	c.systemics = bm
-	c.sbahlen = uint8(bmlen)
 
+	c.systemics = systemics
+	c.sbahlen = uint8(len(systemics.Bytes()))
 	c.onUpdate()
-	//	c.updated = unixtime.Now()
-	//	c.modified = true
 
 	return nil
 }
