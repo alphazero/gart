@@ -29,8 +29,12 @@ type Bitmap interface {
 	NoneSet(bits ...int) bool
 	// Returns true if bitmap changed
 	Set(bits ...int) bool
+	// Compare values
+	IsEqual(a Bitmap) bool
 	// String rep
 	String() string
+	// Assert Bitmap (bytes) size is in [a, b] (inclusive).
+	AssertSize(a, b int) error
 }
 
 //    0        1        2        3        4      ... byte
@@ -106,6 +110,21 @@ func (v bitmap_t) Debug() {
 	DisplayBuf("bitmap", v)
 }
 
+// for now, simple byte array check REVU could expand of other is compressed.
+func (v bitmap_t) IsEqual(a Bitmap) bool {
+	var b1, b2 = []byte(v), a.Bytes()
+	return equalArrays(b1, b2)
+}
+
+// panics if assert fails
+func (v bitmap_t) AssertSize(a, b int) error {
+	vlen := len(v)
+	if vlen < a || vlen > b {
+		return fmt.Errorf("bitmap_t.AssertSize: size %d not in range [%d, %d]", vlen, a, b)
+	}
+	return nil
+}
+
 /// compressed_t //////////////////////////////////////////////////////////
 
 // Byte aligned variant of WAH bitmap compression
@@ -146,12 +165,27 @@ func (v compressed_t) Set(bits ...int) bool {
 	return set(v, bits...)
 }
 
+// for now, simple byte array check REVU could compress of other is compressed.
+func (v compressed_t) IsEqual(a Bitmap) bool {
+	var b1, b2 = []byte(v), a.Bytes()
+	return equalArrays(b1, b2)
+}
+
 func (v compressed_t) String() (s string) {
 	return SprintBuf(v)
 }
 
 func (v compressed_t) Debug() {
 	DisplayBuf("compressed", []byte(v))
+}
+
+// panics if assert fails
+func (v compressed_t) AssertSize(a, b int) error {
+	vlen := len(v)
+	if vlen < a || vlen > b {
+		return fmt.Errorf("compressed_t.AssertSize: size %d not in range [%d, %d]", vlen, a, b)
+	}
+	return nil
 }
 
 /// santa's little helpers /////////////////////////////////////////////////////
@@ -166,4 +200,16 @@ func SprintBuf(buf []byte) (s string) {
 // TODO rename DebugBuf
 func DisplayBuf(label string, buf []byte) {
 	fmt.Printf("%s\n%s\n", label, SprintBuf(buf))
+}
+
+func equalArrays(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
