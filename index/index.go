@@ -22,12 +22,10 @@ type Card interface {
 	Oid() OID
 
 	Tags() bitmap.Bitmap
-	SetTags(cpm bitmap.Bitmap) error
-	UpdateTags(cpm bitmap.Bitmap) (bool, error)
+	SetTags(cpm bitmap.Bitmap) (bool, error)
 
 	Systemic() bitmap.Bitmap
-	SetSystemics(cpm bitmap.Bitmap) error
-	UpdateSystemics(cpm bitmap.Bitmap) (bool, error)
+	SetSystemics(cpm bitmap.Bitmap) (bool, error)
 
 	Paths() []string // REVU len(card.Paths()) > 1 => dup files
 	AddPath(fpath string) (bool, error)
@@ -133,29 +131,44 @@ func AddOrUpdateCard(garthome string, oid *OID, file string, tbm, sbm bitmap.Bit
 	}
 
 	var rev0 = card.Revision()
+	var updated, ok bool
 
-	if ok, e := card.AddPath(file); e != nil {
-		return nil, false, false, e
-	} else if newCard && !ok {
-		err := fmt.Errorf("bug - index.AddOrUpdateCard: path not added on new card.")
-		return nil, false, false, err
-	}
-
-	if e := card.SetTags(tbm); e != nil {
+	if ok, e = card.AddPath(file); e != nil {
 		return nil, false, false, e
 	}
+	updated = updated || ok
+	fmt.Printf("debug - updated:%t - add path\n", updated)
 
-	if e := card.SetSystemics(sbm); e != nil {
+	if ok, e = card.SetTags(tbm); e != nil {
 		return nil, false, false, e
 	}
+	updated = updated || ok
+	fmt.Printf("debug - updated:%t - set tags\n", updated)
 
-	var updated = card.Revision() > rev0
-	if ok, e := card.Save(); e != nil {
+	if ok, e = card.SetSystemics(sbm); e != nil {
 		return nil, false, false, e
-	} else if newCard && !ok {
+	}
+	updated = updated || ok
+	fmt.Printf("debug - updated:%t - set systemics\n", updated)
+
+	// note: it is entirely possible that for an existing card none of the above
+	//       were updating changes.
+
+	// REVU it is silly to repeat what amounts to unit-tests in hot-path of code!
+	// TODO have tests for these and remove them XXX
+	switch { // XXX
+	case updated && card.Revision() != rev0+1: // revision uptick should be max 1
+	case newCard && !updated: // a new card must have change in revision
+		panic(fmt.Errorf("bug - index.AddOrUpdateCard: update asserts fail"))
+	}
+
+	saved, e := card.Save()
+	if e != nil {
+		return nil, false, false, e
+	} else if newCard && !saved { // XXX
 		err := fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok new card.")
 		return nil, false, false, err
-	} else if updated && !ok {
+	} else if updated && !saved { // XXX
 		err := fmt.Errorf("bug - index.AddOrUpdateCard: card.Save not ok on revision change.")
 		return nil, false, false, err
 	}

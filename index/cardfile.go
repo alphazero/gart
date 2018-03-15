@@ -238,42 +238,80 @@ func (c *card_t) SetKey(key uint64) {
 
 /// interface: Card //////////////////////////////////////////////////////
 
-func (c *card_t) UpdateTags(tags bitmap.Bitmap) (bool, error) {
-	panic("card_t.UpdateTags: not implemented")
+func (c *card_t) CreatedOn() time.Time    { return c.created.StdTime() }
+func (c *card_t) UpdatedOn() time.Time    { return c.updated.StdTime() }
+func (c *card_t) Flags() byte             { return c.flags }
+func (c *card_t) Oid() OID                { return c.oid }
+func (c *card_t) Tags() bitmap.Bitmap     { return c.tags }      // REVU return copy?
+func (c *card_t) Systemic() bitmap.Bitmap { return c.systemics } // REVU return copy?
+func (c *card_t) Paths() []string         { return c.paths }     // REVU return copy?
+func (c *card_t) Revision() int           { return int(c.revision) }
+
+func (c *card_t) AddPath(path string) (bool, error) {
+	if path == "" {
+		return false, fmt.Errorf("err - card_t.AddPath: invalid arg - zerolen path")
+	}
+	for _, s := range c.paths {
+		if s == path {
+			return false, nil
+		}
+	}
+	c.paths = append(c.paths, path)
+	c.pathcnt++
+	c.onUpdate()
+	return true, nil
 }
 
-func (c *card_t) SetTags(tags bitmap.Bitmap) error {
+func (c *card_t) RemovePath(path string) (bool, error) {
+	if path == "" {
+		return false, fmt.Errorf("err - card_t.RemovePath: invalid arg - zerolen path")
+	}
+	var i int
+	for i < len(c.paths) {
+		if path == c.paths[i] {
+			if c.pathcnt == 1 {
+				return false, fmt.Errorf("err - card_t.RemovePath: illegal state - card's only path")
+			}
+			goto found
+		}
+		i++
+	}
+	return false, nil // not found
+
+found:
+	if i != len(c.paths) {
+		copy(c.paths[i:], c.paths[i+1:])
+	}
+	c.pathcnt--
+	c.paths = c.paths[:c.pathcnt]
+	c.onUpdate()
+	return true, nil
+}
+
+func (c *card_t) SetTags(tags bitmap.Bitmap) (bool, error) {
 	if e := tags.AssertSize(1, 255); e != nil {
-		return fmt.Errorf("bug - card_t.SetTags: %s", e)
+		return false, fmt.Errorf("bug - card_t.SetTags: %s", e)
 	}
 	if c.tags != nil && c.tags.IsEqual(tags) {
-		return nil // nop
+		return false, nil // nop
 	}
-
 	c.tags = tags
 	c.tbahlen = uint8(len(tags.Bytes()))
 	c.onUpdate()
-
-	return nil
+	return true, nil
 }
 
-func (c *card_t) UpdateSystemics(tags bitmap.Bitmap) (bool, error) {
-	panic("card_t.UpdateSystemics: not implemented")
-}
-
-func (c *card_t) SetSystemics(systemics bitmap.Bitmap) error {
+func (c *card_t) SetSystemics(systemics bitmap.Bitmap) (bool, error) {
 	if e := systemics.AssertSize(1, 255); e != nil {
-		return fmt.Errorf("bug - card_t.SetTags: %s", e)
+		return false, fmt.Errorf("bug - card_t.SetTags: %s", e)
 	}
 	if c.systemics != nil && c.systemics.IsEqual(systemics) {
-		return nil // nop
+		return false, nil // nop
 	}
-
 	c.systemics = systemics
 	c.sbahlen = uint8(len(systemics.Bytes()))
 	c.onUpdate()
-
-	return nil
+	return true, nil
 }
 
 // Saves the card. Returns (true, nil) if successful and cardfile was actually written.
@@ -324,60 +362,6 @@ func (c *card_t) Save() (bool, error) {
 	}
 
 	c.modified = false
-
-	return true, nil
-}
-
-func (c *card_t) CreatedOn() time.Time    { return c.created.StdTime() }
-func (c *card_t) UpdatedOn() time.Time    { return c.updated.StdTime() }
-func (c *card_t) Flags() byte             { return c.flags }
-func (c *card_t) Oid() OID                { return c.oid }
-func (c *card_t) Tags() bitmap.Bitmap     { return c.tags }      // REVU return copy?
-func (c *card_t) Systemic() bitmap.Bitmap { return c.systemics } // REVU return copy?
-func (c *card_t) Paths() []string         { return c.paths }     // REVU return copy?
-func (c *card_t) Revision() int           { return int(c.revision) }
-
-func (c *card_t) AddPath(path string) (bool, error) {
-	if path == "" {
-		return false, fmt.Errorf("err - card_t.AddPath: invalid arg - zerolen path")
-	}
-	for _, s := range c.paths {
-		if s == path {
-			return false, nil // REVU no error on add existing
-		}
-	}
-	c.paths = append(c.paths, path)
-	c.pathcnt++
-	c.onUpdate()
-
-	return true, nil // REVU return true regardless of onUpdate() effects
-}
-
-func (c *card_t) RemovePath(path string) (bool, error) {
-	if path == "" {
-		return false, fmt.Errorf("err - card_t.RemovePath: invalid arg - zerolen path")
-	}
-
-	var i int
-	for i < len(c.paths) {
-		if path == c.paths[i] {
-			if c.pathcnt == 1 {
-				return false, fmt.Errorf("err - card_t.RemovePath: illegal state - card's only path")
-			}
-			goto found
-		}
-		i++
-	}
-	return false, nil // not found
-
-found:
-	if i != len(c.paths) {
-		copy(c.paths[i:], c.paths[i+1:])
-	}
-	c.pathcnt--
-	c.paths = c.paths[:c.pathcnt]
-	c.onUpdate()
-
 	return true, nil
 }
 
