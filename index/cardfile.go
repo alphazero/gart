@@ -228,12 +228,13 @@ func (c *card_t) onUpdate() {
 /// interface: indexedCard ///////////////////////////////////////////////
 
 func (c *card_t) Key() uint64 { return c.key }
-func (c *card_t) SetKey(key uint64) {
+func (c *card_t) SetKey(key uint64) bool {
 	if c.key == key {
-		return
+		return false
 	}
 	c.key = key
 	c.onUpdate()
+	return true
 }
 
 /// interface: Card //////////////////////////////////////////////////////

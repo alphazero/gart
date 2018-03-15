@@ -47,7 +47,7 @@ type indexedCard interface {
 	// returns 64bit index key for card
 	Key() uint64
 	// sets the index key for the card
-	SetKey(uint64)
+	SetKey(uint64) bool
 }
 
 // Cards defines the interface of an Index-Card manager. It is used to isolate
