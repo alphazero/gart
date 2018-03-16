@@ -35,8 +35,10 @@ type idxfile_header struct {
 	crc64    uint64        // crc of header bytes from created.
 	created  unixtime.Time // unsigned 32bits
 	updated  unixtime.Time // unsigned 32bits
-	revision uint64
-	reserved [4064]byte // reserved XXX fix size
+	revision uint64        // 0 is new
+	rcnt     uint64        // number of records includes those marked for deletion, etc.
+	ocnt     uint64        // number of object records. ocnt <= rnct
+	reserved [4048]byte    // reserved XXX fix size
 }
 
 func init() {
@@ -56,6 +58,8 @@ func (h *idxfile_header) writeTo(w io.Writer) error {
 	*(*uint32)(unsafe.Pointer(&buf[16])) = h.created.Timestamp()
 	*(*uint32)(unsafe.Pointer(&buf[20])) = h.updated.Timestamp()
 	*(*uint64)(unsafe.Pointer(&buf[24])) = h.revision
+	*(*uint64)(unsafe.Pointer(&buf[32])) = h.rcnt
+	*(*uint64)(unsafe.Pointer(&buf[40])) = h.ocnt
 
 	h.crc64 = digest.Checksum64(buf[16:])
 	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
