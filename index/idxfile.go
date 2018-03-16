@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"unsafe"
 
 	"github.com/alphazero/gart/bitmap"
 	"github.com/alphazero/gart/fs"
@@ -19,10 +21,14 @@ var _ = fs.OpenNewFile
 // header related consts
 const (
 	idx_file_code = 0x763f079cf73c668e // sha256("index-file")[:8]
+	idxFilename   = "object.idx"       // REVU belongs to toplevle gart package
 )
 
-/// object.idx file ////////////////////////////////////////////////////////////
+/// object.idx file header /////////////////////////////////////////////////////
 
+// REVU this should be in gart/system.go
+
+// file header
 type idxfile_header struct {
 	ftype    uint64
 	crc64    uint64        // REVU this is not practical TODO need better solution
@@ -32,24 +38,38 @@ type idxfile_header struct {
 	reserved [4080]byte // reserved XXX fix size
 }
 
-type idxOp int
+const idxfileHeaderBytes = 4096
 
-const (
-	IdxUpdate = idxOp(os.O_RDWR)
-	IdxRead   = idxOp(os.O_RDONLY)
-)
+func (h *idxfile_header) writeTo(w io.Writer) error {
 
+	var buf [idxfileHeaderBytes]byte
+	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
+	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
+	*(*uint32)(unsafe.Pointer(&buf[16])) = h.created.Timestamp()
+	*(*uint32)(unsafe.Pointer(&buf[20])) = h.updated.Timestamp()
+	*(*uint64)(unsafe.Pointer(&buf[24])) = h.revision
+
+	_, e := w.Write(buf[:])
+	return e
+}
+
+func (idx *idxfile) readAndVerifyHeader() error {
+	return fmt.Errorf("idxfile.readAndVerifyHeader: not implemented!")
+}
+
+/// object.idx file ////////////////////////////////////////////////////////////
+
+// object.idx memory model
 type idxfile struct {
 	idxfile_header
-	opflag   idxOp
+	opMode   idxOpMode
 	file     *os.File
 	filename string
 	offset   uint64
 	modified bool
 }
 
-// index.dat file record header
-// fixed length portion
+// object.idx file record fixed-width prefix
 type idxrec_header struct {
 	flags   byte              // deleted, updated, what else?
 	oid     [oidBytesLen]byte // ref. to index.idx.file record
@@ -57,8 +77,7 @@ type idxrec_header struct {
 	sbahlen uint8
 }
 
-// index.dat file record
-// complete record (fixed header, varlength data)
+// object.idx file record
 type idx_record struct {
 	header    idxrec_header
 	tags      bitmap.Bitmap
@@ -69,20 +88,91 @@ type idx_record struct {
 /// ops ////////////////////////////////////////////////////////////////////////
 
 var (
-	ErrIdxOpMode = fmt.Errorf("object.idx: illegal state - idxOpMode")
+	ErrIdxOpMode = fmt.Errorf("object.idx: illegal state - idxOpModeMode")
 )
+
+type idxOpMode int
+
+// object.idx op/access modes
+const (
+	IdxCreate idxOpMode = 1 << iota
+	IdxRead
+	IdxUpdate
+	IdxCompact
+)
+
+func IdxFilename(garthome string) string {
+	if garthome == "" {
+		panic("bug - index.Idxfilename: garthome is zerolen")
+	}
+	// REVU both "index" and idxFileName should be in package gart
+	return filepath.Join(garthome, "index", idxFilename)
+}
 
 // init - used by gart-init
 // create the minimal object.idx file:
 // idxfile_header and buflen
-func createIdxFile(garthome string) error {
-	panic("idxfile createIdxFile: not implemented")
+// Creates, initializes, and then closes the object.idx file in the
+// specified gart dir.
+func CreateIdxFile(garthome string) error {
+
+	var filename = IdxFilename(garthome)
+	file, e := fs.OpenNewFile(filename, os.O_WRONLY|os.O_APPEND)
+	if e != nil {
+		return fmt.Errorf("index.createIdxFile: %s", e)
+	}
+	defer file.Close()
+
+	var header = idxfile_header{
+		ftype:   idx_file_code,
+		crc64:   0,
+		created: unixtime.Now(),
+	}
+
+	if e := header.writeTo(file); e != nil {
+		return fmt.Errorf("index.createIdxFile: %s", e)
+	}
+
+	return nil
 }
 
 // open
 //	gart-add, gart-tag:     os.O_RDWR   flag
 //  gart-find, [gart-list]: os.O_RDONLY flag
-func openIdxFile(garthome string, op idxOp) (*idxfile, error) {
+func OpenIdxFile(garthome string, opMode idxOpMode) (*idxfile, error) {
+
+	var flag int
+
+	switch opMode {
+	case IdxRead:
+		flag = os.O_RDONLY
+	case IdxUpdate:
+		flag = os.O_RDWR | os.O_SYNC
+	case IdxCompact:
+		flag = os.O_RDWR | os.O_SYNC
+		panic("idxfile openIdxFile: mode:IdxCompact not implemented")
+	default:
+		panic(fmt.Errorf("bug - index.openIdxFile: invalid opMode: %d", opMode))
+	}
+
+	var filename = IdxFilename(garthome)
+	file, e := os.OpenFile(filename, flag, fs.FilePerm)
+	if e != nil {
+		return nil, fmt.Errorf("index.openIdxFile: %s", e)
+	}
+
+	idx := &idxfile{
+		opMode:   opMode,
+		file:     file,
+		filename: filename,
+	}
+
+	if e := idx.readAndVerifyHeader(); e != nil {
+		idx.file.Close()
+		return nil, e
+	}
+
+	idx.file.Close() // XXX TEMP XXX
 	panic("idxfile openIdxFile: not implemented")
 }
 
@@ -90,7 +180,7 @@ func openIdxFile(garthome string, op idxOp) (*idxfile, error) {
 // append idx record and return offset
 func (f *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Time) (uint64, error) {
 	// assert state
-	if f.opflag != IdxUpdate {
+	if f.opMode != IdxUpdate {
 		return notIndexed, ErrIdxOpMode
 	}
 
@@ -144,3 +234,5 @@ func (f *idxfile) onUpdate() {
 		f.revision++
 	}
 }
+
+func (idx *idxfile) DebugStr() string { return fmt.Sprintf("debug: %v", idx) }
