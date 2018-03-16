@@ -15,8 +15,6 @@ import (
 	"github.com/alphazero/gart/unixtime"
 )
 
-var _ = fs.OpenNewFile
-
 /// consts and vars ///////////////////////////////////////////////////////////
 
 // header related consts
@@ -27,24 +25,20 @@ const (
 
 /// object.idx file header /////////////////////////////////////////////////////
 
-// REVU this should be in gart/system.go
-
-// file header
-type idxfile_header struct {
-	ftype    uint64
-	crc64    uint64        // crc of header bytes from created.
-	created  unixtime.Time // unsigned 32bits
-	updated  unixtime.Time // unsigned 32bits
-	revision uint64        // 0 is new
-	rcnt     uint64        // number of records includes those marked for deletion, etc.
-	ocnt     uint64        // number of object records. ocnt <= rnct
-	reserved [4048]byte    // reserved XXX fix size
-}
-
 func init() {
 	var hdr idxfile_header
 	if unsafe.Sizeof(hdr) != idxfileHeaderBytes {
 		panic(fmt.Sprintf("assert fail - idxfile_header size:%d\n", unsafe.Sizeof(hdr)))
+	}
+	ops := []idxOpMode{
+		IdxCreate,
+		IdxRead,
+		IdxVerify,
+		IdxUpdate,
+		IdxCompact,
+	}
+	for _, v := range ops {
+		fmt.Printf("op-mode: %08b\n", v)
 	}
 }
 
@@ -98,15 +92,41 @@ func (idx *idxfile) readAndVerifyHeader() error {
 
 /// object.idx file ////////////////////////////////////////////////////////////
 
+// file header
+type idxfile_header struct {
+	ftype    uint64
+	crc64    uint64        // crc of header bytes from created.
+	created  unixtime.Time // unsigned 32bits
+	updated  unixtime.Time // unsigned 32bits
+	revision uint64        // 0 is new
+	rcnt     uint64        // number of records includes those marked for deletion, etc.
+	ocnt     uint64        // number of object records. ocnt <= rnct
+	reserved [4048]byte    // reserved XXX fix size
+}
+
 // object.idx memory model
 type idxfile struct {
 	idxfile_header
-	opMode   idxOpMode
-	file     *os.File
-	filename string
-	offset   uint64
-	modified bool
+	opMode    idxOpMode     // operation mode
+	file      *os.File      // file handle
+	filename  string        // source file
+	roff      uint64        // offset at read time REVU necessary?
+	modified  bool          // necessary since mod can be in-place
+	closed    bool          // if true, file must be nil REVU necessary ?
+	appendlog []byte        // idx_records to be appended
+	delset    []uint64      // offset of existing records marked deleted
+	modset    []*idx_record //
+	poff      uint64        // poff = roff + len(appendlog) REVU necessary?
 }
+
+// idx record flag masks
+const (
+	idxrec_invalid = 0
+	idxrec_valid   = 0x80                // 10000000
+	idxrec_deleted = idxrec_valid | 0x40 // 11000000
+	idxrec_updated = idxrec_valid | 0x20 // 10100000
+	idxrec_moved   = idxrec_valid | 0x10 // 10010000
+)
 
 // object.idx file record fixed-width prefix
 type idxrec_header struct {
@@ -127,17 +147,20 @@ type idx_record struct {
 /// ops ////////////////////////////////////////////////////////////////////////
 
 var (
-	ErrIdxOpMode = fmt.Errorf("object.idx: illegal state - idxOpModeMode")
+	ErrIdxOpMode         = fmt.Errorf("object.idx: illegal state - idxOpMode")
+	ErrIdxClosed         = fmt.Errorf("object.idx: illegal state - closed")
+	ErrIdxPendingChanges = fmt.Errorf("object.idx: illegal state - close with pending changes")
 )
 
-type idxOpMode int
+type idxOpMode byte
 
 // object.idx op/access modes
 const (
-	IdxCreate idxOpMode = 1 << iota
-	IdxRead
-	IdxUpdate
-	IdxCompact
+	IdxCreate  idxOpMode = 1 << iota
+	IdxRead              // Read only mode - used for queries
+	IdxVerify            // Read only mode - used for system verification
+	IdxUpdate            // RW mode - used for gart object updates
+	IdxCompact           // RW mode - used for gc'ing and repairs (moved recs etc.)
 )
 
 func IdxFilename(garthome string) string {
@@ -148,11 +171,8 @@ func IdxFilename(garthome string) string {
 	return filepath.Join(garthome, "index", idxFilename)
 }
 
-// init - used by gart-init
-// create the minimal object.idx file:
-// idxfile_header and buflen
 // Creates, initializes, and then closes the object.idx file in the
-// specified gart dir.
+// specified gart repo.
 func CreateIdxFile(garthome string) error {
 
 	var filename = IdxFilename(garthome)
@@ -184,12 +204,11 @@ func OpenIdxFile(garthome string, opMode idxOpMode) (*idxfile, error) {
 
 	switch opMode {
 	case IdxRead:
+	case IdxVerify:
 		flag = os.O_RDONLY
 	case IdxUpdate:
-		flag = os.O_RDWR | os.O_SYNC
 	case IdxCompact:
-		flag = os.O_RDWR | os.O_SYNC
-		panic("idxfile openIdxFile: mode:IdxCompact not implemented")
+		flag = os.O_RDWR | os.O_SYNC // TODO research this O_SYNC flag
 	default:
 		panic(fmt.Errorf("bug - index.openIdxFile: invalid opMode: %d", opMode))
 	}
@@ -199,8 +218,7 @@ func OpenIdxFile(garthome string, opMode idxOpMode) (*idxfile, error) {
 	if e != nil {
 		return nil, fmt.Errorf("index.openIdxFile: %s", e)
 	}
-
-	idx := &idxfile{
+	var idx = &idxfile{
 		opMode:   opMode,
 		file:     file,
 		filename: filename,
@@ -211,10 +229,54 @@ func OpenIdxFile(garthome string, opMode idxOpMode) (*idxfile, error) {
 		return nil, e
 	}
 
-	fmt.Printf("debug - idxfile after read header:\n%v\n", idx)
+	return idx, nil
+}
 
-	idx.file.Close() // XXX TEMP XXX
-	panic("idxfile openIdxFile: not implemented")
+// Writes a new revision of the object.idx file. This function is meaningful
+// only for op modes that modify the object index, and have a changeset
+// that can be applied.
+//
+// Returns (true, nil) if openned in IdxUpdate|IdxCompate mode and modified.
+// Returns (false, nil) if openned in IdxUpdate|IdxCompate mode but not changed.
+// Returns (false, ErrIdxOpMode) if not in a write op mode.
+// Returns (false, ErrIdxClosed) if idxfile was closed. REVU this is typical.
+func (idx *idxfile) Sync() (bool, error) {
+	if idx.opMode == IdxRead {
+		return false, ErrIdxOpMode
+	}
+	if idx.file == nil {
+		return false, ErrIdxClosed
+	}
+
+	panic("idxfile idxfile.Sync: not implemented")
+}
+
+// Closes the object.idx file, regardless of op mode. Further use of the
+// idxfile reference will result in panic.
+//
+// This function will return ErrIdxPendingChanges if called with a non-applied
+// changeset (IdxUpdate | IdxCompact modes). To force discard of changes in
+// those modes first call Discard().
+//
+// Otherwise, any returned error is from the underlying os.File.Close.
+func (idx *idxfile) Close() error {
+	if idx.file == nil {
+		return ErrIdxClosed
+	}
+	if idx.PendingChanges() {
+		return ErrIdxPendingChanges
+	}
+
+	// if we error out here, then we have a either an os fault or
+	// or a bug. Either way, the idxfile object is out of commission.
+	e := idx.file.Close()
+	idx.file = nil
+
+	return e
+}
+
+func (idx *idxfile) PendingChanges() bool {
+	return idx.modified
 }
 
 // add object - gart-add - oflag must be os.O_RDWR
@@ -251,7 +313,7 @@ func (f *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Tim
 		return notIndexed, e
 	}
 
-	f.offset = uint64(roff + int64(n)) // REVU so do we even need this field? (for read?)
+	f.roff = uint64(roff + int64(n)) // REVU so do we even need this field? (for read?)
 	f.onUpdate()
 
 	// we don't sync
@@ -276,4 +338,11 @@ func (f *idxfile) onUpdate() {
 	}
 }
 
+// Returns the idxfile's source filename.
+func (idx *idxfile) Filename() string { return idx.filename }
+
+// Returns the semantic size, i.e. the number of objects
+func (idx *idxfile) Size() int { return int(idx.ocnt) }
+
+// Returns a debug string representation. For logging, use idxfile.String()
 func (idx *idxfile) DebugStr() string { return fmt.Sprintf("debug: %v", idx) }
