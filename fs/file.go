@@ -133,11 +133,6 @@ func SwapfileName(fname string) string {
 	return filepath.Join(filepath.Dir(fname), swapbase)
 }
 
-func OpenReadOnly(fname string) (*os.File, error) {
-	var flags = os.O_RDONLY | os.O_SYNC
-	return os.OpenFile(fname, flags, 0)
-}
-
 // Exclusively fully reads the named file. File is closed on return.
 func ReadFull(fname string) ([]byte, error) {
 
@@ -146,8 +141,9 @@ func ReadFull(fname string) ([]byte, error) {
 		return nil, e
 	}
 
-	var flags = os.O_RDONLY | os.O_SYNC
-	file, e := os.OpenFile(fname, flags, FilePerm)
+	// REVU why not just use os.Open(fname) ?
+	var flags = os.O_RDONLY
+	file, e := os.OpenFile(fname, flags, FilePerm) // REVU check if perm here makes any diff
 	if e != nil {
 		return nil, e
 	}
