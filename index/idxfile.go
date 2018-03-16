@@ -45,9 +45,9 @@ func init() {
 
 // XXX
 
-const idxfileHeaderBytes = 4096
-
 /// object.idx file ////////////////////////////////////////////////////////////
+
+const idxfileHeaderBytes = 4096
 
 // file header
 type idxfile_header struct {
