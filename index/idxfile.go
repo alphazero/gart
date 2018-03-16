@@ -65,11 +65,10 @@ type idxfile_header struct {
 type idxfile struct {
 	idxfile_header
 	opMode    idxOpMode     // operation mode
-	file      *os.File      // file handle
+	file      *os.File      // file handle - nil after close
 	filename  string        // source file
 	roff      uint64        // offset at read time REVU necessary?
 	modified  bool          // necessary since mod can be in-place
-	closed    bool          // if true, file must be nil REVU necessary ?
 	appendlog []byte        // idx_records to be appended
 	delset    []uint64      // offset of existing records marked deleted
 	modset    []*idx_record //
