@@ -75,13 +75,6 @@ type idxfile struct {
 	poff      uint64         // poff: pending (or projected) end offset after sync
 }
 
-//type idxPendingOpCode byte
-//
-//const (
-//	idxPendingMove idxPendingOpCode = 1 << iota
-//	idxPendingAdd
-//)
-
 type idxPendingOp struct {
 	offset uint64
 	record *idx_record
@@ -115,6 +108,10 @@ type idx_record struct {
 // Returns the length of the record in bytes.
 func (rec *idx_record) length() int {
 	return 7 + oidBytesLen + int(rec.tbahlen) + int(rec.sbahlen)
+}
+func (rec *idx_record) String() string {
+	s := fmt.Sprintf("idx-record:(flag:%08b oid:%x tlen:%02d slen:%02d date:%s tags:%08b systemics:%08b", rec.flags, rec.oid, rec.tbahlen, rec.sbahlen, rec.date.Date(), rec.tags, rec.systemics)
+	return s
 }
 
 /// header codec ///////////////////////////////////////////////////////////////
@@ -328,7 +325,7 @@ func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.T
 
 	// create new record
 	var header = idxrec_header{
-		flags:   0,
+		flags:   idxrec_valid,
 		oid:     oid.dat, // REVU we're writing to file so no need to copy
 		tbahlen: uint8(len(tags.Bytes())),
 		sbahlen: uint8(len(systemics.Bytes())),
@@ -341,7 +338,8 @@ func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.T
 		systemics:     systemics,
 	}
 
-	fmt.Printf("debug - record: len:%d - %v\n", record.length(), record) // XXX mr compiler :)
+	fmt.Printf("debug - record: len:%d\n", record.length())
+	fmt.Printf("debug - %s\n", record.String())
 
 	var pending idxPendingOp
 	pending.offset = idx.poff
