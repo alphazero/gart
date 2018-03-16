@@ -69,7 +69,7 @@ type idxfile struct {
 	filename  string         // source file
 	size      uint64         // file size at read / after sync
 	modified  bool           // necessary since mod can be in-place
-	appendlog []idxPendingOp // idx_records to be appended
+	appendLog []idxPendingOp // idx_records to be appended
 	delset    []uint64       // offset of existing records marked deleted
 	modset    []idxPendingOp //
 	poff      uint64         // poff: pending (or projected) end offset after sync
@@ -83,8 +83,8 @@ type idxfile struct {
 //)
 
 type idxPendingOp struct {
-	roff uint64
-	rec  *idx_record
+	offset uint64
+	record *idx_record
 }
 
 // idx record flag masks
@@ -320,9 +320,9 @@ func (idx *idxfile) PendingChanges() bool {
 
 // add object - gart-add - oflag must be os.O_RDWR
 // append idx record and return offset
-func (f *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Time) (uint64, error) {
+func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Time) (uint64, error) {
 	// assert state
-	if f.opMode != IdxUpdate {
+	if idx.opMode != IdxUpdate {
 		return notIndexed, ErrIdxOpMode
 	}
 
@@ -342,6 +342,17 @@ func (f *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Tim
 	}
 
 	fmt.Printf("debug - record: len:%d - %v\n", record.length(), record) // XXX mr compiler :)
+
+	var pending idxPendingOp
+	pending.offset = idx.poff
+	pending.record = &record
+
+	idx.poff += uint64(record.length())
+	idx.appendLog = append(idx.appendLog, pending)
+
+	idx.onUpdate()
+
+	return pending.offset, nil
 	/*
 		// REVU not here -- changes should be applied at Sync only
 		// seek end, write record, get new offset
