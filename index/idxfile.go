@@ -25,6 +25,7 @@ const (
 
 /// object.idx file header /////////////////////////////////////////////////////
 
+// XXX
 func init() {
 	var hdr idxfile_header
 	if unsafe.Sizeof(hdr) != idxfileHeaderBytes {
@@ -42,53 +43,9 @@ func init() {
 	}
 }
 
+// XXX
+
 const idxfileHeaderBytes = 4096
-
-func (h *idxfile_header) writeTo(w io.Writer) error {
-
-	var buf [idxfileHeaderBytes]byte
-
-	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
-	*(*uint32)(unsafe.Pointer(&buf[16])) = h.created.Timestamp()
-	*(*uint32)(unsafe.Pointer(&buf[20])) = h.updated.Timestamp()
-	*(*uint64)(unsafe.Pointer(&buf[24])) = h.revision
-	*(*uint64)(unsafe.Pointer(&buf[32])) = h.rcnt
-	*(*uint64)(unsafe.Pointer(&buf[40])) = h.ocnt
-
-	h.crc64 = digest.Checksum64(buf[16:])
-	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
-
-	_, e := w.Write(buf[:])
-	return e
-}
-
-func (idx *idxfile) readAndVerifyHeader() error {
-
-	var buf = make([]byte, idxfileHeaderBytes)
-
-	_, e := idx.file.Seek(0, os.SEEK_SET)
-	if e != nil {
-		return e
-	}
-	var n int
-	for n < len(buf) {
-		n0, e := idx.file.Read(buf[n:])
-		if e != nil {
-			return fmt.Errorf("idxfile.readAndVerifyHeader: Read - n: %d - %s", n, e)
-		}
-		n += n0
-	}
-
-	var h = *(*idxfile_header)(unsafe.Pointer(&buf[0]))
-
-	crc64 := digest.Checksum64(buf[16:])
-	if h.crc64 != crc64 {
-		return fmt.Errorf("idxfile.readAndVerifyHeader: crc - read:%d computed:%d", h.crc64, crc64)
-	}
-
-	(*idx).idxfile_header = h
-	return nil
-}
 
 /// object.idx file ////////////////////////////////////////////////////////////
 
@@ -142,6 +99,54 @@ type idx_record struct {
 	tags      bitmap.Bitmap
 	systemics bitmap.Bitmap
 	date      unixtime.Time
+}
+
+/// header codec ///////////////////////////////////////////////////////////////
+
+func (h *idxfile_header) writeTo(w io.Writer) error {
+
+	var buf [idxfileHeaderBytes]byte
+
+	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
+	*(*uint32)(unsafe.Pointer(&buf[16])) = h.created.Timestamp()
+	*(*uint32)(unsafe.Pointer(&buf[20])) = h.updated.Timestamp()
+	*(*uint64)(unsafe.Pointer(&buf[24])) = h.revision
+	*(*uint64)(unsafe.Pointer(&buf[32])) = h.rcnt
+	*(*uint64)(unsafe.Pointer(&buf[40])) = h.ocnt
+
+	h.crc64 = digest.Checksum64(buf[16:])
+	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
+
+	_, e := w.Write(buf[:])
+	return e
+}
+
+func (idx *idxfile) readAndVerifyHeader() error {
+
+	var buf = make([]byte, idxfileHeaderBytes)
+
+	_, e := idx.file.Seek(0, os.SEEK_SET)
+	if e != nil {
+		return e
+	}
+	var n int
+	for n < len(buf) {
+		n0, e := idx.file.Read(buf[n:])
+		if e != nil {
+			return fmt.Errorf("idxfile.readAndVerifyHeader: Read - n: %d - %s", n, e)
+		}
+		n += n0
+	}
+
+	var h = *(*idxfile_header)(unsafe.Pointer(&buf[0]))
+
+	crc64 := digest.Checksum64(buf[16:])
+	if h.crc64 != crc64 {
+		return fmt.Errorf("idxfile.readAndVerifyHeader: crc - read:%d computed:%d", h.crc64, crc64)
+	}
+
+	(*idx).idxfile_header = h
+	return nil
 }
 
 /// ops ////////////////////////////////////////////////////////////////////////
