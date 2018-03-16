@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/alphazero/gart/bitmap"
+	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
 	"github.com/alphazero/gart/unixtime"
 )
@@ -31,11 +32,18 @@ const (
 // file header
 type idxfile_header struct {
 	ftype    uint64
-	crc64    uint64        // REVU this is not practical TODO need better solution
+	crc64    uint64        // crc of header bytes from created.
 	created  unixtime.Time // unsigned 32bits
 	updated  unixtime.Time // unsigned 32bits
 	revision uint64
-	reserved [4080]byte // reserved XXX fix size
+	reserved [4064]byte // reserved XXX fix size
+}
+
+func init() {
+	var hdr idxfile_header
+	if unsafe.Sizeof(hdr) != idxfileHeaderBytes {
+		panic(fmt.Sprintf("assert fail - idxfile_header size:%d\n", unsafe.Sizeof(hdr)))
+	}
 }
 
 const idxfileHeaderBytes = 4096
@@ -43,18 +51,45 @@ const idxfileHeaderBytes = 4096
 func (h *idxfile_header) writeTo(w io.Writer) error {
 
 	var buf [idxfileHeaderBytes]byte
+
 	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
-	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
 	*(*uint32)(unsafe.Pointer(&buf[16])) = h.created.Timestamp()
 	*(*uint32)(unsafe.Pointer(&buf[20])) = h.updated.Timestamp()
 	*(*uint64)(unsafe.Pointer(&buf[24])) = h.revision
+
+	h.crc64 = digest.Checksum64(buf[16:])
+	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
 
 	_, e := w.Write(buf[:])
 	return e
 }
 
 func (idx *idxfile) readAndVerifyHeader() error {
-	return fmt.Errorf("idxfile.readAndVerifyHeader: not implemented!")
+
+	var buf = make([]byte, idxfileHeaderBytes)
+
+	_, e := idx.file.Seek(0, os.SEEK_SET)
+	if e != nil {
+		return e
+	}
+	var n int
+	for n < len(buf) {
+		n0, e := idx.file.Read(buf[n:])
+		if e != nil {
+			return fmt.Errorf("idxfile.readAndVerifyHeader: Read - n: %d - %s", n, e)
+		}
+		n += n0
+	}
+
+	var h = *(*idxfile_header)(unsafe.Pointer(&buf[0]))
+
+	crc64 := digest.Checksum64(buf[16:])
+	if h.crc64 != crc64 {
+		return fmt.Errorf("idxfile.readAndVerifyHeader: crc - read:%d computed:%d", h.crc64, crc64)
+	}
+
+	(*idx).idxfile_header = h
+	return nil
 }
 
 /// object.idx file ////////////////////////////////////////////////////////////
@@ -171,6 +206,8 @@ func OpenIdxFile(garthome string, opMode idxOpMode) (*idxfile, error) {
 		idx.file.Close()
 		return nil, e
 	}
+
+	fmt.Printf("debug - idxfile after read header:\n%v\n", idx)
 
 	idx.file.Close() // XXX TEMP XXX
 	panic("idxfile openIdxFile: not implemented")
