@@ -252,6 +252,17 @@ func (idx *idxfile) Sync() (bool, error) {
 		return false, ErrIdxClosed
 	}
 
+	// modset
+
+	// TODO if modset is not nil, then first sort so we
+	//      have ascending offsets, and then do the inplace
+	//      mod of the record.
+
+	// appendlog
+
+	// TODO if appendlog is not nil seek end and
+	//      apply appendlog in sequence. (it is already in order).
+
 	panic("idxfile idxfile.Sync: not implemented")
 }
 
@@ -306,22 +317,27 @@ func (f *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Tim
 		date:      date,
 	}
 
-	// seek end, write record, get new offset
-	roff, e := f.file.Seek(0, os.SEEK_END)
-	if e != nil {
-		return notIndexed, e
-	}
+	fmt.Printf("debug - record: %v\n", record) // XXX mr compiler :)
+	/*
+		// REVU not here -- changes should be applied at Sync only
+		// seek end, write record, get new offset
+		roff, e := f.file.Seek(0, os.SEEK_END)
+		if e != nil {
+			return notIndexed, e
+		}
 
-	n, e := record.writeTo(f.file)
-	if e != nil {
-		return notIndexed, e
-	}
+		n, e := record.writeTo(f.file)
+		if e != nil {
+			return notIndexed, e
+		}
 
-	f.roff = uint64(roff + int64(n)) // REVU so do we even need this field? (for read?)
-	f.onUpdate()
+		f.roff = uint64(roff + int64(n)) // REVU so do we even need this field? (for read?)
+		f.onUpdate()
 
-	// we don't sync
-	return uint64(roff), nil
+		// we don't sync
+		return uint64(roff), nil
+	*/
+	panic("idxfile idxfile.Add: not implemented")
 }
 
 // update object - gart-add, gart-tag, (gart-compact?) - oflag must be O_Update
