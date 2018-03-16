@@ -64,15 +64,27 @@ type idxfile_header struct {
 // object.idx memory model
 type idxfile struct {
 	idxfile_header
-	opMode    idxOpMode     // operation mode
-	file      *os.File      // file handle - nil after close
-	filename  string        // source file
-	roff      uint64        // offset at read time REVU necessary?
-	modified  bool          // necessary since mod can be in-place
-	appendlog []byte        // idx_records to be appended
-	delset    []uint64      // offset of existing records marked deleted
-	modset    []*idx_record //
-	poff      uint64        // poff = roff + len(appendlog) REVU necessary?
+	opMode    idxOpMode      // operation mode
+	file      *os.File       // file handle - nil after close
+	filename  string         // source file
+	size      uint64         // file size at read / after sync
+	modified  bool           // necessary since mod can be in-place
+	appendlog []idxPendingOp // idx_records to be appended
+	delset    []uint64       // offset of existing records marked deleted
+	modset    []idxPendingOp //
+	poff      uint64         // poff: pending (or projected) end offset after sync
+}
+
+//type idxPendingOpCode byte
+//
+//const (
+//	idxPendingMove idxPendingOpCode = 1 << iota
+//	idxPendingAdd
+//)
+
+type idxPendingOp struct {
+	roff uint64
+	rec  *idx_record
 }
 
 // idx record flag masks
@@ -94,10 +106,15 @@ type idxrec_header struct {
 
 // object.idx file record
 type idx_record struct {
-	header    idxrec_header
-	tags      bitmap.Bitmap
-	systemics bitmap.Bitmap
-	date      unixtime.Time
+	idxrec_header               // 3 + oidByteLen
+	date          unixtime.Time // 4b
+	tags          bitmap.Bitmap // var
+	systemics     bitmap.Bitmap // var
+}
+
+// Returns the length of the record in bytes.
+func (rec *idx_record) length() int {
+	return 7 + oidBytesLen + int(rec.tbahlen) + int(rec.sbahlen)
 }
 
 /// header codec ///////////////////////////////////////////////////////////////
@@ -222,10 +239,17 @@ func OpenIdxFile(garthome string, opMode idxOpMode) (*idxfile, error) {
 	if e != nil {
 		return nil, fmt.Errorf("index.openIdxFile: %s", e)
 	}
+	finfo, e := file.Stat()
+	if e != nil {
+		return nil, fmt.Errorf("index.openIdxFile: unexpected: %s", e)
+	}
+	fsize := uint64(finfo.Size())
 	var idx = &idxfile{
 		opMode:   opMode,
 		file:     file,
 		filename: filename,
+		size:     fsize,
+		poff:     fsize,
 	}
 
 	if e := idx.readAndVerifyHeader(); e != nil {
@@ -311,13 +335,13 @@ func (f *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Tim
 	}
 
 	var record = idx_record{
-		header:    header,
-		tags:      tags,
-		systemics: systemics,
-		date:      date,
+		idxrec_header: header,
+		date:          date,
+		tags:          tags,
+		systemics:     systemics,
 	}
 
-	fmt.Printf("debug - record: %v\n", record) // XXX mr compiler :)
+	fmt.Printf("debug - record: len:%d - %v\n", record.length(), record) // XXX mr compiler :)
 	/*
 		// REVU not here -- changes should be applied at Sync only
 		// seek end, write record, get new offset
