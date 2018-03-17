@@ -31,16 +31,35 @@ func init() {
 	if unsafe.Sizeof(hdr) != idxfileHeaderBytes {
 		panic(fmt.Sprintf("assert fail - idxfile_header size:%d\n", unsafe.Sizeof(hdr)))
 	}
-	ops := []idxOpMode{
+	opmodes := []idxOpMode{
 		IdxCreate,
 		IdxRead,
 		IdxVerify,
 		IdxUpdate,
 		IdxCompact,
 	}
-	for _, v := range ops {
+	for _, v := range opmodes {
 		fmt.Printf("op-mode: %08b\n", v)
 	}
+	rflags := []byte{
+		idxrec_valid,
+		idxrec_deleted,
+		idxrec_moved,
+		idxrec_locked,
+	}
+	for _, v := range rflags {
+		fmt.Printf("recflag: %08b\n", v)
+	}
+	opcodes := []idxOpcode{
+		idxAddOp,
+		idxUpdateOp,
+		idxMoveOp,
+		idxDeleteOp,
+	}
+	for _, v := range opcodes {
+		fmt.Printf("op-code: %08b\n", v)
+	}
+
 }
 
 // XXX
@@ -48,6 +67,7 @@ func init() {
 /// object.idx file ////////////////////////////////////////////////////////////
 
 const idxfileHeaderBytes = 4096
+const invalidOffset = notIndexed // TODO remove notIndexed from index.go
 
 // file header
 type idxfile_header struct {
@@ -67,34 +87,19 @@ type idxfile struct {
 	opMode    idxOpMode      // operation mode
 	file      *os.File       // file handle - nil after close
 	filename  string         // source file
-	size      uint64         // file size at read / after sync
+	size      uint64         // file size at read / after sync REVU aka roff
 	modified  bool           // necessary since mod can be in-place
+	modset    []idxPendingOp // ops pending sync
 	appendLog []idxPendingOp // idx_records to be appended
-	delset    []uint64       // offset of existing records marked deleted
-	modset    []idxPendingOp //
 	poff      uint64         // poff: pending (or projected) end offset after sync
 }
 
-type idxPendingOp struct {
-	offset uint64
-	record *idx_record
-}
-
-// idx record flag masks
-const (
-	idxrec_invalid = 0
-	idxrec_valid   = 0x80                // 10000000
-	idxrec_deleted = idxrec_valid | 0x40 // 11000000
-	idxrec_updated = idxrec_valid | 0x20 // 10100000
-	idxrec_moved   = idxrec_valid | 0x10 // 10010000
-)
-
 // object.idx file record fixed-width prefix
 type idxrec_header struct {
-	flags   byte              // deleted, updated, what else?
-	oid     [oidBytesLen]byte // ref. to index.idx.file record
+	flags   byte
 	tbahlen uint8
 	sbahlen uint8
+	oid     [oidBytesLen]byte // ref. to index.idx.file record
 }
 
 // object.idx file record
@@ -104,6 +109,39 @@ type idx_record struct {
 	tags          bitmap.Bitmap // var
 	systemics     bitmap.Bitmap // var
 }
+
+// idx record flag masks
+const (
+	idxrec_invalid = 0                   // 00000000 - for holes in idx file
+	idxrec_valid   = 0x80                // 10000000 - on add
+	idxrec_deleted = idxrec_valid | 0x40 // 11000000 - on del
+	idxrec_moved   = idxrec_valid | 0x20 // 10100000 - on move op
+	idxrec_locked  = idxrec_valid | 0x10 // 10010000 - reserved
+)
+
+/// index pending operations ///////////////////////////////////////////////////
+
+type idxOpcode byte
+
+const (
+	// new record - idxPendingOp.record=nil (appendlog) - off[1]=assigned
+	idxAddOp idxOpcode = 1 << iota
+	// update in-place existing - ipo.record=newdata (rlen1 <= rlen0) - off[0]=off
+	idxUpdateOp
+	// update by moving existing - ipo.record=nil (appendLog) - off[0]=off,off[1]=new
+	idxMoveOp
+	// delete existing - ipo.record = nil - off[0]=existing, [1] = invalidOffset
+	idxDeleteOp
+)
+
+// TODO Sort support for idxPendingOp. Sort ascending by offset[0]
+type idxPendingOp struct {
+	opcode idxOpcode
+	offset [2]uint64   // 0:existing 1:new
+	record *idx_record // can be nil per opcode
+}
+
+/// record ops /////////////////////////////////////////////////////////////////
 
 // Returns the length of the record in bytes.
 func (rec *idx_record) length() int {
@@ -313,7 +351,9 @@ func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.T
 	fmt.Printf("debug - %s\n", record.String())
 
 	var pending idxPendingOp
-	pending.offset = idx.poff
+	pending.opcode = idxAddOp
+	pending.offset[0] = invalidOffset
+	pending.offset[1] = idx.poff
 	pending.record = &record
 
 	idx.poff += uint64(record.length())
@@ -321,7 +361,7 @@ func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.T
 
 	idx.onUpdate()
 
-	return pending.offset, nil
+	return pending.offset[1], nil
 }
 
 // Writes a new revision of the object.idx file. This function is meaningful
