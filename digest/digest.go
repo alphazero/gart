@@ -6,9 +6,23 @@ import (
 	"blake2b"
 	"hash/crc32"
 	"hash/crc64"
+	"unsafe"
 
 	"github.com/alphazero/gart/fs"
 )
+
+// Return first 8 bytes of a Black2B Sum as a uint64 value
+// NOTE at around ~460ns/op this is relatively slow, but intended use is
+//      creating certain to be unique 64bit keys for tag-names, which are
+//      created once per tag in the life-time of gart.
+//
+// NOTE the endian-ness of using unsafe flips the bytes so
+//      h:   ffeeddccbbaa9988........ the full b2b hash
+//      n: 0x8899aabbccddeeff
+func SumUint64(b []byte) uint64 {
+	h := blake2b.Sum256(b)
+	return *(*uint64)(unsafe.Pointer(&h[0]))
+}
 
 // Sum: Black2B size 256 digest
 func Sum(b []byte) [32]byte {

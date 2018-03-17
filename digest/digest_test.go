@@ -35,3 +35,9 @@ func BenchmarkBlake2bSmallFile(b *testing.B) {
 		}
 	}
 }
+func BenchmarkBlake2bSumUint64(b *testing.B) {
+	var tagname = []byte("this is a relatively long tag name")
+	for i := 0; i < b.N; i++ {
+		digest.SumUint64(tagname)
+	}
+}
