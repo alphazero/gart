@@ -172,7 +172,7 @@ var (
 
 type idxOpMode byte
 
-// object.idx op/access modes
+// object.idx op/access modes - bitmasks
 const (
 	IdxCreate  idxOpMode = 1 << iota
 	IdxRead              // Read only mode - used for queries
@@ -257,36 +257,6 @@ func OpenIdxFile(garthome string, opMode idxOpMode) (*idxfile, error) {
 	return idx, nil
 }
 
-// Writes a new revision of the object.idx file. This function is meaningful
-// only for op modes that modify the object index, and have a changeset
-// that can be applied.
-//
-// Returns (true, nil) if openned in IdxUpdate|IdxCompate mode and modified.
-// Returns (false, nil) if openned in IdxUpdate|IdxCompate mode but not changed.
-// Returns (false, ErrIdxOpMode) if not in a write op mode.
-// Returns (false, ErrIdxClosed) if idxfile was closed. REVU this is typical.
-func (idx *idxfile) Sync() (bool, error) {
-	if idx.opMode == IdxRead {
-		return false, ErrIdxOpMode
-	}
-	if idx.file == nil {
-		return false, ErrIdxClosed
-	}
-
-	// modset
-
-	// TODO if modset is not nil, then first sort so we
-	//      have ascending offsets, and then do the inplace
-	//      mod of the record.
-
-	// appendlog
-
-	// TODO if appendlog is not nil seek end and
-	//      apply appendlog in sequence. (it is already in order).
-
-	panic("idxfile idxfile.Sync: not implemented")
-}
-
 // Closes the object.idx file, regardless of op mode. Further use of the
 // idxfile reference will result in panic.
 //
@@ -311,16 +281,17 @@ func (idx *idxfile) Close() error {
 	return e
 }
 
-func (idx *idxfile) PendingChanges() bool {
-	return idx.modified
-}
-
+// REVU not a library! :) idxfile is a flat-file and there is no efficient way
+//		to check if the given oid is already present. That fact must be ascertained
+//		in the calling index.Add(..) etc.
+// TODO idxfile.Update(.. same ..) bool, error
+//
 // add object - gart-add - oflag must be os.O_RDWR
 // append idx record and return offset
 func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.Time) (uint64, error) {
-	// assert state
-	if idx.opMode != IdxUpdate {
-		return notIndexed, ErrIdxOpMode
+	// assert state: NOTE IdxCompact also writes. REVU this later.
+	if e := idx.assertState(IdxUpdate | IdxCompact); e != nil {
+		return notIndexed, e
 	}
 
 	// create new record
@@ -351,6 +322,33 @@ func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.T
 	idx.onUpdate()
 
 	return pending.offset, nil
+}
+
+// Writes a new revision of the object.idx file. This function is meaningful
+// only for op modes that modify the object index, and have a changeset
+// that can be applied.
+//
+// Returns (true, nil) if openned in IdxUpdate|IdxCompate mode and modified.
+// Returns (false, nil) if openned in IdxUpdate|IdxCompate mode but not changed.
+// Returns (false, ErrIdxOpMode) if not in a write op mode.
+// Returns (false, ErrIdxClosed) if idxfile was closed. REVU this is typical.
+func (idx *idxfile) Sync() (bool, error) {
+	// assert state: NOTE see same in idxfile.Add()
+	if e := idx.assertState(IdxUpdate | IdxCompact); e != nil {
+		return false, e
+	}
+
+	// modset
+
+	// TODO if modset is not nil, then first sort so we
+	//      have ascending offsets, and then do the inplace
+	//      mod of the record.
+
+	// appendlog
+
+	// TODO if appendlog is not nil seek end and
+	//      apply appendlog in sequence. (it is already in order).
+
 	/*
 		// REVU not here -- changes should be applied at Sync only
 		// seek end, write record, get new offset
@@ -370,7 +368,12 @@ func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.T
 		// we don't sync
 		return uint64(roff), nil
 	*/
-	panic("idxfile idxfile.Add: not implemented")
+	panic("idxfile idxfile.Sync: not implemented")
+}
+
+// REVU func name not correct.
+func (idx *idxfile) PendingChanges() bool {
+	return idx.modified
 }
 
 // update object - gart-add, gart-tag, (gart-compact?) - oflag must be O_Update
@@ -383,6 +386,18 @@ func (f *idx_record) writeTo(w io.Writer) (int, error) {
 	panic("idx_record.writeTo: not implemented")
 }
 
+// opMask is logical OR of any acceptable idxOpMode for the calling function.
+// Returns ErrIdxClosed if idxfile is close
+// Returns ErrIdxOpMode if opMode & opMask == 0
+func (idx *idxfile) assertState(opMask idxOpMode) error {
+	if idx.file == nil {
+		return ErrIdxClosed
+	}
+	if idx.opMode|opMask == 0 {
+		return ErrIdxOpMode
+	}
+	return nil
+}
 func (f *idxfile) onUpdate() {
 	f.updated = unixtime.Now()
 	if !f.modified {
