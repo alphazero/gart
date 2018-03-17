@@ -338,13 +338,32 @@ func (idx *idxfile) Sync() (bool, error) {
 		return false, e
 	}
 
-	// modset
+	// if nothing pending, then nop
+	if !idx.PendingChanges() {
+		return false, nil
+	}
 
-	// TODO if modset is not nil, then first sort so we
-	//      have ascending offsets, and then do the inplace
-	//      mod of the record.
+	/// updates of existing records //////////////////////
+	// REVU in both compact and update modes it is possible that records
+	//      will be marked moved (delset) or changed in place (modset).
+	//      Both need to be merged and then sorted so we start at top
+	//      move forward completing all changes.
+	// TODO is rethink of the delset/modset fields and idxPendingOp struct
+	// REVU appendLog is distinct, because (A) each item follows the previous,
+	//      and, (B) it may change an simply be a []byte buffer!
 
-	// appendlog
+	// delset records: flag as deleted
+	// TODO delset to be sorted
+	println("TODO - apply pending-ops to delset")
+
+	// modset records: flag per pending op. (REVU move, update, ?else)
+	// TODO delset to be sorted
+	println("TODO - apply pending-ops to modset")
+
+	// idx.appendLog has all the new records, including new version
+	// of 'moved' records in above mod set. This array should already
+	// be in order and to ba appended to file.
+	println("TODO - apply pending-ops to modset")
 
 	// TODO if appendlog is not nil seek end and
 	//      apply appendlog in sequence. (it is already in order).
