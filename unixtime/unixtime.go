@@ -2,6 +2,7 @@
 
 // unixtime defines a wrapper for unsigned 32bit timestamps with second
 // precision and various calendar helpers.
+// REVU change the package name -- too long and not general for top level
 package unixtime
 
 import (
@@ -12,6 +13,8 @@ import (
 
 // Time just holds the unix seconds.
 type Time uint32
+
+const TimeSize = 4
 
 // basically a semantic convenience method
 func (t Time) Timestamp() uint32 { return uint32(t) }

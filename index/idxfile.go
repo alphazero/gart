@@ -60,6 +60,13 @@ func init() {
 		fmt.Printf("op-code: %08b\n", v)
 	}
 
+	// check some sizes
+	var irhs idxrec_header
+	idxrec_header_size := unsafe.Sizeof(irhs)
+	var ir idx_record
+	idx_record_size := unsafe.Sizeof(ir)
+	fmt.Printf("idxrec_header_size: %d\n", idxrec_header_size)
+	fmt.Printf("idx_record_size:%d\n", idx_record_size)
 }
 
 // XXX
@@ -94,20 +101,24 @@ type idxfile struct {
 	poff      uint64         // poff: pending (or projected) end offset after sync
 }
 
-// object.idx file record fixed-width prefix
+// object.idx file record header
 type idxrec_header struct {
-	flags   byte
-	tbahlen uint8
-	sbahlen uint8
-	oid     [oidBytesLen]byte // ref. to index.idx.file record
+	flags    byte
+	tbahlen  uint8
+	sbahlen  uint8
+	reserved byte
 }
+
+const idxrec_header_size = 4 // TODO assert in init
+var idxrec_prefix_size = idxrec_header_size + unixtime.TimeSize + oidBytesLen
 
 // object.idx file record
 type idx_record struct {
-	idxrec_header               // 3 + oidByteLen
-	date          unixtime.Time // 4b
-	tags          bitmap.Bitmap // var
-	systemics     bitmap.Bitmap // var
+	idxrec_header                   // 3 + oidByteLen
+	oid           [oidBytesLen]byte // ref. to index.idx.file record
+	date          unixtime.Time     // 4b
+	tags          bitmap.Bitmap     // var
+	systemics     bitmap.Bitmap     // var
 }
 
 // idx record flag masks
@@ -145,10 +156,18 @@ type idxPendingOp struct {
 
 // Returns the length of the record in bytes.
 func (rec *idx_record) length() int {
-	return 7 + oidBytesLen + int(rec.tbahlen) + int(rec.sbahlen)
+	return idxrec_prefix_size + int(rec.tbahlen) + int(rec.sbahlen)
 }
 func (rec *idx_record) String() string {
-	s := fmt.Sprintf("idx-record:(flag:%08b oid:%x tlen:%02d slen:%02d date:%s tags:%08b systemics:%08b", rec.flags, rec.oid, rec.tbahlen, rec.sbahlen, rec.date.Date(), rec.tags, rec.systemics)
+	s := fmt.Sprintf("idx-record:(")
+	s += fmt.Sprintf("flag:%08b ", rec.flags)
+	s += fmt.Sprintf("oid:%x ", rec.oid)
+	s += fmt.Sprintf("tlen:%02d ", rec.tbahlen)
+	s += fmt.Sprintf("slen:%02d ", rec.sbahlen)
+	s += fmt.Sprintf("date:%s ", rec.date.Date())
+	s += fmt.Sprintf("tags:%08b ", rec.tags)
+	s += fmt.Sprintf("systemics:%08b", rec.systemics)
+	s += fmt.Sprintf(")")
 	return s
 }
 
@@ -335,13 +354,13 @@ func (idx *idxfile) Add(oid *OID, tags, systemics bitmap.Bitmap, date unixtime.T
 	// create new record
 	var header = idxrec_header{
 		flags:   idxrec_valid,
-		oid:     oid.dat, // REVU we're writing to file so no need to copy
 		tbahlen: uint8(len(tags.Bytes())),
 		sbahlen: uint8(len(systemics.Bytes())),
 	}
 
 	var record = idx_record{
 		idxrec_header: header,
+		oid:           oid.dat, // REVU we're writing to file so no need to copy
 		date:          date,
 		tags:          tags,
 		systemics:     systemics,
