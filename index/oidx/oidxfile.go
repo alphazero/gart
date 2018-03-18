@@ -258,10 +258,17 @@ func (idx *idxfile) Register(oid []byte) (uint64, error) {
 }
 
 func (idx *idxfile) Lookup(key ...uint64) ([][]byte, error) {
+	// REVU will never query in Write mode?
+	if idx.opMode != Read {
+		return nil, ErrInvalidOp
+	}
 	panic("oidx.Lookup: not implemented")
 }
 
 func (idx *idxfile) Sync() (bool, error) {
+	if idx.opMode != Write {
+		return false, ErrInvalidOp
+	}
 	panic("oidx.Sync: not implemented")
 }
 
