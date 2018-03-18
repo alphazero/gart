@@ -4,6 +4,7 @@ package oidx
 
 import (
 	"fmt"
+
 	"github.com/alphazero/gart/index"
 )
 

@@ -61,7 +61,7 @@ type header struct {
 	reserved [4048]byte
 }
 
-const recordBytes = digest.HashBytes // assert this on init
+const recordSize = digest.HashBytes // assert this on init
 type idxfile struct {
 	header
 	file     *os.File
@@ -86,7 +86,7 @@ func CreateIndex(home string) error {
 
 	file, e := fs.OpenNewFile(filename, os.O_WRONLY|os.O_APPEND)
 	if e != nil {
-		return fmt.Errorf("index.createIdxFile: %s", e)
+		return fmt.Errorf("oidx.CreateIndex: %s", e)
 	}
 	defer file.Close()
 
@@ -100,14 +100,7 @@ func CreateIndex(home string) error {
 	}
 
 	var buf [headerSize]byte
-	*(*uint64)(unsafe.Pointer(&buf[0])) = hdr.ftype
-	*(*int64)(unsafe.Pointer(&buf[16])) = hdr.created
-	*(*int64)(unsafe.Pointer(&buf[24])) = hdr.updated
-	*(*uint64)(unsafe.Pointer(&buf[32])) = hdr.bcnt
-	*(*uint64)(unsafe.Pointer(&buf[40])) = hdr.rcnt
-
-	hdr.crc64 = digest.Checksum64(buf[16:])
-	*(*uint64)(unsafe.Pointer(&buf[8])) = hdr.crc64
+	hdr.encode(buf[:])
 
 	_, e = file.Write(buf[:])
 	if e != nil {
@@ -117,12 +110,82 @@ func CreateIndex(home string) error {
 	return nil
 }
 
+func (h *header) encode(buf []byte) {
+	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
+	*(*int64)(unsafe.Pointer(&buf[16])) = h.created
+	*(*int64)(unsafe.Pointer(&buf[24])) = h.updated
+	*(*uint64)(unsafe.Pointer(&buf[32])) = h.bcnt
+	*(*uint64)(unsafe.Pointer(&buf[40])) = h.rcnt
+
+	h.crc64 = digest.Checksum64(buf[16:])
+	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
+
+	return
+}
+
+func (idx *idxfile) readAndVerifyHeader() error {
+
+	_, e := idx.file.Seek(0, os.SEEK_SET)
+	if e != nil {
+		return e
+	}
+
+	var buf = make([]byte, headerSize)
+	var n int
+	for n < len(buf) {
+		n0, e := idx.file.Read(buf[n:])
+		if e != nil {
+			return fmt.Errorf("idxfile.readAndVerifyHeader: Read - n: %d - %s", n, e)
+		}
+		n += n0
+	}
+
+	(*idx).header = *(*header)(unsafe.Pointer(&buf[0]))
+
+	crc64 := digest.Checksum64(buf[16:])
+	if idx.crc64 != crc64 {
+		return fmt.Errorf("idxfile.readAndVerifyHeader: crc:%d computed:%d", idx.crc64, crc64)
+	}
+	return nil
+}
+
 // Opens the object index file. REVU mode?
 func OpenIndex(home string) (*idxfile, error) {
-	panic("oidx.OpenIndex: not implemented")
+	var filename = Filename(home)
+
+	// open file and get stat
+	file, e := fs.OpenNewFile(filename, os.O_RDWR)
+	if e != nil {
+		return nil, fmt.Errorf("oidx.OpenIndex: %s", e)
+	}
+	finfo, e := file.Stat()
+	if e != nil {
+		return nil, fmt.Errorf("oidx.OpenIndex: unexpected: %s", e)
+	}
+
+	// initialize idxfile
+	idx := &idxfile{
+		file:     file,
+		filename: filename,
+		size:     finfo.Size(),
+		modified: false,
+		pending:  nil,
+	}
+
+	// read header and verify
+	if e := idx.readAndVerifyHeader(); e != nil {
+		idx.file.Close()
+		return nil, e
+	}
+
+	return idx, nil
 }
 
 func (idx *idxfile) Register(oid []byte) (uint64, error) {
+	if oid == nil || len(oid) != recordSize {
+		return 0, ErrInvalidOid
+	}
+
 	panic("oidx.Register: not implemented")
 }
 
