@@ -11,6 +11,7 @@ import (
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
+	"github.com/alphazero/gart/lang/sort"
 )
 
 /// consts and vars ///////////////////////////////////////////////////////////
@@ -97,7 +98,21 @@ const (
 	Compact
 )
 
-// panics
+// panics on unimplemented op mode
+func (m OpMode) fopenFlag() int {
+	switch m {
+	case Read:
+		return os.O_RDONLY
+	case Write:
+		return os.O_RDWR
+	case Verify:
+	case Compact:
+	default:
+	}
+	panic(fmt.Errorf("bug - oidx.OpMode: not implemented - mode  %d", m))
+}
+
+// panics on invalid opMode
 func (m OpMode) verify() error {
 	switch m {
 	case Read:
@@ -109,6 +124,8 @@ func (m OpMode) verify() error {
 	}
 	return nil
 }
+
+// Returns string rep. of opMode
 func (m OpMode) String() string {
 	switch m {
 	case Read:
@@ -208,13 +225,16 @@ func (idx *idxfile) readAndVerifyHeader() error {
 // Opens the object index file. REVU mode?
 func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 
+	/// open ////////////////////////////////////////////////////////
+
 	if e := opMode.verify(); e != nil {
 		return nil, e
 	}
 
 	// open file and get stat
 	var filename = Filename(home)
-	file, e := os.OpenFile(filename, os.O_RDWR, fs.FilePerm)
+	var flag = opMode.fopenFlag()
+	file, e := os.OpenFile(filename, flag, fs.FilePerm)
 	if e != nil {
 		return nil, fmt.Errorf("oidx.OpenIndex: %s", e)
 	}
@@ -222,8 +242,10 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 	if e != nil {
 		return nil, fmt.Errorf("oidx.OpenIndex: unexpected: %s", e)
 	}
+	fmt.Printf("debug - idxfile.OpenIndex - open flag: %d - filename: %q\n", flag, filename)
 
-	// initialize idxfile
+	/// initialize idxfile //////////////////////////////////////////
+
 	idx := &idxfile{
 		file:     file,
 		filename: filename,
@@ -233,7 +255,6 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 		pending:  nil,
 	}
 
-	// read header and verify
 	if e := idx.readAndVerifyHeader(); e != nil {
 		idx.file.Close()
 		return nil, e
@@ -262,11 +283,14 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 }
 
 func (idx *idxfile) initModeRead() error {
-	panic("not implemented")
+	// NOTE mmap would be appropriate here.
+	//      Read mode is to support idxfile.Lookup(key...uint64)
+	//		which is a scan function.
+	panic("idxfile.initModeRead: not implemented")
 }
 
 func (idx *idxfile) initModeWrite() error {
-	panic("not implemented")
+	panic("idxfile.initModeWrite: not implemented")
 }
 
 // Register adds an entry for the object content hash 'oid'.
@@ -288,6 +312,9 @@ func (idx *idxfile) Lookup(key ...uint64) ([][]byte, error) {
 	if idx.opMode != Read {
 		return nil, ErrInvalidOp
 	}
+	// sort them
+	sort.Uint64(key)
+
 	panic("oidx.Lookup: not implemented")
 }
 
