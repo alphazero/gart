@@ -80,6 +80,13 @@ func Filename(home string) string {
 	return filepath.Join(home, "index", "objects.idx")
 }
 
+/// errors ////////////////////////////////////////////////////////////////////
+
+var (
+	ErrObjectNotFound = fmt.Errorf("object.idx: OID for key not found")
+	ErrInvalidOid     = fmt.Errorf("object.idx: Invalid OID")
+)
+
 // Creates file, writes initial header and closes file.
 func CreateIndex(home string) error {
 	var filename = Filename(home)
@@ -107,6 +114,7 @@ func CreateIndex(home string) error {
 		return fmt.Errorf("oidx.CreateIndex: %s", e)
 	}
 
+	fmt.Printf("debug - oidx.CreateIndex:\n%v\n", hdr)
 	return nil
 }
 
