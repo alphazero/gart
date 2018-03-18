@@ -98,15 +98,16 @@ const (
 )
 
 // panics
-func (m OpMode) verify() {
+func (m OpMode) verify() error {
 	switch m {
 	case Read:
 	case Write:
 	case Verify:
 	case Compact:
 	default:
-		panic(fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m))
+		return fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m)
 	}
+	return nil
 }
 func (m OpMode) String() string {
 	switch m {
@@ -125,11 +126,12 @@ func (m OpMode) String() string {
 /// errors ////////////////////////////////////////////////////////////////////
 
 var (
-	ErrInvalidOp      = fmt.Errorf("object.idx: Invalid op for index opMode")
-	ErrObjectNotFound = fmt.Errorf("object.idx: OID for key not found")
-	ErrInvalidOid     = fmt.Errorf("object.idx: Invalid OID")
-	ErrIndexIsClosed  = fmt.Errorf("object.idx: Invalid state - index already closed")
-	ErrPendingChanges = fmt.Errorf("object.idx: Invalid state - pending changes on close")
+	ErrInvalidOp        = fmt.Errorf("object.idx: Invalid op for index opMode")
+	ErrOpNotImplemented = fmt.Errorf("object.idx: Operation not implemented")
+	ErrObjectNotFound   = fmt.Errorf("object.idx: OID for key not found")
+	ErrInvalidOid       = fmt.Errorf("object.idx: Invalid OID")
+	ErrIndexIsClosed    = fmt.Errorf("object.idx: Invalid state - index already closed")
+	ErrPendingChanges   = fmt.Errorf("object.idx: Invalid state - pending changes on close")
 )
 
 // Creates file, writes initial header and closes file.
@@ -205,11 +207,13 @@ func (idx *idxfile) readAndVerifyHeader() error {
 
 // Opens the object index file. REVU mode?
 func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
-	var filename = Filename(home)
 
-	opMode.verify()
+	if e := opMode.verify(); e != nil {
+		return nil, e
+	}
 
 	// open file and get stat
+	var filename = Filename(home)
 	file, e := os.OpenFile(filename, os.O_RDWR, fs.FilePerm)
 	if e != nil {
 		return nil, fmt.Errorf("oidx.OpenIndex: %s", e)
@@ -235,6 +239,12 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 		return nil, e
 	}
 
+	switch opMode {
+	case Read:
+	case Write:
+	default:
+		return nil, fmt.Errorf("")
+	}
 	// REVU TODO determine if we last block is partial or not
 	if idx.rcnt%recordsPerBlock != 0 {
 		fmt.Printf("debug - has partial block\n")
