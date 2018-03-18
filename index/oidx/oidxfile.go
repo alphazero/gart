@@ -125,7 +125,7 @@ func (m OpMode) String() string {
 /// errors ////////////////////////////////////////////////////////////////////
 
 var (
-	ErrOpMode         = fmt.Errorf("object.idx: Invalid state - opMode")
+	ErrInvalidOp      = fmt.Errorf("object.idx: Invalid op for index opMode")
 	ErrObjectNotFound = fmt.Errorf("object.idx: OID for key not found")
 	ErrInvalidOid     = fmt.Errorf("object.idx: Invalid OID")
 	ErrIndexIsClosed  = fmt.Errorf("object.idx: Invalid state - index already closed")
@@ -249,6 +249,9 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 func (idx *idxfile) Register(oid []byte) (uint64, error) {
 	if oid == nil || len(oid) != recordSize {
 		return 0, ErrInvalidOid
+	}
+	if idx.opMode != Write {
+		return 0, ErrInvalidOp
 	}
 
 	panic("oidx.Register: not implemented")
