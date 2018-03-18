@@ -239,18 +239,34 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 		return nil, e
 	}
 
+	var oe error
 	switch opMode {
 	case Read:
+		oe = idx.initModeRead()
 	case Write:
+		oe = idx.initModeWrite()
 	default:
 		return nil, fmt.Errorf("")
 	}
+	if oe != nil {
+		idx.file.Close()
+		return nil, fmt.Errorf("oidx.OpenIndex: open for opMode:%s - %s", opMode, e)
+	}
+
 	// REVU TODO determine if we last block is partial or not
 	if idx.rcnt%recordsPerBlock != 0 {
 		fmt.Printf("debug - has partial block\n")
 	}
 
 	return idx, nil
+}
+
+func (idx *idxfile) initModeRead() error {
+	panic("not implemented")
+}
+
+func (idx *idxfile) initModeWrite() error {
+	panic("not implemented")
 }
 
 // Register adds an entry for the object content hash 'oid'.
