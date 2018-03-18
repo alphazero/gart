@@ -11,6 +11,14 @@ import (
 	"github.com/alphazero/gart/fs"
 )
 
+/// consts and vars ///////////////////////////////////////////////////////////
+
+const (
+	HashBytes = 32
+)
+
+/// consts and vars ///////////////////////////////////////////////////////////
+
 // Return first 8 bytes of a Black2B Sum as a uint64 value
 // NOTE at around ~460ns/op this is relatively slow, but intended use is
 //      creating certain to be unique 64bit keys for tag-names, which are
@@ -25,7 +33,7 @@ func SumUint64(b []byte) uint64 {
 }
 
 // Sum: Black2B size 256 digest
-func Sum(b []byte) [32]byte {
+func Sum(b []byte) [HashBytes]byte {
 	return blake2b.Sum256(b)
 }
 
