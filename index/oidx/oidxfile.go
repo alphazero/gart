@@ -61,6 +61,11 @@ type header struct {
 	reserved [4048]byte
 }
 
+type pendingBlock struct {
+	blk *block
+	off int64
+}
+
 const recordSize = digest.HashBytes // assert this on init
 type idxfile struct {
 	header
@@ -68,8 +73,8 @@ type idxfile struct {
 	filename string
 	size     int64
 	modified bool
-	pending  *block
 	nextkey  uint64
+	pending  *pendingBlock
 }
 
 // panics on zerolen input REVU index pkg should give it the full name
@@ -188,9 +193,17 @@ func OpenIndex(home string) (*idxfile, error) {
 		return nil, e
 	}
 
+	// REVU TODO determine if we last block is partial or not
+	if idx.rcnt%recordsPerBlock != 0 {
+		fmt.Printf("debug - has partial block\n")
+	}
+
 	return idx, nil
 }
 
+// Register adds an entry for the object content hash 'oid'.
+// REVU Note that this function (nor this index type) checks for
+// duplicates.
 func (idx *idxfile) Register(oid []byte) (uint64, error) {
 	if oid == nil || len(oid) != recordSize {
 		return 0, ErrInvalidOid
