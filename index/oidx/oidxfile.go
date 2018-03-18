@@ -85,6 +85,8 @@ func Filename(home string) string {
 var (
 	ErrObjectNotFound = fmt.Errorf("object.idx: OID for key not found")
 	ErrInvalidOid     = fmt.Errorf("object.idx: Invalid OID")
+	ErrIndexIsClosed  = fmt.Errorf("object.idx: Invalid state - index already closed")
+	ErrPendingChanges = fmt.Errorf("object.idx: Invalid state - pending changes on close")
 )
 
 // Creates file, writes initial header and closes file.
@@ -162,7 +164,7 @@ func OpenIndex(home string) (*idxfile, error) {
 	var filename = Filename(home)
 
 	// open file and get stat
-	file, e := fs.OpenNewFile(filename, os.O_RDWR)
+	file, e := os.OpenFile(filename, os.O_RDWR, fs.FilePerm)
 	if e != nil {
 		return nil, fmt.Errorf("oidx.OpenIndex: %s", e)
 	}
@@ -206,5 +208,17 @@ func (idx *idxfile) Sync() (bool, error) {
 }
 
 func (idx *idxfile) Close() error {
-	panic("oidx.Close: not implemented")
+	if idx.file == nil {
+		return ErrIndexIsClosed
+	}
+	if idx.modified {
+		return ErrPendingChanges
+	}
+
+	// if we error out here, then we have a either an os fault or
+	// or a bug. Either way, the idxfile object is out of commission.
+	e := idx.file.Close()
+	idx.file = nil
+
+	return e
 }
