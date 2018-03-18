@@ -34,11 +34,13 @@ type block_header struct {
 const (
 	blockSize       = 32768
 	blockHeaderSize = 32
-	blockDataSize   = 32736
+	blockDataSize   = 32736 // 1023 32byte object hashes
 	blockRecordSize = 32
 	recordsPerBlock = 1023
 )
 
+// file consists of header and 0 or more blocks. blocks are multiples of fs
+// pagesize.
 type block struct {
 	crc64    uint64
 	created  int64  // std unix nano
@@ -48,7 +50,7 @@ type block struct {
 	dat      [blockDataSize]byte
 }
 
-const headerSize = 4096 // fs page
+const headerSize = 4096 // file header is fs page sized
 type header struct {
 	ftype    uint64
 	crc64    uint64 // header crc
@@ -59,6 +61,7 @@ type header struct {
 	reserved [4048]byte
 }
 
+const recordBytes = digest.HashBytes // assert this on init
 type idxfile struct {
 	header
 	file     *os.File
@@ -69,7 +72,7 @@ type idxfile struct {
 	nextkey  uint64
 }
 
-// panics on zerolen input
+// panics on zerolen input REVU index pkg should give it the full name
 func Filename(home string) string {
 	if home == "" {
 		panic("bug - oidx.idxfilename: garthome is zerolen")
@@ -112,4 +115,25 @@ func CreateIndex(home string) error {
 	}
 
 	return nil
+}
+
+// Opens the object index file. REVU mode?
+func OpenIndex(home string) (*idxfile, error) {
+	panic("oidx.OpenIndex: not implemented")
+}
+
+func (idx *idxfile) Register(oid []byte) (uint64, error) {
+	panic("oidx.Register: not implemented")
+}
+
+func (idx *idxfile) Lookup(key ...uint64) ([][]byte, error) {
+	panic("oidx.Lookup: not implemented")
+}
+
+func (idx *idxfile) Sync() (bool, error) {
+	panic("oidx.Sync: not implemented")
+}
+
+func (idx *idxfile) Close() error {
+	panic("oidx.Close: not implemented")
 }
