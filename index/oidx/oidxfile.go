@@ -72,6 +72,7 @@ type idxfile struct {
 	file     *os.File
 	filename string
 	size     int64
+	opMode   OpMode
 	modified bool
 	nextkey  uint64
 	pending  *pendingBlock
@@ -85,9 +86,46 @@ func Filename(home string) string {
 	return filepath.Join(home, "index", "objects.idx")
 }
 
+/// op mode ///////////////////////////////////////////////////////////////////
+
+type OpMode byte
+
+const (
+	Read OpMode = 1 << iota
+	Write
+	Verify
+	Compact
+)
+
+// panics
+func (m OpMode) verify() {
+	switch m {
+	case Read:
+	case Write:
+	case Verify:
+	case Compact:
+	default:
+		panic(fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m))
+	}
+}
+func (m OpMode) String() string {
+	switch m {
+	case Read:
+		return "Read"
+	case Write:
+		return "Write"
+	case Verify:
+		return "Verify"
+	case Compact:
+		return "Compact"
+	}
+	panic(fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m))
+}
+
 /// errors ////////////////////////////////////////////////////////////////////
 
 var (
+	ErrOpMode         = fmt.Errorf("object.idx: Invalid state - opMode")
 	ErrObjectNotFound = fmt.Errorf("object.idx: OID for key not found")
 	ErrInvalidOid     = fmt.Errorf("object.idx: Invalid OID")
 	ErrIndexIsClosed  = fmt.Errorf("object.idx: Invalid state - index already closed")
@@ -104,6 +142,7 @@ func CreateIndex(home string) error {
 	}
 	defer file.Close()
 
+	// just write the header
 	var now = time.Now().UnixNano()
 	var hdr = header{
 		ftype:   idx_file_code,
@@ -165,8 +204,10 @@ func (idx *idxfile) readAndVerifyHeader() error {
 }
 
 // Opens the object index file. REVU mode?
-func OpenIndex(home string) (*idxfile, error) {
+func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 	var filename = Filename(home)
+
+	opMode.verify()
 
 	// open file and get stat
 	file, e := os.OpenFile(filename, os.O_RDWR, fs.FilePerm)
@@ -183,6 +224,7 @@ func OpenIndex(home string) (*idxfile, error) {
 		file:     file,
 		filename: filename,
 		size:     finfo.Size(),
+		opMode:   opMode,
 		modified: false,
 		pending:  nil,
 	}
