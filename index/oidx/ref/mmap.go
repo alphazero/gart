@@ -22,23 +22,41 @@ func main() {
 	// mmap a file to its full extent
 	// increase the size of the file
 	// investigate the process of (re)mapping for the longer extent.
+	// Doost!
+
+	// NOTE
+	// this works fine and possible optimizations are:
+	// 	- increase page size as each call to ExtendTo() incurs cost of unmap & mmap
+	//	  for example, 32KB page size extends every 1024 records.
+	//	  Likely we're wasting tens of KB.
+	//
+	//	- don't use pages at all. On OpMode.Write, start with a resize to something
+	//	  very large, say inrease by k * MB. Say 4MB (~128k objects to be added) and
+	//	  that takes care of most use cases. Then on UnmapClose trunc to actual size.
+	//	  That would require more extensive changes, but would certainly be faster.
+	//	  REVU this is clearly the optimal approach.(Resize extent can be adjusted
+	//	  for host device type to address mobile-phone use-cases.
+	//
+	//	- But also try MAP_NOCACHE flag on OpWrite to see if that helps.
 
 	var filename = "/Users/alphazero/.gart/index/objects.idx"
 
-	if e := readFromIt(filename); e != nil {
-		exitOnError(e)
-	}
+	debug := len(os.Args) > 1
 
-	if 0 == 2 {
-		return
+	if debug {
+		if e := readFromIt(filename); e != nil {
+			exitOnError(e)
+		}
 	}
 
 	if e := writeToIt(filename, 333); e != nil {
 		exitOnError(e)
 	}
 
-	if e := readFromIt(filename); e != nil {
-		exitOnError(e)
+	if debug {
+		if e := readFromIt(filename); e != nil {
+			exitOnError(e)
+		}
 	}
 }
 
@@ -59,7 +77,6 @@ func writeToIt(filename string, items int) error {
 			fmt.Printf("err - writeToIt: %v", e)
 			return e
 		}
-		// mmf.header.Print()
 	}
 
 	return nil
@@ -69,39 +86,49 @@ const headersize = 0x1000
 const pagesize = 0x1000
 const recsize = 0x20
 
-func (mmf *mappedFile) AddObject(oid []byte) error {
-	//	var hdr = readHeader(mmf.buf)
-	//	var page = mmf.header.pcnt // page cnt is in [1, n]
-	//	var ocnt = mmf.header.ocnt // object count is ~equiv. to 'last key'
-	//	var key = ocnt + 1
+func (mmf *mappedFile) Lookup(key ...uint64) ([][]byte, error) {
+	return nil, fmt.Errorf("not implemented -- use exiting code in oidx.oidxfile.go")
+}
 
-	//	var offset = ((key - 1) << 5) + headersize
+func (mmf *mappedFile) AddObject(oid []byte) error {
+	var offset = ((mmf.header.ocnt) << 5) + headersize
+	if mmf.header.ocnt&0x7f == 0 {
+		// need new page
+		if e := mmf.ExtendBy(pagesize); e != nil {
+			return e
+		}
+		mmf.header.pcnt++
+	}
+	n := copy(mmf.buf[offset:], oid)
+	if n != 32 {
+		panic(fmt.Errorf("n is %d!", n))
+	}
+	mmf.header.ocnt++
+	if !mmf.modified {
+		mmf.modified = true
+	}
+	return nil
+}
+
+// REVU deprecated
+func (mmf *mappedFile) AddObject_works(oid []byte) error {
 	var offset = ((mmf.header.ocnt) << 5) + headersize
 	switch mmf.header.ocnt & 0x7f {
 	case 0: // need new page
 		if e := mmf.ExtendBy(pagesize); e != nil {
 			return e
 		}
-		//		page++
 		mmf.header.pcnt++
-		//		fmt.Printf("add object to NEW page:%d at offset:%d\n", page, offset)
-		fmt.Printf("add object to NEW page:%d at offset:%d\n", mmf.header.pcnt, offset)
+		//		fmt.Printf("add object to NEW page:%d at offset:%d\n", mmf.header.pcnt, offset)
 	default: // partial page
-		// kpoff is key offset in page
-		//		fmt.Printf("add object to page:%d at offset:%d\n", page, offset)
-		fmt.Printf("add object to page:%d at offset:%d\n", mmf.header.pcnt, offset)
+		//		fmt.Printf("add object to page:%d at offset:%d\n", mmf.header.pcnt, offset)
 	}
 	n := copy(mmf.buf[offset:], oid)
 	if n != 32 {
 		panic(fmt.Errorf("n is %d!", n))
 	}
-	// update header!
-	//	mmf.header.pcnt = page
 	mmf.header.ocnt++
-	//	return writeHeader(&hdr, mmf.buf)
-	//	mmf.header.Print()
 	if !mmf.modified {
-		//		hdr.updated = time.Now().UnixNano()
 		mmf.modified = true
 	}
 	return nil
@@ -173,7 +200,7 @@ func readFromIt(filename string) error {
 }
 
 type mappedFile struct {
-	header
+	*header
 	filename string
 	opMode   oidx.OpMode
 	file     *os.File
@@ -212,12 +239,9 @@ func (mmf *mappedFile) ExtendBy(delta int64) error {
 }
 
 func (mmf *mappedFile) UnmapClose() error {
-	//	fmt.Println("mappedFile.UnmapClose: begin")
 	if mmf.modified {
 		mmf.header.updated = time.Now().UnixNano()
-		writeHeader(&mmf.header, mmf.buf)
-		//		fmt.Printf("debug - mappedFile.UnmapClose: wrote header")
-		//		mmf.header.Print()
+		writeHeader(mmf.header, mmf.buf)
 	}
 	if e := mmf.Unmap(); e != nil {
 		return e
@@ -249,7 +273,7 @@ func (mmf *mappedFile) mmap(offset int64, length int, remap bool) error {
 	mmf.buf = buf
 	mmf.offset = offset
 	if !remap {
-		mmf.header = *(readHeader(mmf.buf))
+		mmf.header = readHeader(mmf.buf)
 	}
 
 	return nil
