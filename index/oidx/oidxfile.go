@@ -22,36 +22,28 @@ const (
 	idxFilename   = "object.idx"       // REVU belongs to toplevle gart package
 )
 
-const block_header_size = 8
-
-// object.idx file consists of 1 or more blocks. Each block is prefixed with
-// by an 8 byte header and the rest of the block is a sequence of OIDs.
-type block_header struct {
-	crc32 uint32
-	rcnt  uint32 // number of records in the block
-}
-
-// 32KB blocks
+// 4K header, 32KB blocks
 const (
+	headerSize      = 4096 // file header is fs page sized
 	blockSize       = 32768
-	blockHeaderSize = 32
-	blockDataSize   = 32736 // 1023 32byte object hashes
+	blockHeaderSize = 32    // TODO assert this
+	blockDataSize   = 32736 // 1023 32B objects per block
 	blockRecordSize = 32
 	recordsPerBlock = 1023
 )
 
 // file consists of header and 0 or more blocks. blocks are multiples of fs
-// pagesize.
+// pagesize. Each block is headed by 32B of meta-data, followed by sequence
+// of object ids.
 type block struct {
 	crc64    uint64
 	created  int64  // std unix nano
 	updated  int64  // std unix nano
-	rcnt     uint32 // number of records in the block
-	reserved [4]byte
+	rcnt     uint16 // [0, 1023]
+	reserved [6]byte
 	dat      [blockDataSize]byte
 }
 
-const headerSize = 4096 // file header is fs page sized
 type header struct {
 	ftype    uint64
 	crc64    uint64 // header crc
@@ -75,7 +67,7 @@ type idxfile struct {
 	size     int64
 	opMode   OpMode
 	modified bool
-	nextkey  uint64
+	nextKey  uint64
 	pending  *pendingBlock
 }
 
@@ -252,6 +244,7 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 		size:     finfo.Size(),
 		opMode:   opMode,
 		modified: false,
+		nextKey:  0,
 		pending:  nil,
 	}
 
@@ -259,6 +252,7 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 		idx.file.Close()
 		return nil, e
 	}
+	idx.nextKey = idx.rcnt + 1
 
 	var oe error
 	switch opMode {
@@ -283,6 +277,7 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 }
 
 func (idx *idxfile) initModeRead() error {
+	fmt.Printf("debug - idxfile\n%v\n", idx)
 	// NOTE mmap would be appropriate here.
 	//      Read mode is to support idxfile.Lookup(key...uint64)
 	//		which is a scan function.
@@ -290,6 +285,7 @@ func (idx *idxfile) initModeRead() error {
 }
 
 func (idx *idxfile) initModeWrite() error {
+	fmt.Printf("debug - idxfile\n%v\n", idx)
 	panic("idxfile.initModeWrite: not implemented")
 }
 
@@ -307,13 +303,25 @@ func (idx *idxfile) Register(oid []byte) (uint64, error) {
 	panic("oidx.Register: not implemented")
 }
 
+// Returns the oid (bytes) for the key set. Note that keys are
+// sorted ascending to optimize reads and the returned []byte array
+// order corresponds to the sorted order of keys. As 'key' is purely
+// an internal concern this is of no concern to top-level funcs using
+// Lookup(). There the [][]byte will be converted to []OID and identified
+// index.Cards will have full information, including 'key' should be required.
 func (idx *idxfile) Lookup(key ...uint64) ([][]byte, error) {
 	// REVU will never query in Write mode?
 	if idx.opMode != Read {
 		return nil, ErrInvalidOp
 	}
-	// sort them
+
+	// sort keys and seek forward
 	sort.Uint64(key)
+
+	_, e := idx.file.Seek(0, os.SEEK_SET)
+	if e != nil {
+		return nil, e
+	}
 
 	panic("oidx.Lookup: not implemented")
 }
