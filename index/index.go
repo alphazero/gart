@@ -79,6 +79,9 @@ func ObjectId(fpath string) (*OID, error) {
 	return newOid(md), nil
 }
 
+// REVU temp-dev export this (or simply use this)
+func NewOid(bytes []byte) *OID { return newOid(bytes) }
+
 // internal func panics on errors
 func newOid(bytes []byte) *OID {
 

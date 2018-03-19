@@ -139,6 +139,8 @@ var (
 	ErrOpNotImplemented = fmt.Errorf("object.idx: Operation not implemented")
 	ErrObjectNotFound   = fmt.Errorf("object.idx: OID for key not found")
 	ErrInvalidOid       = fmt.Errorf("object.idx: Invalid OID")
+	ErrInvalidKeyRange  = fmt.Errorf("object.idx: Invalid key range")
+	ErrNilArg           = fmt.Errorf("object.idx: Invalid arg - nil")
 	ErrIndexIsClosed    = fmt.Errorf("object.idx: Invalid state - index already closed")
 	ErrPendingChanges   = fmt.Errorf("object.idx: Invalid state - pending changes on close")
 )
@@ -315,13 +317,25 @@ func (idx *idxfile) Lookup(key ...uint64) ([][]byte, error) {
 		return nil, ErrInvalidOp
 	}
 
-	// sort keys and seek forward
-	sort.Uint64(key)
-
-	_, e := idx.file.Seek(0, os.SEEK_SET)
-	if e != nil {
-		return nil, e
+	if key == nil {
+		return nil, ErrNilArg
 	}
+
+	var klen = len(key)
+	if klen == 0 {
+		return [][]byte{}, nil // nop
+	}
+
+	sort.Uint64(key)
+	if key[klen-1] >= idx.nextKey {
+		return nil, ErrInvalidKeyRange
+	}
+
+	// REVU certainly Read ops can (should) be mmap
+	//	_, e := idx.file.Seek(0, os.SEEK_SET)
+	//	if e != nil {
+	//		return nil, e
+	//	}
 
 	panic("oidx.Lookup: not implemented")
 }
