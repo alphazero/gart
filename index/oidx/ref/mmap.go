@@ -29,7 +29,7 @@ func main() {
 		exitOnError(e)
 	}
 
-	if true {
+	if 0 == 2 {
 		return
 	}
 
@@ -42,36 +42,24 @@ func main() {
 	}
 }
 
-// actual idxfile: a page may be partially written, so
-// writeToIt will need to check the header and find the ocnt.
-// Given the simple model of pure data pages of 128 OIDs / 4K page,
-//					+ 4k header offset (1024)
-//		data pages		[1, N]
-//		pages numbered 	[0, N]
-//
-//		page 	p	: p << 10  					-- ( x 1024 )
-//		p.rec 	0	: 0		000000000
-//				1	: 32	000010000
-//
-//				n	: n << 5					-- ( x   32 )
-//
-//		given object key [1, n_k) -- n_k is 'next key'
-//		note key = 0 is key.nil
-//
-//		offset = ((key - 1) << 5) + hdr.size
-//
 func writeToIt(filename string, items int) error {
+	// gart process prepare:
 	mmf, e := mapfile(oidx.Write, filename)
 	if e != nil {
 		exitOnError(e)
 	}
+
+	// gart process complete:
 	defer mmf.UnmapClose()
 
+	// gart-add:
 	for i := 0; i < items; i++ {
 		oid := digest.Sum([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
 		if e := mmf.AddObject(oid[:]); e != nil {
+			fmt.Printf("err - writeToIt: %v", e)
 			return e
 		}
+		// mmf.header.Print()
 	}
 
 	return nil
@@ -82,38 +70,50 @@ const pagesize = 0x1000
 const recsize = 0x20
 
 func (mmf *mappedFile) AddObject(oid []byte) error {
-	var hdr = readHeader(mmf.buf)
-	var page = hdr.pcnt // page cnt is in [1, n]
-	var ocnt = hdr.ocnt // object count is ~equiv. to 'last key'
-	var key = ocnt + 1
+	//	var hdr = readHeader(mmf.buf)
+	//	var page = mmf.header.pcnt // page cnt is in [1, n]
+	//	var ocnt = mmf.header.ocnt // object count is ~equiv. to 'last key'
+	//	var key = ocnt + 1
 
-	var offset = ((key - 1) << 5) + headersize
-	switch key & 0x7f {
+	//	var offset = ((key - 1) << 5) + headersize
+	var offset = ((mmf.header.ocnt) << 5) + headersize
+	switch mmf.header.ocnt & 0x7f {
 	case 0: // need new page
 		if e := mmf.ExtendBy(pagesize); e != nil {
 			return e
 		}
-		page++
-		fmt.Printf("add object to NEW page:%d at offset:%d\n", page, offset)
+		//		page++
+		mmf.header.pcnt++
+		//		fmt.Printf("add object to NEW page:%d at offset:%d\n", page, offset)
+		fmt.Printf("add object to NEW page:%d at offset:%d\n", mmf.header.pcnt, offset)
 	default: // partial page
 		// kpoff is key offset in page
-		fmt.Printf("add object to page:%d at offset:%d\n", page, offset)
+		//		fmt.Printf("add object to page:%d at offset:%d\n", page, offset)
+		fmt.Printf("add object to page:%d at offset:%d\n", mmf.header.pcnt, offset)
 	}
 	n := copy(mmf.buf[offset:], oid)
 	if n != 32 {
 		panic(fmt.Errorf("n is %d!", n))
 	}
 	// update header!
-	return writeHeader(hdr, mmf.buf)
+	//	mmf.header.pcnt = page
+	mmf.header.ocnt++
+	//	return writeHeader(&hdr, mmf.buf)
+	//	mmf.header.Print()
+	if !mmf.modified {
+		//		hdr.updated = time.Now().UnixNano()
+		mmf.modified = true
+	}
+	return nil
 }
 
 func (mmf *mappedFile) Hexdump(page uint64) {
 	var p = int(page)
-	var width = 32
-	var poff = (p + 1) << 10
+	var width = 16
+	var poff = p << 12
 	var pend = poff + 0x1000 // page size 4K
 	for i := poff; i < pend; i += width {
-		fmt.Printf("debug - % 02x\n", mmf.buf[i:i+width])
+		fmt.Printf("%08x % 02x\n", i, mmf.buf[i:i+width])
 	}
 }
 
@@ -127,12 +127,22 @@ type header struct {
 	reserved [4048]byte
 }
 
-func writeHeader(hdr *header, buf []byte) error {
-	return nil
+func writeHeader(h *header, buf []byte) {
+	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
+	*(*int64)(unsafe.Pointer(&buf[16])) = h.created
+	*(*int64)(unsafe.Pointer(&buf[24])) = h.updated
+	*(*uint64)(unsafe.Pointer(&buf[32])) = h.pcnt
+	*(*uint64)(unsafe.Pointer(&buf[40])) = h.ocnt
+
+	h.crc64 = digest.Checksum64(buf[16:])
+	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
+
+	return
 }
 
 func readHeader(buf []byte) *header {
-	return (*header)(unsafe.Pointer(&buf[0]))
+	var h header = *(*header)(unsafe.Pointer(&buf[0]))
+	return &h
 }
 
 func (hdr *header) Print() {
@@ -151,9 +161,9 @@ func readFromIt(filename string) error {
 	}
 	fmt.Printf("debug - readFromIt - bufsize: %d\n", len(mmf.buf))
 
-	hdr := readHeader(mmf.buf)
-	hdr.Print()
-
+	//	hdr := readHeader(mmf.buf)
+	mmf.header.Print()
+	hdr := mmf.header
 	// display last page if any
 	if hdr.pcnt > 0 {
 		fmt.Printf("last data page\n")
@@ -163,6 +173,7 @@ func readFromIt(filename string) error {
 }
 
 type mappedFile struct {
+	header
 	filename string
 	opMode   oidx.OpMode
 	file     *os.File
@@ -171,6 +182,7 @@ type mappedFile struct {
 	prot     int
 	buf      []byte
 	offset   int64
+	modified bool
 }
 
 func (mmf *mappedFile) ExtendBy(delta int64) error {
@@ -200,6 +212,13 @@ func (mmf *mappedFile) ExtendBy(delta int64) error {
 }
 
 func (mmf *mappedFile) UnmapClose() error {
+	//	fmt.Println("mappedFile.UnmapClose: begin")
+	if mmf.modified {
+		mmf.header.updated = time.Now().UnixNano()
+		writeHeader(&mmf.header, mmf.buf)
+		//		fmt.Printf("debug - mappedFile.UnmapClose: wrote header")
+		//		mmf.header.Print()
+	}
 	if e := mmf.Unmap(); e != nil {
 		return e
 	}
@@ -229,6 +248,9 @@ func (mmf *mappedFile) mmap(offset int64, length int, remap bool) error {
 	}
 	mmf.buf = buf
 	mmf.offset = offset
+	if !remap {
+		mmf.header = *(readHeader(mmf.buf))
+	}
 
 	return nil
 }
@@ -245,6 +267,7 @@ func (mmf *mappedFile) Unmap() error {
 	return nil
 }
 
+// OpenIndex:
 func mapfile(opMode oidx.OpMode, filename string) (*mappedFile, error) {
 	var flags int // = syscall.MAP_SHARED // syscall.MAP_PRIVATE
 	var oflags int
