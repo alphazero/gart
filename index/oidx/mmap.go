@@ -267,10 +267,11 @@ func CreateIndex(home string) error {
 	}
 	defer file.Close()
 
+	var now = time.Now().UnixNano()
 	var hdr = &header{
-		ftype:   idx_file_code,         // TODO uniformly call these _typecode
-		created: time.Now().UnixNano(), // TODO REVU timestamps on all files
-		updated: 0,                     // TODO uniformly set updated to 0 on init on all files
+		ftype:   idx_file_code, // TODO uniformly call these _typecode
+		created: now,           // TODO REVU timestamps on all files
+		updated: now,           // TODO uniformly set updated to created on init on all files
 		pcnt:    0,
 		ocnt:    0,
 	}
