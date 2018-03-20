@@ -25,7 +25,7 @@ func init() {
 
 const headerSize = 0x1000
 const pageSize = 0x1000
-const recordSize = index.OidSize // expecting 32 - TODO assert this in init
+const recordSize = index.OidSize
 
 type header struct {
 	ftype    uint64
@@ -108,7 +108,7 @@ func (mmf *mappedFile) AddObject(oid []byte) error {
 	var offset = ((mmf.header.ocnt) << 5) + headerSize
 	if mmf.header.ocnt&0x7f == 0 {
 		// need new page
-		if e := mmf.ExtendBy(pageSize); e != nil {
+		if e := mmf.extendBy(pageSize); e != nil {
 			return e
 		}
 		mmf.header.pcnt++
@@ -134,98 +134,33 @@ func (mmf *mappedFile) Hexdump(page uint64) {
 	}
 }
 
-func (mmf *mappedFile) ExtendBy(delta int64) error {
+func (mmf *mappedFile) extendBy(delta int64) error {
 
 	size := mmf.finfo.Size() + delta
 	if e := mmf.file.Truncate(size); e != nil {
 		fmt.Printf("error on truncate to %d - will unmap and close file", size)
-		mmf.UnmapClose()
+		mmf.unmapAndClose()
 		return e
 	}
 	// update state
 	finfo, e := mmf.file.Stat()
 	if e != nil {
 		fmt.Printf("error on file.Stat - will unmap and close file")
-		mmf.UnmapClose()
+		mmf.unmapAndClose()
 		return e
 	}
 	mmf.finfo = finfo
 	// remap
 	if e := mmf.mmap(0, int(mmf.finfo.Size()), true); e != nil {
 		fmt.Printf("error on remap - will unmap and close file")
-		mmf.UnmapClose()
+		mmf.unmapAndClose()
 		return e
 	}
 
 	return nil
 }
 
-func (mmf *mappedFile) CloseIndex() (bool, error) {
-	panic("mappedFile.CloseIndex: not implemented.")
-}
-
-// REVU not exported
-// TODO mmf.Close() (bool, error) calls this
-func (mmf *mappedFile) UnmapClose() error {
-	// NOTE the write of header is here is very important
-	// REVU possibly should be moved to Extend directly?
-	// TODO first try it in ref/mmap.go
-	if mmf.modified {
-		mmf.header.updated = time.Now().UnixNano()
-		writeHeader(mmf.header, mmf.buf)
-		// REVU this should return a bool indicating header update
-	}
-	if e := mmf.Unmap(); e != nil {
-		return e
-	}
-	if e := mmf.file.Close(); e != nil {
-		return e
-	}
-	mmf.file = nil
-	return nil
-}
-
-// if mmf.buf != nil, function first unmaps and then maps again at given
-// offset and for buf length specfieid -- effectively remap. Otherwise it
-// just a mapping.
-func (mmf *mappedFile) mmap(offset int64, length int, remap bool) error {
-	if mmf.buf != nil {
-		if !remap {
-			return fmt.Errorf("mmap with existing mapping - remap: %t", remap)
-		}
-		if e := mmf.Unmap(); e != nil {
-			return e
-		}
-	}
-	var fd = int(mmf.file.Fd())
-	buf, e := syscall.Mmap(fd, offset, length, mmf.prot, mmf.flags)
-	if e != nil {
-		return e
-	}
-	mmf.buf = buf
-	mmf.offset = offset
-	if !remap {
-		mmf.header = readHeader(mmf.buf)
-	}
-
-	return nil
-}
-
-// REVU not exported
-func (mmf *mappedFile) Unmap() error {
-	if mmf.buf == nil {
-		return fmt.Errorf("mappedFile.Unmap: buf is nil")
-	}
-	if e := syscall.Munmap(mmf.buf); e != nil {
-		return fmt.Errorf("mappedFile.Unmap: %v", e)
-	}
-	mmf.buf = nil
-	mmf.offset = 0
-	return nil
-}
-
-// NOTE OpenIndex:
-func mapfile(opMode OpMode, filename string) (*mappedFile, error) {
+func OpenIndex(opMode OpMode, filename string) (*mappedFile, error) {
 	var flags int // = syscall.MAP_SHARED // syscall.MAP_PRIVATE
 	var oflags int
 	var prot int
@@ -270,4 +205,69 @@ func mapfile(opMode OpMode, filename string) (*mappedFile, error) {
 	}
 
 	return mmf, nil
+}
+func (mmf *mappedFile) CloseIndex() (bool, error) {
+	panic("mappedFile.CloseIndex: not implemented.")
+}
+
+// unmapAndClose first updates header timestamp and (re)writes
+// the header bytes (if opMode is Read & modified). If so, the
+// bool retval will reflect that.
+func (mmf *mappedFile) unmapAndClose() (bool, error) {
+	// NOTE the write of header is here is very important
+	// REVU this should be done in AddObject (which is the only
+	// place that actually modifies the header! It does not belong here.
+	// TODO first try it in ref/mmap.go
+	var updated bool
+	if mmf.modified {
+		mmf.header.updated = time.Now().UnixNano()
+		writeHeader(mmf.header, mmf.buf)
+		updated = true
+	}
+	if e := mmf.unmap(); e != nil {
+		return updated, e
+	}
+	if e := mmf.file.Close(); e != nil {
+		return updated, e
+	}
+	mmf.file = nil
+	return updated, nil
+}
+
+// if mmf.buf != nil, function first unmaps and then maps again at given
+// offset and for buf length specfieid -- effectively remap. Otherwise it
+// just a mapping.
+func (mmf *mappedFile) mmap(offset int64, length int, remap bool) error {
+	if mmf.buf != nil {
+		if !remap {
+			return fmt.Errorf("mmap with existing mapping - remap: %t", remap)
+		}
+		if e := mmf.unmap(); e != nil {
+			return e
+		}
+	}
+	var fd = int(mmf.file.Fd())
+	buf, e := syscall.Mmap(fd, offset, length, mmf.prot, mmf.flags)
+	if e != nil {
+		return e
+	}
+	mmf.buf = buf
+	mmf.offset = offset
+	if !remap {
+		mmf.header = readHeader(mmf.buf)
+	}
+
+	return nil
+}
+
+func (mmf *mappedFile) unmap() error {
+	if mmf.buf == nil {
+		return fmt.Errorf("mappedFile.unmap: buf is nil")
+	}
+	if e := syscall.Munmap(mmf.buf); e != nil {
+		return fmt.Errorf("mappedFile.unmap: %v", e)
+	}
+	mmf.buf = nil
+	mmf.offset = 0
+	return nil
 }
