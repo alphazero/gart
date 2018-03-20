@@ -26,8 +26,8 @@ func init() {
 
 // header related consts
 const (
-	idx_file_code = 0x763f079cf73c668e // sha256("index-file")[:8]
-	idxFilename   = "object.idx"       // REVU belongs to toplevle gart package
+	mmap_idx_file_code = 0x8fe452c6d1f55c66 // sha256("mmaped-index-file")[:8]
+	idxFilename        = "object.idx"       // REVU belongs to toplevle gart package
 )
 
 // error codes
@@ -40,6 +40,12 @@ var (
 	ErrNilArg           = fmt.Errorf("object.idx: Invalid arg - nil")
 	ErrIndexIsClosed    = fmt.Errorf("object.idx: Invalid state - index already closed")
 	ErrPendingChanges   = fmt.Errorf("object.idx: Invalid state - pending changes on close")
+)
+
+// bugs -- typically used in panics
+var (
+	BugInvalidChecksum     = fmt.Errorf("bug - oidx.mappedFile: Invalid header checksum")
+	BugInvalidFileTypecode = fmt.Errorf("bug - oidx.mappedFIle: Invalid header file type code")
 )
 
 const (
@@ -137,6 +143,18 @@ func writeHeader(h *header, buf []byte) {
 
 func readHeader(buf []byte) *header {
 	var h header = *(*header)(unsafe.Pointer(&buf[0]))
+
+	// verify
+	if h.ftype != mmap_idx_file_code {
+		panic(BugInvalidFileTypecode)
+	}
+
+	// crc
+	crc64 := digest.Checksum64(buf[16:])
+	if crc64 != h.crc64 {
+		panic(BugInvalidChecksum)
+	}
+
 	return &h
 }
 
@@ -269,9 +287,9 @@ func CreateIndex(home string) error {
 
 	var now = time.Now().UnixNano()
 	var hdr = &header{
-		ftype:   idx_file_code, // TODO uniformly call these _typecode
-		created: now,           // TODO REVU timestamps on all files
-		updated: now,           // TODO uniformly set updated to created on init on all files
+		ftype:   mmap_idx_file_code, // TODO uniformly call these _file
+		created: now,                // TODO REVU timestamps on all files
+		updated: now,                // TODO uniformly set to now on init on all files
 		pcnt:    0,
 		ocnt:    0,
 	}
