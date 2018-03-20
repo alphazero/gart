@@ -17,7 +17,7 @@ type Map interface {
 
 	UpdatedOn() time.Time
 
-	// Adds a new tag. Tag name must be at most maxNameBytes or an error is returned.
+	// Adds a new tag. Tag name must be at most maxNameSize or an error is returned.
 	// Further note that tag names are case-insensitive.
 	// added is true if tag was indeed new. Otherwise false (with no error)
 	// If error is nil, the tag id is returned.

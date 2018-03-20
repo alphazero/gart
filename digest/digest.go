@@ -14,7 +14,7 @@ import (
 /// consts and vars ///////////////////////////////////////////////////////////
 
 const (
-	HashBytes = 32
+	HashSize = 32
 )
 
 /// consts and vars ///////////////////////////////////////////////////////////
@@ -33,7 +33,7 @@ func SumUint64(b []byte) uint64 {
 }
 
 // Sum: Black2B size 256 digest
-func Sum(b []byte) [HashBytes]byte {
+func Sum(b []byte) [HashSize]byte {
 	return blake2b.Sum256(b)
 }
 

@@ -19,7 +19,7 @@ import (
 
 // header related consts
 const (
-	headerBytes      = 4096               // minimum length of a tagmap.dat file
+	headerSize       = 4096               // minimum length of a tagmap.dat file
 	tagmap_file_code = 0xd42b72e897893438 // sha256("tagmap-file")[:8]
 )
 
@@ -51,7 +51,7 @@ func init() {
 
 	// header size
 	var hdr header
-	if unsafe.Sizeof(hdr) != headerBytes {
+	if unsafe.Sizeof(hdr) != headerSize {
 		panic("bug - tagmap header struct size non-conformant")
 	}
 }
@@ -105,7 +105,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 	var mapsize = int(float64(hdr.tagcnt) * 1.25) // a bit larger to prevent resize
 	var m = make(map[string]*Tag, mapsize)
 	var id int
-	var offset = uint64(headerBytes)
+	var offset = uint64(headerSize)
 	for offset < uint64(len(buf)) {
 		id++
 		if id&0x7 == 0 { // skip multiples of 8 so we don't have to encode7 for BAH
@@ -117,7 +117,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 			return nil, fmt.Errorf("bug - decoding tag[id:%d] offset:%d - %s", id, offset, e)
 		}
 		tag.id = id
-		tag.offset = offset - headerBytes
+		tag.offset = offset - headerSize
 		m[tag.name] = &tag
 
 		offset += uint64(tlen)
@@ -133,7 +133,7 @@ func LoadMap(fname string, create bool) (Map, error) {
 		source: fname,
 		header: *hdr,
 		m:      m,
-		buf:    buf[headerBytes:],
+		buf:    buf[headerSize:],
 		nextId: id + 1,
 	}
 
@@ -159,7 +159,7 @@ func (t *tagmap) Sync() (bool, error) {
 	}
 	defer sfile.Close() // REVU not sure about behavior of defering this due to os.Rename below.
 
-	hdrbuf := *(*[headerBytes]byte)(unsafe.Pointer(&t.header))
+	hdrbuf := *(*[headerSize]byte)(unsafe.Pointer(&t.header))
 	_, e = sfile.Write(hdrbuf[:])
 	if e != nil {
 		return false, e
@@ -290,7 +290,7 @@ func createMapFile(fname string) error {
 	hdr.buflen = 0
 	hdr.crc64 = digest.Checksum64([]byte{})
 
-	var arr = *(*[headerBytes]byte)(unsafe.Pointer(&hdr))
+	var arr = *(*[headerSize]byte)(unsafe.Pointer(&hdr))
 	_, e = file.Write(arr[:])
 	if e != nil {
 		return e
@@ -300,7 +300,7 @@ func createMapFile(fname string) error {
 }
 
 func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
-	if len(buf) < headerBytes {
+	if len(buf) < headerSize {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid buffer - len:%d", len(buf))
 	}
 
@@ -315,14 +315,14 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 	if hdr.updated == 0 {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid updated: %d ", hdr.updated)
 	}
-	var crc64 = digest.Checksum64(buf[headerBytes:])
+	var crc64 = digest.Checksum64(buf[headerSize:])
 	if hdr.crc64 != crc64 {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid crc64: %08x expect: %08x",
 			hdr.crc64, crc64)
 	}
-	if hdr.buflen != uint64(finfo.Size())-headerBytes {
+	if hdr.buflen != uint64(finfo.Size())-headerSize {
 		return nil, fmt.Errorf("readAndVerifyHeader - invalid buflen: %d expect: %d",
-			hdr.buflen, finfo.Size()-headerBytes)
+			hdr.buflen, finfo.Size()-headerSize)
 	}
 	for i, v := range hdr.reserved {
 		if v != 0x00 {

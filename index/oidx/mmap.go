@@ -15,12 +15,17 @@ import (
 	"github.com/alphazero/gart/lang/sort"
 )
 
+func init() {
+	if index.OidSize != 32 {
+		panic("package oidx: index.OidSize is not 32")
+	}
+}
+
 /// memory mapped object index file ////////////////////////////////////////////
 
 const headerSize = 0x1000
 const pageSize = 0x1000
 const recordSize = index.OidSize // expecting 32 - TODO assert this in init
-//const recordSize = digest.HashBytes // assert this on init
 
 type header struct {
 	ftype    uint64

@@ -10,6 +10,13 @@ import (
 	"github.com/alphazero/gart/digest"
 )
 
+// REVU these type len asserts can be removed when we have unit tests
+func init() {
+	if digest.HashSize != 32 {
+		panic("package index: digest.HashSize is not 32!")
+	}
+}
+
 /// Index Cards ////////////////////////////////////////////////////////////////
 
 // Card defines the interface of an Index-Card.
@@ -60,8 +67,7 @@ type Cards interface {
 /// Object IDs /////////////////////////////////////////////////////////////////
 
 const (
-	// TODO assert this is 32 on init()
-	OidSize = digest.HashBytes // TODO unify const names on Size.
+	OidSize = digest.HashSize // TODO unify const names on Size.
 )
 
 // export the type but keep internals private to index package
@@ -84,13 +90,13 @@ func ObjectId(fpath string) (*OID, error) {
 func NewOid(bytes []byte) *OID { return newOid(bytes) }
 
 // internal func panics on errors
-func newOid(bytes []byte) *OID {
+func newOid(buf []byte) *OID {
 
-	if bug := validateOidBytes(bytes); bug != nil {
+	if bug := validateOidBytes(buf); bug != nil {
 		panic(fmt.Errorf("bug - index.newOid: invalid arg - %s", bug))
 	}
 	var oid OID
-	copy(oid.dat[:], bytes[:OidSize])
+	copy(oid.dat[:], buf[:OidSize])
 
 	return &oid
 }

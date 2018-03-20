@@ -21,7 +21,7 @@ import (
 
 // card file header related consts
 const (
-	headerBytes    = 32
+	headerSize     = 32
 	card_file_code = 0xec5a011e // sha256("card-file")[:4]
 )
 
@@ -149,7 +149,7 @@ func readCard(garthome string, oid *OID) (Card, error) {
 	}
 
 	/// create in-mem card rep ---------------------------------------------------
-	var offset = headerBytes
+	var offset = headerSize
 	if offset == len(buf) {
 		return nil, fmt.Errorf("bug - card_t.Read: card has no data - cardfile: %q", cardfile)
 	}
@@ -393,7 +393,7 @@ func (c *card_t) encode(buf []byte) error {
 	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 
 	// card_t's persisted fields
-	var offset = headerBytes + OidSize //64
+	var offset = headerSize + OidSize //64
 	copy(buf[offset:], c.tags.Bytes())
 	offset += int(c.tbahlen)
 	copy(buf[offset:], c.systemics.Bytes())
@@ -428,7 +428,7 @@ func (c *card_t) encode(buf []byte) error {
 
 // REVU can we just merge header with card_t ? why not?
 func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
-	if len(buf) < headerBytes {
+	if len(buf) < headerSize {
 		return nil, fmt.Errorf("card.readAndVerifyHeader - invalid buffer - len:%d", len(buf))
 	}
 
@@ -474,7 +474,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 }
 
 func (c *card_t) bufsize() int {
-	n := headerBytes
+	n := headerSize
 	n += OidSize
 	n += len(c.tags.Bytes())
 	n += len(c.systemics.Bytes())

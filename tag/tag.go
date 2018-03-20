@@ -12,9 +12,9 @@ import (
 
 // individual tag binary representation invariants
 const (
-	prefixBytes  = 6   // 1:flag 4:refcnt 1:value-len
-	maxNameBytes = 255 // bytes not runes (e.g. non-latin unicode names)
-	minTagBytes  = 8   //  prefix + 1 byte tag (e.g. '1')
+	prefixSize  = 6   // 1:flag 4:refcnt 1:value-len
+	maxNameSize = 255 // bytes not runes (e.g. non-latin unicode names)
+	minTagSize  = 8   //  prefix + 1 byte tag (e.g. '1')
 
 	flagsOffset  = uintptr(0)
 	refcntOffset = uintptr(1)
@@ -24,15 +24,15 @@ const (
 type Tag struct {
 	flags  byte   // reserved
 	refcnt uint32 // number of objects associated with this tag
-	name   string // see maxNameBytes
+	name   string // see maxNameSize
 
 	/* not persisted in binary image -- ! maintain this order ! */
 	id     int    // ids are ~7-encoded: for any id, id mod 8 != 0
-	offset uint64 // offset + headerBytes = offset in file
+	offset uint64 // offset + headerSize = offset in file
 }
 
 // Returns length of the binary representation. For name len, just len(t.name).
-func (t Tag) buflen() int { return prefixBytes + len(t.name) }
+func (t Tag) buflen() int { return prefixSize + len(t.name) }
 
 // semantic representation
 func (t Tag) String() string { return fmt.Sprintf("tag:{ %q (%d) } ", t.name, t.refcnt) }
@@ -46,13 +46,13 @@ func (t Tag) Debug() string {
 func normalizeName(name string) (string, bool) {
 	name = strings.ToLower(name) // in case this affects len for funky langs
 	length := len(name)
-	if length == 0 || length > maxNameBytes {
+	if length == 0 || length > maxNameSize {
 		return "", false
 	}
 	return name, true
 }
 
-// Tag name must be at most maxNameBytes long. Zerolen strings are not permitted.
+// Tag name must be at most maxNameSize long. Zerolen strings are not permitted.
 // Tag name is stored in lower-case, regardless of the input arg case.
 func newTag(tag string, id int, offset uint64) (*Tag, error) {
 	name, ok := normalizeName(tag)
@@ -63,22 +63,22 @@ func newTag(tag string, id int, offset uint64) (*Tag, error) {
 }
 
 // decode reads a Tag from the provided buffer, returning the number of bytes
-// read.  The provided slice must be at least minTagBytes bytes in length.
+// read.  The provided slice must be at least minTagSize bytes in length.
 //
 // Function returns error if b is nil or does not meet the minimum length requirement.
 func (t *Tag) decode(b []byte) (int, error) {
 	if b == nil {
 		return 0, fmt.Errorf("Tag.decode: invalid argument - b is nil")
 	}
-	if len(b) < minTagBytes {
-		return 0, fmt.Errorf("Tag.decode: invalid argument - len(b) < %d ", minTagBytes)
+	if len(b) < minTagSize {
+		return 0, fmt.Errorf("Tag.decode: invalid argument - len(b) < %d ", minTagSize)
 	}
 
 	t.flags = b[flagsOffset]
 	t.refcnt = *(*uint32)(unsafe.Pointer(&b[refcntOffset]))
 	namelen := int(b[lenOffset])
-	n := prefixBytes + int(namelen)
-	t.name = string(b[prefixBytes:n])
+	n := prefixSize + int(namelen)
+	t.name = string(b[prefixSize:n])
 
 	return n, nil
 }
@@ -100,7 +100,7 @@ func (t Tag) encode(b []byte) (int, error) {
 	var namelen = len(t.name)
 	*(*uint32)(unsafe.Pointer(&b[refcntOffset])) = t.refcnt
 	b[lenOffset] = byte(namelen)
-	if n := copy(b[prefixBytes:], []byte(t.name)); n != namelen {
+	if n := copy(b[prefixSize:], []byte(t.name)); n != namelen {
 		panic(fmt.Sprintf("bug - only copied %d bytes of name (len:%d)", n, t.buflen()))
 	}
 
