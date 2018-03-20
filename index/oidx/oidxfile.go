@@ -133,24 +133,11 @@ func (m OpMode) String() string {
 	panic(fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m))
 }
 
-/// errors ////////////////////////////////////////////////////////////////////
-
-var (
-	ErrInvalidOp        = fmt.Errorf("object.idx: Invalid op for index opMode")
-	ErrOpNotImplemented = fmt.Errorf("object.idx: Operation not implemented")
-	ErrObjectNotFound   = fmt.Errorf("object.idx: OID for key not found")
-	ErrInvalidOid       = fmt.Errorf("object.idx: Invalid OID")
-	ErrInvalidKeyRange  = fmt.Errorf("object.idx: Invalid key range")
-	ErrNilArg           = fmt.Errorf("object.idx: Invalid arg - nil")
-	ErrIndexIsClosed    = fmt.Errorf("object.idx: Invalid state - index already closed")
-	ErrPendingChanges   = fmt.Errorf("object.idx: Invalid state - pending changes on close")
-)
-
+/* XXX deprecated
 // Creates file, writes initial header and closes file.
 func CreateIndex(home string) error {
 	// TODO just modify below
 	panic("oidx.CreateIndex: not implemented")
-	/* XXX deprecated
 	var filename = Filename(home)
 
 	file, e := fs.OpenNewFile(filename, os.O_WRONLY|os.O_APPEND)
@@ -179,8 +166,8 @@ func CreateIndex(home string) error {
 
 	fmt.Printf("debug - oidx.CreateIndex:\n%v\n", hdr)
 	return nil
-	*/
 }
+*/
 
 /* XXX deprecated
 func (h *header) encode(buf []byte) {

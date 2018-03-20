@@ -5,6 +5,7 @@ package oidx
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 	"time"
 	"unsafe"
@@ -20,6 +21,19 @@ func init() {
 		panic("package oidx: index.OidSize is not 32")
 	}
 }
+
+/// errors ////////////////////////////////////////////////////////////////////
+
+var (
+	ErrInvalidOp        = fmt.Errorf("object.idx: Invalid op for index opMode")
+	ErrOpNotImplemented = fmt.Errorf("object.idx: Operation not implemented")
+	ErrObjectNotFound   = fmt.Errorf("object.idx: OID for key not found")
+	ErrInvalidOid       = fmt.Errorf("object.idx: Invalid OID")
+	ErrInvalidKeyRange  = fmt.Errorf("object.idx: Invalid key range")
+	ErrNilArg           = fmt.Errorf("object.idx: Invalid arg - nil")
+	ErrIndexIsClosed    = fmt.Errorf("object.idx: Invalid state - index already closed")
+	ErrPendingChanges   = fmt.Errorf("object.idx: Invalid state - pending changes on close")
+)
 
 /// memory mapped object index file ////////////////////////////////////////////
 
@@ -77,6 +91,14 @@ type mappedFile struct {
 	modified bool
 }
 
+// XXX temp
+func (mmf *mappedFile) DevDebug() {
+	if mmf.header.pcnt > 0 {
+		mmf.Hexdump(mmf.header.pcnt)
+	}
+	mmf.header.Print()
+}
+
 func (mmf *mappedFile) Lookup(key ...uint64) ([][]byte, error) {
 	// assert mode, sort keys, and verify key range validity
 	if mmf.opMode != Read {
@@ -105,6 +127,10 @@ func (mmf *mappedFile) Lookup(key ...uint64) ([][]byte, error) {
 }
 
 func (mmf *mappedFile) AddObject(oid []byte) error {
+	if mmf.opMode != Write {
+		return ErrInvalidOp
+	}
+
 	var offset = ((mmf.header.ocnt) << 5) + headerSize
 	if mmf.header.ocnt&0x7f == 0 {
 		// need new page
@@ -160,8 +186,52 @@ func (mmf *mappedFile) extendBy(delta int64) error {
 	return nil
 }
 
-func OpenIndex(opMode OpMode, filename string) (*mappedFile, error) {
-	var flags int // = syscall.MAP_SHARED // syscall.MAP_PRIVATE
+func filename(home string) string {
+	if home == "" {
+		panic("bug - oidx.idxfilename: garthome is zerolen")
+	}
+	return filepath.Join(home, "index", "objects.idx")
+}
+
+// CreateIndex will create the objects.idx file in the <home>/index/ directory.
+// Error is returned if in-arg home is zerolen or if the file already exists.
+// The initial index file is simply the header.
+func CreateIndex(home string) error {
+	var filename = filename(home)
+
+	file, e := fs.OpenNewFile(filename, os.O_WRONLY|os.O_APPEND)
+	if e != nil {
+		return fmt.Errorf("oidx.CreateIndex: %s", e)
+	}
+	defer file.Close()
+
+	var hdr = &header{
+		ftype:   idx_file_code,         // TODO uniformly call these _typecode
+		created: time.Now().UnixNano(), // TODO REVU timestamps on all files
+		updated: 0,                     // TODO uniformly set updated to 0 on init on all files
+		pcnt:    0,
+		ocnt:    0,
+	}
+
+	var buf [headerSize]byte
+	writeHeader(hdr, buf[:])
+
+	_, e = file.Write(buf[:])
+	if e != nil {
+		return fmt.Errorf("oidx.CreateIndex: %s", e)
+	}
+
+	return nil
+}
+
+func OpenIndex(home string, opMode OpMode) (*mappedFile, error) {
+
+	if e := opMode.verify(); e != nil {
+		return nil, e
+	}
+
+	var filename = filename(home)
+	var flags int
 	var oflags int
 	var prot int
 	switch opMode {
@@ -174,7 +244,7 @@ func OpenIndex(opMode OpMode, filename string) (*mappedFile, error) {
 		prot = syscall.PROT_WRITE
 		oflags = os.O_RDWR
 	default:
-		panic("bug - invalid opMode")
+		panic("bug - unsupported opMode")
 	}
 
 	file, e := os.OpenFile(filename, oflags, fs.FilePerm)
@@ -207,7 +277,7 @@ func OpenIndex(opMode OpMode, filename string) (*mappedFile, error) {
 	return mmf, nil
 }
 func (mmf *mappedFile) CloseIndex() (bool, error) {
-	panic("mappedFile.CloseIndex: not implemented.")
+	return mmf.unmapAndClose()
 }
 
 // unmapAndClose first updates header timestamp and (re)writes
