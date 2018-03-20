@@ -2,6 +2,7 @@
 
 package oidx
 
+/* XXX deprecated
 import (
 	"fmt"
 	"os"
@@ -13,15 +14,6 @@ import (
 	//	"github.com/alphazero/gart/lang/sort"
 )
 
-/// consts and vars ///////////////////////////////////////////////////////////
-
-// header related consts
-const (
-	idx_file_code = 0x763f079cf73c668e // sha256("index-file")[:8]
-	idxFilename   = "object.idx"       // REVU belongs to toplevle gart package
-)
-
-/* XXX deprecated
 // 4K header, 32KB blocks
 const (
 	//	headerSize      = 4096 // file header is fs page sized
@@ -80,59 +72,6 @@ func Filename(home string) string {
 	return filepath.Join(home, "index", "objects.idx")
 }
 */
-/// op mode ///////////////////////////////////////////////////////////////////
-
-type OpMode byte
-
-const (
-	Read OpMode = 1 << iota
-	Write
-	Verify
-	Compact
-)
-
-// panics on unimplemented op mode
-func (m OpMode) fopenFlag() int {
-	switch m {
-	case Read:
-		return os.O_RDONLY
-	case Write:
-		return os.O_RDWR
-	case Verify:
-	case Compact:
-	default:
-	}
-	panic(fmt.Errorf("bug - oidx.OpMode: not implemented - mode  %d", m))
-}
-
-// panics on invalid opMode
-func (m OpMode) verify() error {
-	switch m {
-	case Read:
-	case Write:
-	case Verify:
-	case Compact:
-	default:
-		return fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m)
-	}
-	return nil
-}
-
-// Returns string rep. of opMode
-func (m OpMode) String() string {
-	switch m {
-	case Read:
-		return "Read"
-	case Write:
-		return "Write"
-	case Verify:
-		return "Verify"
-	case Compact:
-		return "Compact"
-	}
-	panic(fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m))
-}
-
 /* XXX deprecated
 // Creates file, writes initial header and closes file.
 func CreateIndex(home string) error {

@@ -22,8 +22,15 @@ func init() {
 	}
 }
 
-/// errors ////////////////////////////////////////////////////////////////////
+/// consts and vars ///////////////////////////////////////////////////////////
 
+// header related consts
+const (
+	idx_file_code = 0x763f079cf73c668e // sha256("index-file")[:8]
+	idxFilename   = "object.idx"       // REVU belongs to toplevle gart package
+)
+
+// error codes
 var (
 	ErrInvalidOp        = fmt.Errorf("object.idx: Invalid op for index opMode")
 	ErrOpNotImplemented = fmt.Errorf("object.idx: Operation not implemented")
@@ -35,11 +42,66 @@ var (
 	ErrPendingChanges   = fmt.Errorf("object.idx: Invalid state - pending changes on close")
 )
 
-/// memory mapped object index file ////////////////////////////////////////////
+const (
+	headerSize = 0x1000
+	pageSize   = 0x1000
+	recordSize = index.OidSize
+)
 
-const headerSize = 0x1000
-const pageSize = 0x1000
-const recordSize = index.OidSize
+/// op mode ///////////////////////////////////////////////////////////////////
+
+type OpMode byte
+
+const (
+	Read OpMode = 1 << iota
+	Write
+	Verify
+	Compact
+)
+
+// panics on unimplemented op mode
+func (m OpMode) fopenFlag() int {
+	switch m {
+	case Read:
+		return os.O_RDONLY
+	case Write:
+		return os.O_RDWR
+	case Verify:
+	case Compact:
+	default:
+	}
+	panic(fmt.Errorf("bug - oidx.OpMode: not implemented - mode  %d", m))
+}
+
+// panics on invalid opMode
+func (m OpMode) verify() error {
+	switch m {
+	case Read:
+	case Write:
+	case Verify:
+	case Compact:
+	default:
+		return fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m)
+	}
+	return nil
+}
+
+// Returns string rep. of opMode
+func (m OpMode) String() string {
+	switch m {
+	case Read:
+		return "Read"
+	case Write:
+		return "Write"
+	case Verify:
+		return "Verify"
+	case Compact:
+		return "Compact"
+	}
+	panic(fmt.Errorf("bug - oidx.OpMode: unknown mode - %d", m))
+}
+
+/// memory mapped object index file ////////////////////////////////////////////
 
 type header struct {
 	ftype    uint64
