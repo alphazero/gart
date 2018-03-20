@@ -3,70 +3,80 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
 
 	"github.com/alphazero/gart/digest"
 	"github.com/alphazero/gart/fs"
-	//	"github.com/alphazero/gart/index"
+	"github.com/alphazero/gart/index"
 	"github.com/alphazero/gart/index/oidx"
+	"github.com/alphazero/gart/lang/sort"
 )
+
+var filename = "/Users/alphazero/.gart/index/objects.idx"
+var op string
+var debug bool
+
+func init() {
+	flag.StringVar(&op, "op", op, "op: 'r', 'w', 'q', 'qrange")
+	flag.BoolVar(&debug, "debug", debug, "debug")
+}
 
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
 
-	// to try:
-	// mmap a file to its full extent
-	// increase the size of the file
-	// investigate the process of (re)mapping for the longer extent.
-	// Doost!
+	flag.Parse()
+	op = strings.ToLower(op)
 
-	// NOTE
-	// this works fine and possible optimizations are:
-	// 	- increase page size as each call to ExtendTo() incurs cost of unmap & mmap
-	//	  for example, 32KB page size extends every 1024 records.
-	//	  Likely we're wasting tens of KB.
-	//
-	//	- don't use pages at all. On OpMode.Write, start with a resize to something
-	//	  very large, say inrease by k * MB. Say 4MB (~128k objects to be added) and
-	//	  that takes care of most use cases. Then on UnmapClose trunc to actual size.
-	//	  That would require more extensive changes, but would certainly be faster.
-	//	  REVU this is clearly the optimal approach.(Resize extent can be adjusted
-	//	  for host device type to address mobile-phone use-cases.
-	//
-	//	- But also try MAP_NOCACHE flag on OpWrite to see if that helps.
-
-	var filename = "/Users/alphazero/.gart/index/objects.idx"
-
-	debug := len(os.Args) > 1
-
-	if debug {
-		if e := readFromIt(filename); e != nil {
-			exitOnError(e)
-		}
+	var e error
+	switch op {
+	case "r":
+		e = readFromIt(filename)
+	case "w":
+		e = writeToIt(filename, 333)
+	case "q":
+		keys := []uint64{57, 17, 22, 18, 34}
+		e = queryIt(filename, keys...)
+	case "qrange":
+		keys := []uint64{57, 17, 22, 18, 34, 777}
+		e = queryIt(filename, keys...)
+	default:
+		exitOnError(fmt.Errorf("invalid op: %q", op))
 	}
-
-	if e := writeToIt(filename, 333); e != nil {
+	if e != nil {
 		exitOnError(e)
 	}
+}
 
-	if debug {
-		if e := readFromIt(filename); e != nil {
-			exitOnError(e)
-		}
+func readFromIt(filename string) error {
+	mmf, e := mapfile(oidx.Read, filename)
+	if e != nil {
+		return e
 	}
+	// gart process complete:
+	defer mmf.UnmapClose()
+
+	// in debug mode - display last page if any
+	if debug && mmf.header.pcnt > 0 {
+		fmt.Printf("last data page\n")
+		mmf.Hexdump(mmf.header.pcnt)
+	}
+
+	mmf.header.Print()
+	return mmf.UnmapClose()
 }
 
 func writeToIt(filename string, items int) error {
 	// gart process prepare:
 	mmf, e := mapfile(oidx.Write, filename)
 	if e != nil {
-		exitOnError(e)
+		return e
 	}
-
 	// gart process complete:
 	defer mmf.UnmapClose()
 
@@ -78,16 +88,62 @@ func writeToIt(filename string, items int) error {
 			return e
 		}
 	}
+	return nil
+}
 
+func queryIt(filename string, keys ...uint64) error {
+	// gart process prepare:
+	mmf, e := mapfile(oidx.Read, filename)
+	if e != nil {
+		return e
+	}
+	// gart process complete:
+	defer mmf.UnmapClose()
+
+	oids, e := mmf.Lookup(keys...)
+	if e != nil {
+		return e
+	}
+
+	// display them
+	if debug {
+		fmt.Printf("Lookup results:\n")
+		for i, oid := range oids {
+			fmt.Printf("[%03d]: oid: %x\n", i, oid)
+		}
+	}
 	return nil
 }
 
 const headersize = 0x1000
 const pagesize = 0x1000
-const recsize = 0x20
+const recsize = index.OidSize // 0x20
 
 func (mmf *mappedFile) Lookup(key ...uint64) ([][]byte, error) {
-	return nil, fmt.Errorf("not implemented -- use exiting code in oidx.oidxfile.go")
+	// assert mode, sort keys, and verify key range validity
+	if mmf.opMode != oidx.Read {
+		return nil, ErrInvalidOp
+	}
+	if key == nil {
+		return nil, ErrNilArg
+	}
+	var klen = len(key)
+	if klen == 0 {
+		return [][]byte{}, nil // nop
+	}
+	sort.Uint64(key)
+	if key[0] == 0 || key[klen-1] >= mmf.ocnt {
+		return nil, ErrInvalidKeyRange
+	}
+
+	var oids = make([][]byte, klen)
+	for i, k := range key {
+		offset := (k << 5) + headersize
+		oids[i] = make([]byte, recsize)
+		copy(oids[i], mmf.buf[offset:offset+recsize])
+	}
+
+	return oids, nil
 }
 
 func (mmf *mappedFile) AddObject(oid []byte) error {
@@ -100,7 +156,7 @@ func (mmf *mappedFile) AddObject(oid []byte) error {
 		mmf.header.pcnt++
 	}
 	n := copy(mmf.buf[offset:], oid)
-	if n != 32 {
+	if n != recsize {
 		panic(fmt.Errorf("n is %d!", n))
 	}
 	mmf.header.ocnt++
@@ -124,7 +180,7 @@ func (mmf *mappedFile) AddObject_works(oid []byte) error {
 		//		fmt.Printf("add object to page:%d at offset:%d\n", mmf.header.pcnt, offset)
 	}
 	n := copy(mmf.buf[offset:], oid)
-	if n != 32 {
+	if n != recsize {
 		panic(fmt.Errorf("n is %d!", n))
 	}
 	mmf.header.ocnt++
@@ -179,24 +235,6 @@ func (hdr *header) Print() {
 	fmt.Printf("updated:    %016x (%s)\n", hdr.updated, time.Unix(0, hdr.updated))
 	fmt.Printf("page cnt: : %d\n", hdr.pcnt)
 	fmt.Printf("object cnt: %d\n", hdr.ocnt)
-}
-
-func readFromIt(filename string) error {
-	mmf, e := mapfile(oidx.Read, filename)
-	if e != nil {
-		exitOnError(e)
-	}
-	fmt.Printf("debug - readFromIt - bufsize: %d\n", len(mmf.buf))
-
-	//	hdr := readHeader(mmf.buf)
-	mmf.header.Print()
-	hdr := mmf.header
-	// display last page if any
-	if hdr.pcnt > 0 {
-		fmt.Printf("last data page\n")
-		mmf.Hexdump(hdr.pcnt)
-	}
-	return mmf.UnmapClose()
 }
 
 type mappedFile struct {
@@ -343,3 +381,16 @@ func exitOnError(e error) {
 	fmt.Printf("err - %s\n", e)
 	os.Exit(1)
 }
+
+/// errors ////////////////////////////////////////////////////////////////////
+
+var (
+	ErrInvalidOp        = fmt.Errorf("object.idx: Invalid op for index opMode")
+	ErrOpNotImplemented = fmt.Errorf("object.idx: Operation not implemented")
+	ErrObjectNotFound   = fmt.Errorf("object.idx: OID for key not found")
+	ErrInvalidOid       = fmt.Errorf("object.idx: Invalid OID")
+	ErrInvalidKeyRange  = fmt.Errorf("object.idx: Invalid key range")
+	ErrNilArg           = fmt.Errorf("object.idx: Invalid arg - nil")
+	ErrIndexIsClosed    = fmt.Errorf("object.idx: Invalid state - index already closed")
+	ErrPendingChanges   = fmt.Errorf("object.idx: Invalid state - pending changes on close")
+)

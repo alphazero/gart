@@ -61,6 +61,7 @@ type Cards interface {
 
 const (
 	oidBytesLen = 32
+	OidSize     = 32 // REVU TODO unify const names on Size.
 )
 
 // export the type but keep internals private to index package
