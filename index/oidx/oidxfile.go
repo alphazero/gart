@@ -5,13 +5,12 @@ package oidx
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"time"
-	"unsafe"
-
-	"github.com/alphazero/gart/digest"
-	"github.com/alphazero/gart/fs"
-	"github.com/alphazero/gart/lang/sort"
+	//	"path/filepath"
+	//	"time"
+	//	"unsafe"
+	//	"github.com/alphazero/gart/digest"
+	//	"github.com/alphazero/gart/fs"
+	//	"github.com/alphazero/gart/lang/sort"
 )
 
 /// consts and vars ///////////////////////////////////////////////////////////
@@ -22,9 +21,10 @@ const (
 	idxFilename   = "object.idx"       // REVU belongs to toplevle gart package
 )
 
+/* XXX deprecated
 // 4K header, 32KB blocks
 const (
-	headerSize      = 4096 // file header is fs page sized
+	//	headerSize      = 4096 // file header is fs page sized
 	blockSize       = 32768
 	blockHeaderSize = 32    // TODO assert this
 	blockDataSize   = 32736 // 1023 32B objects per block
@@ -44,22 +44,23 @@ type block struct {
 	dat      [blockDataSize]byte
 }
 
-type header struct {
-	ftype    uint64
-	crc64    uint64 // header crc
-	created  int64
-	updated  int64
-	bcnt     uint64 // block count
-	rcnt     uint64 // record count
-	reserved [4048]byte
-}
+//type header struct {
+//	ftype    uint64
+//	crc64    uint64 // header crc
+//	created  int64
+//	updated  int64
+//	bcnt     uint64 // block count
+//	rcnt     uint64 // record count
+//	reserved [4048]byte
+//}
 
 type pendingBlock struct {
 	blk *block
 	off int64
 }
 
-const recordSize = digest.HashBytes // assert this on init
+//const recordSize = digest.HashBytes // assert this on init
+
 type idxfile struct {
 	header
 	file     *os.File
@@ -78,7 +79,7 @@ func Filename(home string) string {
 	}
 	return filepath.Join(home, "index", "objects.idx")
 }
-
+*/
 /// op mode ///////////////////////////////////////////////////////////////////
 
 type OpMode byte
@@ -147,6 +148,9 @@ var (
 
 // Creates file, writes initial header and closes file.
 func CreateIndex(home string) error {
+	// TODO just modify below
+	panic("oidx.CreateIndex: not implemented")
+	/* XXX deprecated
 	var filename = Filename(home)
 
 	file, e := fs.OpenNewFile(filename, os.O_WRONLY|os.O_APPEND)
@@ -175,8 +179,10 @@ func CreateIndex(home string) error {
 
 	fmt.Printf("debug - oidx.CreateIndex:\n%v\n", hdr)
 	return nil
+	*/
 }
 
+/* XXX deprecated
 func (h *header) encode(buf []byte) {
 	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
 	*(*int64)(unsafe.Pointer(&buf[16])) = h.created
@@ -215,10 +221,14 @@ func (idx *idxfile) readAndVerifyHeader() error {
 	}
 	return nil
 }
+*/
 
+// TODO redo in mmap.go
+/* XXX deprecated
 // Opens the object index file. REVU mode?
 func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 
+	panic("oidx.OpenIndex: not implemented")
 	/// open ////////////////////////////////////////////////////////
 
 	if e := opMode.verify(); e != nil {
@@ -277,7 +287,9 @@ func OpenIndex(home string, opMode OpMode) (*idxfile, error) {
 
 	return idx, nil
 }
+*/
 
+/* XXX deprecated
 func (idx *idxfile) initModeRead() error {
 	fmt.Printf("debug - idxfile\n%v\n", idx)
 	// NOTE mmap would be appropriate here.
@@ -362,3 +374,4 @@ func (idx *idxfile) Close() error {
 
 	return e
 }
+*/

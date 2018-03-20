@@ -60,13 +60,13 @@ type Cards interface {
 /// Object IDs /////////////////////////////////////////////////////////////////
 
 const (
-	oidBytesLen = 32
-	OidSize     = 32 // REVU TODO unify const names on Size.
+	// TODO assert this is 32 on init()
+	OidSize = digest.HashBytes // TODO unify const names on Size.
 )
 
 // export the type but keep internals private to index package
 type OID struct {
-	dat [oidBytesLen]byte
+	dat [OidSize]byte
 }
 
 // REVU: this should be the only way to get an OID
@@ -90,13 +90,13 @@ func newOid(bytes []byte) *OID {
 		panic(fmt.Errorf("bug - index.newOid: invalid arg - %s", bug))
 	}
 	var oid OID
-	copy(oid.dat[:], bytes[:oidBytesLen])
+	copy(oid.dat[:], bytes[:OidSize])
 
 	return &oid
 }
 
 func validateOidBytes(bytes []byte) error {
-	if len(bytes) < oidBytesLen {
+	if len(bytes) < OidSize {
 		return fmt.Errorf("bug - invalid OID bytes - len: %d", len(bytes))
 	}
 	for _, b := range bytes {
@@ -108,7 +108,7 @@ func validateOidBytes(bytes []byte) error {
 }
 
 func (this *OID) isEqual(that *OID) bool {
-	for i := 0; i < oidBytesLen; i++ {
+	for i := 0; i < OidSize; i++ {
 		if this.dat[i] != that.dat[i] {
 			return false
 		}

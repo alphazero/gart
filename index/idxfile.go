@@ -1,5 +1,7 @@
 // Doost!
 
+// REVU deprecated TODO salvage bits and discard
+
 package index
 
 import (
@@ -110,15 +112,15 @@ type idxrec_header struct {
 }
 
 const idxrec_header_size = 4 // TODO assert in init
-var idxrec_prefix_size = idxrec_header_size + unixtime.TimeSize + oidBytesLen
+var idxrec_prefix_size = idxrec_header_size + unixtime.TimeSize + OidSize
 
 // object.idx file record
 type idx_record struct {
-	idxrec_header                   // 3 + oidByteLen
-	oid           [oidBytesLen]byte // ref. to index.idx.file record
-	date          unixtime.Time     // 4b
-	tags          bitmap.Bitmap     // var
-	systemics     bitmap.Bitmap     // var
+	idxrec_header               // 3 + oidByteLen
+	oid           [OidSize]byte // ref. to index.idx.file record
+	date          unixtime.Time // 4b
+	tags          bitmap.Bitmap // var
+	systemics     bitmap.Bitmap // var
 }
 
 // idx record flag masks

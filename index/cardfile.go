@@ -156,7 +156,7 @@ func readCard(garthome string, oid *OID) (Card, error) {
 
 	// read & verify the OID - 32 bytes
 	var card_oid OID
-	var oidDat = buf[offset : offset+oidBytesLen]
+	var oidDat = buf[offset : offset+OidSize]
 	if e := validateOidBytes(oidDat); e != nil {
 		return nil, fmt.Errorf("bug - card_t:Read - %s", e)
 	}
@@ -165,7 +165,7 @@ func readCard(garthome string, oid *OID) (Card, error) {
 		return nil, fmt.Errorf("bug - card_t:Read - cardfile OID - have::%v should-be:%v", card_oid, oid)
 	}
 
-	offset += oidBytesLen
+	offset += OidSize
 
 	// read user-tags and systemics-tags BAHs
 	tagBytes := buf[offset : offset+int(hdr.tbahlen)]
@@ -393,7 +393,7 @@ func (c *card_t) encode(buf []byte) error {
 	*(*OID)(unsafe.Pointer(&buf[32])) = c.oid
 
 	// card_t's persisted fields
-	var offset = headerBytes + oidBytesLen //64
+	var offset = headerBytes + OidSize //64
 	copy(buf[offset:], c.tags.Bytes())
 	offset += int(c.tbahlen)
 	copy(buf[offset:], c.systemics.Bytes())
@@ -475,7 +475,7 @@ func readAndVerifyHeader(buf []byte, finfo os.FileInfo) (*header, error) {
 
 func (c *card_t) bufsize() int {
 	n := headerBytes
-	n += oidBytesLen
+	n += OidSize
 	n += len(c.tags.Bytes())
 	n += len(c.systemics.Bytes())
 	// each path is len of the []byte of path + \n
