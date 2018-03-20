@@ -82,13 +82,18 @@ func writeToIt(filename string, items int) error {
 
 	// gart-add:
 	for i := 0; i < items; i++ {
-		oid := digest.Sum([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+		oid := oidForObject(i)
+		//		oid := digest.Sum([]byte(fmt.Sprintf("object-%d", i)))
 		if e := mmf.AddObject(oid[:]); e != nil {
 			fmt.Printf("err - writeToIt: %v", e)
 			return e
 		}
 	}
 	return nil
+}
+
+func oidForObject(n int) [index.OidSize]byte {
+	return digest.Sum([]byte(fmt.Sprintf("object-%d", n)))
 }
 
 func queryIt(filename string, keys ...uint64) error {
@@ -100,6 +105,7 @@ func queryIt(filename string, keys ...uint64) error {
 	// gart process complete:
 	defer mmf.UnmapClose()
 
+	// Note! Lookup sorts the keys as side-effect!
 	oids, e := mmf.Lookup(keys...)
 	if e != nil {
 		return e
@@ -110,6 +116,11 @@ func queryIt(filename string, keys ...uint64) error {
 		fmt.Printf("Lookup results:\n")
 		for i, oid := range oids {
 			fmt.Printf("[%03d]: oid: %x\n", i, oid)
+		}
+		fmt.Println("\t---")
+		fmt.Printf("Expected set (not in sort order):\n")
+		for _, key := range keys {
+			fmt.Printf("key %03d =>  %x\n", key, oidForObject(int(key)))
 		}
 	}
 	return nil
