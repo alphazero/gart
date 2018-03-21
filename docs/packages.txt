@@ -21,7 +21,7 @@ inclusion will be from top to bottom:
 sketch:
 	gart\
 		capability\
-			repo.go			was: init.go
+			init.go
 			add.go
 			search.go
 			tag.go
@@ -34,7 +34,7 @@ sketch:
 			gart-tag.go
 			gart-find.go
 			...
-		system\
+		system\				revu: maybe this should just be pulled up to gart.
 			consts.go		ok	ex: const gart.system.Dirname = ".gart"
 			errors.go		ok		std error handling
 			types.go		ok	ex: type gart.system.OID struct {...}
@@ -42,7 +42,8 @@ sketch:
 									OID, Bitmap, ... ? NO. 
 									(possibly) Device, Volume, Tag, Card, Object, Index
 			runtime.go		ok	ex: type gart.system.Context
-		syslib\
+		syslib\				revu: no package in syslib/* should refer to anything
+								  outside of syslib or go stdlib.
 			digest\
 				digest.go	ok
 			bitmap\
@@ -52,13 +53,18 @@ sketch:
 			fs\
 				file.go		ok
 			sort\
-				sort.go
-			timestamp\
-				unixtime.go
+				sort.go		ok
+			timestamp\	
+				unixtime.go	no: it is only used in cardfile for apparently 2 reasons:
+								1 - it is 32 bits and keeps card header size == 32B (why?) 
+								2 - we don't really need nanosec precision for card files.
 		index\
-			index.go		type index.Index
-							type index.Card
-							type 
+			index.go		
+							why not: (or use system instead of gart)
+								type gart.Oid
+								type gart.Index
+								type gart.Card << revu: requires 'Bitmap' WHY?
+								type gart.Tag 
 
 							no: circular >> support interface: gart.system.Index
 			provider.go  
