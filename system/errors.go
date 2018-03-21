@@ -16,7 +16,8 @@ var (
 
 var (
 	BugInvalidOidBytesData = Bug("invalid oid bytes data")
-	BugInvalidArg          = Bug("invalid argument")
+	BugInvalidArg          = Bug("invalid input argument")
+	BugNilArg              = Bug("nil input argument")
 )
 
 /// defined faults /////////////////////////////////////////////////////////////
