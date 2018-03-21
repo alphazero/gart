@@ -36,6 +36,7 @@ sketch:
 			...
 		system\
 			consts.go		ex: const gart.system.Dirname = ".gart"
+			errors.go		std error handling
 			types.go		ex: type gart.system.OID struct {...}
 								OID, Bitmap, ... ?
 								(possibly) Device, Volume, Tag, Card, Object, Index
