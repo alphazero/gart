@@ -1,0 +1,77 @@
+-- Doost!
+
+goal: keep things simple and allow for future enhancements and changes to component
+implementations.
+
+main issue: go packages can not have ciruclar dependencies. 
+couterpoint: go standard library is extensive. there is a way.
+
+approach --
+
+inclusion will be from top to bottom: 
+	package gart -> any nested package
+	package index -> any nested package
+
+2 categories of widely accessed elements:
+	a - system constants 
+		such as gart.Dir, gart.TagsetFile, etc.
+	b - system types
+		such as OID (as of now the only one)
+
+sketch:
+	gart\
+		capability\
+			repo.go			was: init.go
+			add.go
+			search.go
+			tag.go
+			integrity.go
+			...
+		cmd\
+			process.go
+			gart-init.go
+			gart-add.go
+			gart-tag.go
+			gart-find.go
+			...
+		system\
+			consts.go		ex: const gart.system.Dirname = ".gart"
+			types.go		ex: type gart.system.OID struct {...}
+								OID, Bitmap, ... ?
+								(possibly) Device, Volume, Tag, Card, Object, Index
+			runtime.go		ex: type gart.system.Context
+		syslib\
+			digest\
+				digest.go
+			bitmap\
+				bitmap.go
+				bah.go
+				wah.go
+			tag\
+				tagdict.go	was: tagmap.go
+			oid\
+				oid.go
+			fs\
+				fs.go
+			sort\
+				sort.go
+			time\
+				unixtime.go
+		index\
+			index.go		support interface: gart.system.Index
+			provider.go  
+							gart.index.Cards
+							gart.index.Objects
+							gart.index.Tags
+							gart.index.Devices
+			/* provider implementations */
+			cards\
+				cardfile.go		-- fs based Cards
+			objects\
+				mmap.go			-- mapped file Objects
+			tags\
+								-- mapped file object-tag column Tags
+			devices\			-- tbd
+			volumes\			-- tbd
+		
+		
