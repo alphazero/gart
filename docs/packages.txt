@@ -35,37 +35,40 @@ sketch:
 			gart-find.go
 			...
 		system\
-			consts.go		ex: const gart.system.Dirname = ".gart"
-			errors.go		std error handling
-			types.go		ex: type gart.system.OID struct {...}
-								OID, Bitmap, ... ?
-								(possibly) Device, Volume, Tag, Card, Object, Index
-			runtime.go		ex: type gart.system.Context
+			consts.go		ok	ex: const gart.system.Dirname = ".gart"
+			errors.go		ok		std error handling
+			types.go		ok	ex: type gart.system.OID struct {...}
+							    	type gart.system.Context
+									OID, Bitmap, ... ? NO. 
+									(possibly) Device, Volume, Tag, Card, Object, Index
+			runtime.go		ok	ex: type gart.system.Context
 		syslib\
 			digest\
-				digest.go
+				digest.go	ok
 			bitmap\
 				bitmap.go
 				bah.go
 				wah.go
-			tag\
-				tagdict.go	was: tagmap.go
-			oid\
-				oid.go
 			fs\
-				fs.go
+				file.go		ok
 			sort\
 				sort.go
-			time\
+			timestamp\
 				unixtime.go
 		index\
-			index.go		support interface: gart.system.Index
+			index.go		type index.Index
+							type index.Card
+							type 
+
+							no: circular >> support interface: gart.system.Index
 			provider.go  
 							gart.index.Cards
 							gart.index.Objects
 							gart.index.Tags
 							gart.index.Devices
 			/* provider implementations */
+			tag\	<< RENAME
+				tagdict.go	was: tagmap.go
 			cards\
 				cardfile.go		-- fs based Cards
 			objects\
