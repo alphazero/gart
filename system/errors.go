@@ -9,7 +9,8 @@ import (
 /// defined errors /////////////////////////////////////////////////////////////
 
 var (
-	ErrInvalidArg = Error("invalid argument")
+	ErrInvalidArg  = Error("invalid argument")
+	ErrTagNotFound = Error("Tag for name not found")
 )
 
 /// defined bugs ///////////////////////////////////////////////////////////////
@@ -21,6 +22,10 @@ var (
 )
 
 /// defined faults /////////////////////////////////////////////////////////////
+
+var (
+	FaultOsRename = Fault("os.Rename error")
+)
 
 /// err/bug uniform formatters /////////////////////////////////////////////////
 

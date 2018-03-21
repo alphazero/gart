@@ -25,3 +25,8 @@ const (
 	DirPerm  = 0755 // all dirs are  drwxr-xr-x
 	FilePerm = 0644 // all files are -rw-r--r--
 )
+
+const (
+	OidSize        = 32  // bytes
+	MaxTagNameSize = 255 // bytes not chars.
+)
