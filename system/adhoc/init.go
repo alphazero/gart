@@ -4,8 +4,6 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/alphazero/gart/system"
 )
 
 func main() {

@@ -2,8 +2,9 @@
 package sort_test
 
 import (
-	"github.com/alphazero/gart/syslib/sort"
 	"testing"
+
+	"github.com/alphazero/gart/syslib/sort"
 )
 
 func TestUint64Slice(t *testing.T) {
