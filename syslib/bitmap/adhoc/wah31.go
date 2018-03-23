@@ -214,6 +214,8 @@ func (w *Wahl) Set(bits ...int) {
 			w.arr[i] |= 1 << (bit & 0x1f)
 		}
 	}
+	// compress it
+	w.Compress()
 }
 
 // Returns the maximum bit position in bitmap. This is simply the
@@ -439,7 +441,7 @@ func main() {
 	fmt.Printf("max: %d len:%d\n", wahl.Max(), wahl.Len())
 	wahl.Print(os.Stdout)
 	fmt.Println("-- test set -- ")
-	wahl.Set(5, 333, 1000, 1027)
+	wahl.Set(5, 333, 1000, 1027, 1132)
 	fmt.Printf("max: %d len:%d\n", wahl.Max(), wahl.Len())
 	wahl.Print(os.Stdout)
 }
