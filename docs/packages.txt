@@ -49,7 +49,7 @@ sketch:
 			bitmap\
 				bitmap.go
 				bah.go
-				wah.go
+				wahl.go
 			fs\
 				file.go		ok
 			sort\
