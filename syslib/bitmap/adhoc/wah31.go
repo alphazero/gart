@@ -53,9 +53,33 @@ func (w *Wahl) Decode(buf []byte) error {
 	return nil
 }
 
+var _ = bits.Reverse32
+
 func (w *Wahl) Len() int { return len(w.arr) }
 
 func (wah Wahl) Print(w io.Writer) {
+	var binfo = func(b uint32, max0 int) (int, int, int) {
+		n := 1
+		if b>>31 > 0 {
+			n = int(b & 0x3fffffff)
+		}
+		return max0 + 1, max0 + (n * 31), n
+	}
+
+	var min, max, n int = -1, -1, 0 //= binfo(0, 0)
+	for _, b := range wah.arr {
+		min, max, n = binfo(b, max)
+		fmt.Fprintf(w, "%06d       %06d       %06d ", min, n, max) // bits.Reverse32(n))
+	}
+	fmt.Fprintf(w, "\n")
+	for range wah.arr {
+		fmt.Fprintf(w, "..........1.........2.........3. ") // bits.Reverse32(n))
+	}
+	fmt.Fprintf(w, "\n")
+	for range wah.arr {
+		fmt.Fprintf(w, ".123456789.123456789.123456789.1 ") // bits.Reverse32(n))
+	}
+	fmt.Fprintf(w, "\n")
 	for _, n := range wah.arr {
 		fmt.Fprintf(w, "%032b ", bits.Reverse32(n))
 	}
@@ -86,25 +110,115 @@ func NewWahl(bits ...int) (*Wahl, error) {
 	return &wah, nil
 }
 
+// Set is used to
+// 	(a) create new bitmaps when gart is adding object with a new tag.
+//      most likely case is a sequence of 'bits' (corresonding to object keys)
+//      from n -> n+k. But this is not necessarily always true. (a 'new' file
+//		may in fact be an existing object with a new tag.)
+//
+//	(b) a single bit is being set. This is a very likely case, even in case of
+//		aggregate adds unless top-level gart batches the updates to the index.
+//
+//	(c) general case: a random selection of bits, not necessarily in sort order,
+//		are being set.
+//
+// Function may allocate new blocks before a final decompression at the end.
 func (w *Wahl) Set(bits ...int) {
-	sort.Ints(bits)
-	// REVU New() should be reconsidered and refactored into Set
+	if len(bits) > 1 {
+		sort.Ints(bits)
+	}
 
-	// general approach:
-	// as long as bits[i] < w.Max() we are either
-	// - setting a bit in an existing tile
-	// - splitting a fill-0 block into fill-0-pre, new-tile, fill-0-rem
-	// - nop in a fill-1 block.
-	/*
-		bitmax := bits[len(bits)-1]
-		wmax := w.Max()
-		if bitmax > w.Max() {
-			// REVU requires more thought
+	// if the maximum bitnum in bits is > w.Max(), then add the necessary blocks.
+	var wmax = w.Max() // (initial) maximum bit position in bitmap
+	var bitsmax = bits[len(bits)-1]
+	if bitsmax > wmax {
+		nblks := make([]uint32, ((bitsmax-wmax)/31)+1)
+		w.arr = append(w.arr, nblks...)
+	}
+	// Note we may still have to add more blocks if any fill-0 blocks need to
+	// be split but bitsmax is guaranteed to be in range of the bitmap and the
+	// updated wmax will -not- be affected.
+	wmax = w.Max() // update it. it will be >= bitsmax
+
+	// helper function returns range of the block given the prior
+	// block's range-max and runlen
+	var brange = func(b uint32, max0 int) (int, int, int) {
+		n := 1
+		if b>>31 > 0 {
+			n = int(b & 0x3fffffff)
 		}
-	*/
+		return max0 + 1, max0 + (n * 31), n
+	}
+
+	// since we've sorted the bits arg, an index i of wahl blocks will only
+	// move forward.
+	var i int // current block
+	// [min, max] bitrange of current block and its runlength
+	var bmin, bmax, rn = brange(w.arr[i], 0)
+	for _, bitnum := range bits {
+		for bitnum > bmax {
+			i++
+			bmin, bmax, rn = brange(w.arr[i], bmax)
+		}
+		switch block := w.arr[i]; {
+		case block>>30 == 0x2:
+			// fill-0 needs to be split (into 3 or 2 blocks) or changed into a tile
+			if rn == 1 { // change to tile
+				var bit = uint(bitnum % 31)
+				w.arr[i] = 1 << (bit & 0x1f)
+				continue
+			}
+			// splits
+			rn_a := (bitnum - bmin) / 31 // REVU if rn_a == 0
+			rn_z := rn - rn_a - 1        // REVU if rn_z == 0
+			switch {
+			case rn_a == 0: // split in 2 - set bit in 1st block
+				var bit = uint(bitnum % 31)
+				w.arr[i] = 1 << (bit & 0x1f)
+				arr := make([]uint32, len(w.arr)+1)
+				copy(arr, w.arr[:i+1])
+				arr[i+1] = 0x80000000 | uint32(rn_z) // assert (rn_z == rn - 1)
+				copy(arr[i+2:], w.arr[i+1:])
+				w.arr = arr
+				bmax = bmin + 30
+			case rn_z == 0: // split in 2 - set bit in 2nd block
+				arr := make([]uint32, len(w.arr)+1)
+				w.arr[i] = 0x80000000 | uint32(rn_a) // asert (rn_a == rn - 1)
+				copy(arr, w.arr[:i+1])
+				var bit = uint(bitnum % 31)
+				arr[i+1] = 1 << (bit & 0x1f)
+				copy(arr[i+2:], w.arr[i+1:])
+				w.arr = arr
+				// update block info - current is the new tile added
+				i++
+				bmin += (rn_a * 31)
+				bmax = bmin + 30
+			default: // split in 3 - set bit in middle block
+				arr := make([]uint32, len(w.arr)+2)
+				w.arr[i] = 0x80000000 | uint32(rn_a)
+				copy(arr, w.arr[:i+1])
+				var bit = uint(bitnum % 31)
+				arr[i+1] = 1 << (bit & 0x1f)
+				arr[i+2] = 0x80000000 | uint32(rn_z)
+				copy(arr[i+3:], w.arr[i+1:])
+				w.arr = arr
+				// update block info - current is the new tile added
+				i++
+				bmin += (rn_a * 31)
+				bmax = bmin + 30
+			}
+		case block>>30 == 0x3: // fill-1 is already set, next bit!
+			continue
+		default: // tile needs to have bitpos 'bitnum' set
+			var bit = uint(bitnum % 31)
+			w.arr[i] |= 1 << (bit & 0x1f)
+		}
+	}
 }
 
-// Returns the maximum bit position in bitmap.
+// Returns the maximum bit position in bitmap. This is simply the
+// number of decompressed blocks x 31. Function does -not- decompress and is
+// side-effect free.
 func (w *Wahl) Max() int {
 	var max int
 	for _, b := range w.arr {
@@ -255,78 +369,82 @@ func main() {
 	// to try:
 	// - find optimal way to use []int32 for wah
 	// - sketch out Wahl 32-bit encoding, compression, and logical ops
+	/*
+		bits := []int{1, 2, 30, 32, 60, 65, 1024}
+		onerun := make([]int, 333)
+		for i := 0; i < len(onerun); i++ {
+			onerun[i] = 1132 + i
+		}
+		bits = append(bits, onerun...)
+		for i := 0; i < len(onerun); i++ {
+			onerun[i] = 2018 + i
+		}
+		bits = append(bits, onerun...)
+		onerun = make([]int, 777)
+		for i := 0; i < len(onerun); i++ {
+			onerun[i] = 33329 + i
+		}
+		bits = append(bits, onerun...)
 
-	bits := []int{1, 2, 30, 32, 60, 65, 1024}
-	onerun := make([]int, 333)
-	for i := 0; i < len(onerun); i++ {
-		onerun[i] = 1132 + i
-	}
-	bits = append(bits, onerun...)
-	for i := 0; i < len(onerun); i++ {
-		onerun[i] = 2018 + i
-	}
-	bits = append(bits, onerun...)
-	onerun = make([]int, 777)
-	for i := 0; i < len(onerun); i++ {
-		onerun[i] = 33329 + i
-	}
-	bits = append(bits, onerun...)
-
-	wah, e := NewWahl(bits...)
-	if e != nil {
-		exitOnError(e)
-	}
-	//	arr.Set(0, 8, 16, 24, 31, 32, 40, 48, 56, 63, 64)
-	wah.Print(os.Stdout)
-
-	// test unsafe codec
-	fmt.Println("-- test encode -- ")
-	var buf = make([]byte, 3+wah.Len()*4)
-
-	if e := wah.Encode(buf); e != nil {
-		exitOnError(e)
-	}
-	for _, b := range buf {
-		fmt.Printf("%08b ", b)
-	}
-	fmt.Println()
-
-	fmt.Println("-- test decode -- ")
-	var wah2 Wahl
-	e = wah2.Decode(buf)
-	if e != nil {
-		exitOnError(e)
-	}
-	wah2.Print(os.Stdout)
-
-	fmt.Println("-- test compress -- ")
-	var wlen = wah.Len()
-	if wah.Compress() {
-		fmt.Printf("compressed from %d to %d blocks\n", wlen, wah.Len())
+		wah, e := NewWahl(bits...)
+		if e != nil {
+			exitOnError(e)
+		}
+		//	arr.Set(0, 8, 16, 24, 31, 32, 40, 48, 56, 63, 64)
 		wah.Print(os.Stdout)
-	}
 
-	fmt.Println("-- test decompress -- ")
-	wlen = wah.Len()
-	if wah.Decompress() {
-		fmt.Printf("decompressed from %d to %d blocks\n", wlen, wah.Len())
-		wah.Print(os.Stdout)
-	}
+		// test unsafe codec
+		fmt.Println("-- test encode -- ")
+		var buf = make([]byte, 3+wah.Len()*4)
 
+		if e := wah.Encode(buf); e != nil {
+			exitOnError(e)
+		}
+		for _, b := range buf {
+			fmt.Printf("%08b ", b)
+		}
+		fmt.Println()
+
+		fmt.Println("-- test decode -- ")
+		var wah2 Wahl
+		e = wah2.Decode(buf)
+		if e != nil {
+			exitOnError(e)
+		}
+		wah2.Print(os.Stdout)
+
+		fmt.Println("-- test compress -- ")
+		var wlen = wah.Len()
+		if wah.Compress() {
+			fmt.Printf("compressed from %d to %d blocks\n", wlen, wah.Len())
+			wah.Print(os.Stdout)
+		}
+
+		fmt.Println("-- test decompress -- ")
+		wlen = wah.Len()
+		if wah.Decompress() {
+			fmt.Printf("decompressed from %d to %d blocks\n", wlen, wah.Len())
+			wah.Print(os.Stdout)
+		}
+
+	*/
 	fmt.Println("-- test max -- ")
-	wah, e = NewWahl(1, 1024, 99999)
+	//	wahl, e := NewWahl(31, 32, 1024)
+	wahl, e := NewWahl(1024)
 	if e != nil {
 		exitOnError(e)
 	}
-	fmt.Printf("max: %d len:%d\n", wah.Max(), wah.Len())
-	wah.Compress()
-	fmt.Printf("max: %d len:%d\n", wah.Max(), wah.Len())
-
+	fmt.Printf("max: %d len:%d\n", wahl.Max(), wahl.Len())
+	wahl.Compress()
+	fmt.Printf("max: %d len:%d\n", wahl.Max(), wahl.Len())
+	wahl.Print(os.Stdout)
+	fmt.Println("-- test set -- ")
+	wahl.Set(5, 333, 1000, 1027)
+	fmt.Printf("max: %d len:%d\n", wahl.Max(), wahl.Len())
+	wahl.Print(os.Stdout)
 }
 
 func exitOnError(e error) {
 	fmt.Printf("err - %v\n", e)
 	os.Exit(1)
 }
-
-// fedcba98                         76543210
