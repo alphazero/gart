@@ -19,6 +19,44 @@ var (
 	ErrNotImplemented = fmt.Errorf("function not implemented")
 )
 
+/// wahl block (helper) ////////////////////////////////////////////////////////
+
+type wahlBlock struct {
+	val  uint32
+	fill bool
+	fval int
+	rlen int // 1 for tiles (to be consistent)
+}
+
+func (b wahlBlock) String() string {
+	var revbit = bits.Reverse32(b.val)
+	var typ = "tile"
+	if b.fill {
+		if b.fval == 0 {
+			typ = "fill-0"
+		} else {
+			typ = "fill-1"
+		}
+		return fmt.Sprintf("%030b %02b %-6s (%d)", revbit>>2, revbit&0x3, typ, b.rlen)
+	}
+	return fmt.Sprintf("%031b-  %-6s", revbit>>1, typ)
+}
+
+func WahlBlock(v uint32) wahlBlock {
+	var block = wahlBlock{v, false, 0, 1} // assume tile
+	switch {
+	case v>>31 == 0: // tile
+		return block
+	case v>>30 == 0x3: // fill 1
+		block.fval = 1
+	case v>>30 == 0x1: // fill 0
+		block.fval = 0
+	}
+	block.fill = true
+	block.rlen = int(v & 0x3fffffff)
+	return block
+}
+
 /// WπAπAπL /////////////////////////////////////////////////////////////////
 
 // 0                                1                                ... byte
@@ -28,6 +66,7 @@ var (
 // +x------x-------x-------x------+ +-------x-------x-------x------+
 //  30     24      16      8      0  63     56      48      40    32 ... bitset bit
 //
+
 type Wahl struct {
 	arr []uint32
 }
@@ -59,8 +98,7 @@ func (w *Wahl) Decode(buf []byte) error {
 // Allocates a new, zerovalue, Wahl object.
 func NewWahl() *Wahl { return &Wahl{[]uint32{0}} }
 
-// Allocates a new Wahl bitmap with the given initial bits.
-// Note that Wahl bitmaps are compressed by default.
+// Allocates a new (compressed) Wahl bitmap with the given initial bits.
 func NewWahlInit(bits ...uint) *Wahl {
 	w := NewWahl()
 
@@ -72,27 +110,16 @@ func NewWahlInit(bits ...uint) *Wahl {
 	return w
 }
 
-// Set is used to
-// 	(a) create new bitmaps when gart is adding object with a new tag.
-//      most likely case is a sequence of 'bits' (corresonding to object keys)
-//      from n -> n+k. But this is not necessarily always true. (a 'new' file
-//		may in fact be an existing object with a new tag.)
-//
-//	(b) a single bit is being set. This is a very likely case, even in case of
-//		aggregate adds unless top-level gart batches the updates to the index.
-//
-//	(c) general case: a random selection of bits, not necessarily in sort order,
-//		are being set.
+// Set sets the given 'bits' of the bitmap. It is irrelevant whether the bitmap
+// is in compressed or decompressed state.
 //
 // Set method will perform a final compress before returning.
-//
-// REVU has not been TODO tested with 1 fill sequences.
 func (w *Wahl) Set(bits ...uint) {
 	if len(bits) > 1 {
 		sort.Uints(bits)
 	}
 
-	// if the maximum bitnum in bits is > w.Max(), then add the necessary blocks.
+	// add additional blocks to w.arr if necessary
 	var wmax = w.Max() // (initial) maximum bit position in bitmap
 	var bitsmax = int(bits[len(bits)-1])
 	if bitsmax > wmax {
@@ -104,8 +131,7 @@ func (w *Wahl) Set(bits ...uint) {
 	// updated wmax will -not- be affected.
 	wmax = w.Max() // update it. it will be >= bitsmax
 
-	// helper function returns range of the block given the prior
-	// block's range-max and runlen
+	// returns range of the block 'b' & the prior max
 	var brange = func(b uint32, max0 int) (uint, uint, int) {
 		min := uint(max0) + 1
 		n := 1
@@ -115,8 +141,6 @@ func (w *Wahl) Set(bits ...uint) {
 		return min, min + (uint(n) * 31) - 1, n
 	}
 
-	// since we've sorted the bits arg, an index i of wahl blocks will only
-	// move forward.
 	var i int // current block
 	var bmin, bmax, rn = brange(w.arr[i], -1)
 	for _, bitnum := range bits {
@@ -141,13 +165,14 @@ func (w *Wahl) Set(bits ...uint) {
 				w.arr[i] = 1 << (bit & 0x1f)
 				arr := make([]uint32, len(w.arr)+1)
 				copy(arr, w.arr[:i+1])
-				arr[i+1] = 0x80000000 | uint32(rn_z) // assert (rn_z == rn - 1)
+				arr[i+1] = 0x80000000 | uint32(rn_z)
 				copy(arr[i+2:], w.arr[i+1:])
 				w.arr = arr
+				// update block info
 				bmax = bmin + 30
 			case rn_z == 0: // split in 2 - set bit in 2nd block
 				arr := make([]uint32, len(w.arr)+1)
-				w.arr[i] = 0x80000000 | uint32(rn_a) // asert (rn_a == rn - 1)
+				w.arr[i] = 0x80000000 | uint32(rn_a)
 				copy(arr, w.arr[:i+1])
 				var bit = uint(bitnum % 31)
 				arr[i+1] = 1 << (bit & 0x1f)
@@ -209,7 +234,6 @@ func (w *Wahl) Decompress() bool {
 		}
 		return a
 	}
-	// Bitmap is decompressed into block array.
 	// i indexes the compressed, and j the decompressed blocks.
 	const fill_0, fill_1 uint32 = 0x0, 0x7FFFFFFF
 	var blocks []uint32
@@ -220,19 +244,16 @@ func (w *Wahl) Decompress() bool {
 		switch {
 		case x>>30 == 0x3: // fill 1
 			n := int(x & 0x3fffffff)
-			//			fmt.Printf("fill-1 block[%d]: %032b - runlen:%d\n", i, x, n)
 			fillblocks = makefill(fill_1, n)
 			i++
 			j += n
 		case x>>30 == 0x2: // fill 0
 			n := int(x & 0x3fffffff)
-			//			fmt.Printf("fill-1 block[%d]: %032b - runlen:%d\n", i, x, n)
 			fillblocks = makefill(fill_0, n)
 			i++
 			j += n
 		case x>>31 == 0: // tile
 			fillblocks = []uint32{x}
-			//			fmt.Printf("tile   block[%d]: %032b\n", i, x)
 			i++
 			j++
 		}
@@ -265,12 +286,9 @@ func (w *Wahl) Compress() bool {
 		return n
 	}
 
-	// we have a bitmap of at least 2 blocks, so we can meaningfully
-	// compress it. we compress in-place.
+	// Compress in-place.
 	// i: index of block to consider for compression
 	// j: index of the last (possibly) rewritten block
-	//
-	// j may be equal to i if no (further) compression can be done.
 	var i, j int
 	for i < wlen {
 		var x = w.arr[i]
@@ -304,9 +322,10 @@ func (w *Wahl) Compress() bool {
 // Returns the number of blocks
 func (w *Wahl) Len() int { return len(w.arr) }
 
+// Returns the maximal bit position
 func (w *Wahl) Max() int {
 	var max int = -1
-	if e := w.apply(&max, maxBitsVisitor); e != nil {
+	if e := w.apply(maxBitsVisitor(&max)); e != nil {
 		panic(fmt.Errorf("bug - Wahl.Max: %v", e))
 	}
 	return max
@@ -314,7 +333,7 @@ func (w *Wahl) Max() int {
 
 // Note that bits are reversed and printed LSB -> MSB
 func (w Wahl) Print(writer io.Writer) {
-	if e := w.apply(writer, printVisitor); e != nil {
+	if e := w.apply(printVisitor(writer)); e != nil {
 		panic(fmt.Errorf("bug - Wahl.Print: %v", e))
 	}
 	fmt.Fprintf(writer, "\n")
@@ -322,7 +341,7 @@ func (w Wahl) Print(writer io.Writer) {
 
 // Note that bits are reversed and printed LSB -> MSB
 func (w Wahl) Debug(writer io.Writer) {
-	if e := w.apply(writer, debugPrintVisitor); e != nil {
+	if e := w.apply(debugVisitor(writer)); e != nil {
 		panic(fmt.Errorf("bug - Wahl.Print: %v", e))
 	}
 	fmt.Fprintf(writer, "\n")
@@ -331,14 +350,43 @@ func (w Wahl) Debug(writer io.Writer) {
 /// Wahl visitors //////////////////////////////////////////////////////////////
 
 // Visit function for Wahl.
-type visitFn func(ctx interface{}, bn int, val uint32) (done bool, err error)
+type visitFn func(bn int, val uint32) (done bool, err error)
+
+func maxBitsVisitor(max *int) visitFn {
+	return func(bnum int, bval uint32) (bool, error) {
+		*max += int(31 * WahlBlock(bval).rlen)
+		return false, nil
+	}
+}
+
+func printVisitor(w io.Writer) visitFn {
+	return func(bnum int, bval uint32) (bool, error) {
+		block := WahlBlock(bval)
+		fmt.Fprintf(w, "[%4d]: %s\n", bnum, block)
+		return false, nil
+	}
+}
+
+func debugVisitor(w io.Writer) visitFn {
+	return func(bnum int, bval uint32) (bool, error) {
+		block := WahlBlock(bval)
+		if block.fill {
+		} else {
+			fmt.Fprintf(w, "       01234567890123456789012345678901\n")
+			fmt.Fprintf(w, "       0---------1---------2---------3-\n")
+		}
+		fmt.Fprintf(w, "[%4d]:%s\n", bnum, block)
+		fmt.Fprintf(w, "\n")
+		return false, nil
+	}
+}
 
 // apply will walk the blocks and apply the visit function in sequence.
 // Iteration is stopped on completion or error by the visit func (which is
 // returned).
-func (w *Wahl) apply(ctx interface{}, visit visitFn) error {
+func (w *Wahl) apply(visit visitFn) error {
 	for i, block := range w.arr {
-		done, e := visit(ctx, i, block)
+		done, e := visit(i, block)
 		if e != nil {
 			return e
 		}
@@ -347,80 +395,6 @@ func (w *Wahl) apply(ctx interface{}, visit visitFn) error {
 		}
 	}
 	return nil
-}
-
-type wahlBlock struct {
-	val  uint32
-	fill bool
-	fval int
-	rlen int // 1 for tiles (to be consistent)
-}
-
-func (b wahlBlock) String() string {
-	var revbit = bits.Reverse32(b.val)
-	var typ = "tile"
-	if b.fill {
-		if b.fval == 0 {
-			typ = "fill-0"
-		} else {
-			typ = "fill-1"
-		}
-		return fmt.Sprintf("%030b %02b %-6s (%d)", revbit>>2, revbit&0x3, typ, b.rlen)
-	}
-	return fmt.Sprintf("%031b-  %-6s", revbit>>1, typ)
-}
-
-func WahlBlock(v uint32) wahlBlock {
-	var block = wahlBlock{v, false, 0, 1} // assume tile
-	switch {
-	case v>>31 == 0: // tile
-		return block
-	case v>>30 == 0x3: // fill 1
-		block.fval = 1
-	case v>>30 == 0x1: // fill 0
-		block.fval = 0
-	}
-	block.fill = true
-	block.rlen = int(v & 0x3fffffff)
-	return block
-}
-
-// usage:
-// var max uint
-// w.apply(&max, maxBitnumVisitor)
-func maxBitsVisitor(ctx interface{}, bnum int, bval uint32) (bool, error) {
-	max, ok := ctx.(*int)
-	if !ok {
-		return true, fmt.Errorf("Wahl.maxBitnumVisitor: ctx is not *uint")
-	}
-	*max += int(31 * WahlBlock(bval).rlen)
-	return false, nil
-}
-
-func printVisitor(ctx interface{}, bnum int, bval uint32) (bool, error) {
-	w, ok := ctx.(io.Writer)
-	if !ok {
-		return true, fmt.Errorf("Wahl.printerVisitor: ctx is not io.Writer")
-	}
-	block := WahlBlock(bval)
-	fmt.Fprintf(w, "[%4d]: %s\n", bnum, block)
-	return false, nil
-}
-
-func debugPrintVisitor(ctx interface{}, bnum int, bval uint32) (bool, error) {
-	w, ok := ctx.(io.Writer)
-	if !ok {
-		return true, fmt.Errorf("Wahl.printerVisitor: ctx is not io.Writer")
-	}
-	block := WahlBlock(bval)
-	if block.fill {
-	} else {
-		fmt.Fprintf(w, "       01234567890123456789012345678901\n")
-		fmt.Fprintf(w, "       0---------1---------2---------3-\n")
-	}
-	fmt.Fprintf(w, "[%4d]:%s\n", bnum, block)
-	fmt.Fprintf(w, "\n")
-	return false, nil
 }
 
 /// adhoc test /////////////////////////////////////////////////////////////////
