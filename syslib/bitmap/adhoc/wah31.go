@@ -57,6 +57,36 @@ func WahlBlock(v uint32) wahlBlock {
 	return block
 }
 
+/// wahl codecs ////////////////////////////////////////////////////////////////
+
+// REVU also New from array (buf or blocks) or just New
+
+// Writes the bitmap blocks to the given []byte slice.
+// ErrInvalidArg is returned if buf len < w.Size().
+func (w *Wahl) Encode(buf []byte) error {
+	var wlen = len(w.arr)
+	if len(buf) < (wlen << 2) {
+		return ErrInvalidArg
+	}
+	for i := 0; i < wlen; i++ {
+		*(*uint32)(unsafe.Pointer(&buf[i<<2])) = w.arr[i]
+	}
+	return nil
+}
+
+// Reads the bitmap blocks from the given []byte slice.
+// ErrInvalidArg is returned if buf len < 4.
+func (w *Wahl) Decode(buf []byte) error {
+	if len(buf) < 4 {
+		return ErrInvalidArg // minimum length
+	}
+	w.arr = make([]uint32, len(buf)>>2)
+	for i := 0; i < len(w.arr); i++ {
+		w.arr[i] = *(*uint32)(unsafe.Pointer(&buf[i<<2]))
+	}
+	return nil
+}
+
 /// WπAπAπL /////////////////////////////////////////////////////////////////
 
 // 0                                1                                ... byte
@@ -71,29 +101,11 @@ type Wahl struct {
 	arr []uint32
 }
 
-func (w *Wahl) Encode(buf []byte) error {
-	var wlen = len(w.arr)
-	if len(buf) < (wlen << 2) {
-		return ErrInvalidArg
-	}
-	for i := 0; i < wlen; i++ {
-		*(*uint32)(unsafe.Pointer(&buf[i<<2])) = w.arr[i]
-	}
-	return nil
-}
+// Returns the number of blocks
+func (w *Wahl) Len() int { return len(w.arr) }
 
-func (w *Wahl) Decode(buf []byte) error {
-	if len(buf) < 4 {
-		return ErrInvalidArg // minimum length
-	}
-	w.arr = make([]uint32, len(buf)>>2)
-	for i := 0; i < len(w.arr); i++ {
-		w.arr[i] = *(*uint32)(unsafe.Pointer(&buf[i<<2]))
-	}
-	return nil
-}
-
-// REVU also New from array (buf or blocks) or just New
+// Returns the (encoded) size in bytes.
+func (w *Wahl) Size() int { return len(w.arr) << 2 }
 
 // Allocates a new, zerovalue, Wahl object.
 func NewWahl() *Wahl { return &Wahl{[]uint32{0}} }
@@ -318,9 +330,6 @@ func (w *Wahl) Compress() bool {
 	}
 	return false
 }
-
-// Returns the number of blocks
-func (w *Wahl) Len() int { return len(w.arr) }
 
 // Returns the maximal bit position
 func (w *Wahl) Max() int {
