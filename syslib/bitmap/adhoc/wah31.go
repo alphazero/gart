@@ -37,9 +37,9 @@ func (b wahlBlock) String() string {
 		} else {
 			typ = "fill-1"
 		}
-		return fmt.Sprintf("%030b %02b %-6s (%d)", revbit>>2, revbit&0x3, typ, b.rlen)
+		return fmt.Sprintf("%030b %02b %-6s (%d) +%d", revbit>>2, revbit&0x3, typ, b.rlen, b.rlen*31)
 	}
-	return fmt.Sprintf("%031b-  %-6s", revbit>>1, typ)
+	return fmt.Sprintf("%031b-  %-6s +31", revbit>>1, typ)
 }
 
 func WahlBlock(v uint32) wahlBlock {
@@ -554,45 +554,28 @@ func main() {
 	// - find optimal way to use []int32 for wah
 	// - sketch out Wahl 32-bit encoding, compression, and logical ops
 
-	fmt.Println("-- test NewWah -- ")
-	var wahl0 = NewWahl()
-	wahl0.Print(os.Stdout)
-
-	fmt.Println("-- test Set -- ")
 	lotsofones := make([]uint, 333)
 	for i := 0; i < len(lotsofones); i++ {
-		lotsofones[i] = uint(i + 999)
+		lotsofones[i] = uint(i + 1000)
 	}
-	wahl0.Set(lotsofones...)
-	wahl0.Set(0, 61, 333, 1024)
-	wahl0.Print(os.Stdout)
 
-	fmt.Println("-- test NewWahInit-- ")
-	var wahl = NewWahlInit(0, 124, 155, 185, 186, 2309, 2311)
-	wahl.Print(os.Stdout)
+	var wahl_1 = NewWahl()
+	wahl_1.Set(lotsofones...)
+	wahl_1.Print(os.Stdout)
+
+	var wahl_2 = NewWahl()
+	wahl_2.Set(0, 124, 155, 185, 186, 2309, 2311)
+	wahl_2.Set(lotsofones[:111]...)
+	wahl_2.Print(os.Stdout)
 
 	fmt.Println("-- test AND -- ")
 
-	wahl_a := wahl0 // NewWahlInit(0, 30, 31)
-	wahl_b := wahl  //NewWahlInit(1, 30, 31, 32)
-	wahl2, e := wahl_a.And(wahl_b)
+	wahl_and, e := wahl_1.And(wahl_2)
 	if e != nil {
 		exitOnError(e)
 	}
-	wahl2.Debug(os.Stdout)
+	wahl_and.Print(os.Stdout)
 
-	return // XXX remove
-
-	fmt.Println("-- test compress -- ")
-	fmt.Printf("inital     - max:         %d len:%d\n", wahl.Max(), wahl.Len())
-	wahl.Compress()
-	fmt.Printf("compressed - max:         %d len:%d\n", wahl.Max(), wahl.Len())
-	wahl.Print(os.Stdout)
-
-	fmt.Println("-- test Set -- ")
-	wahl.Set(5, 333, 1000, 1027, 1132)
-	fmt.Printf("max: %d len:%d\n", wahl.Max(), wahl.Len())
-	wahl.Debug(os.Stdout)
 }
 
 func exitOnError(e error) {
