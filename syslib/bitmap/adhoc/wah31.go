@@ -85,6 +85,8 @@ func NewWahlInit(bits ...uint) *Wahl {
 //		are being set.
 //
 // Set method will perform a final compress before returning.
+//
+// REVU has not been TODO tested with 1 fill sequences.
 func (w *Wahl) Set(bits ...uint) {
 	if len(bits) > 1 {
 		sort.Uints(bits)
@@ -131,8 +133,8 @@ func (w *Wahl) Set(bits ...uint) {
 				continue
 			}
 			// splits
-			rn_a := int(bitnum-bmin) / 31 // REVU if rn_a == 0
-			rn_z := rn - rn_a - 1         // REVU if rn_z == 0
+			rn_a := int(bitnum-bmin) / 31
+			rn_z := rn - rn_a - 1
 			switch {
 			case rn_a == 0: // split in 2 - set bit in 1st block
 				var bit = uint(bitnum % 31)
@@ -242,6 +244,8 @@ func (w *Wahl) Decompress() bool {
 	return true
 }
 
+// Compress will (further) compress the bitmap.
+// Returns true if bitmap size is reduced.
 func (w *Wahl) Compress() bool {
 	var wlen = len(w.arr)
 
@@ -250,7 +254,7 @@ func (w *Wahl) Compress() bool {
 		return false
 	}
 
-	// little helper returns the number of blocks with value v
+	// little helper returns the number consequitive of blocks with value v
 	var runlen = func(i int, v uint32) int {
 		n := 1
 		for i+n < wlen && n < 0x3fffffff {
@@ -298,26 +302,70 @@ func (w *Wahl) Compress() bool {
 	return false
 }
 
-// Returns the maximum bit position in bitmap. This is simply the
-// number of decompressed blocks x 31. Function does -not- decompress and is
-// side-effect free.
+// Returns the number of blocks
+func (w *Wahl) Len() int { return len(w.arr) }
+
 func (w *Wahl) Max() uint {
 	var max uint
-	for _, b := range w.arr {
-		var n int // runlen
-		switch {
-		case b>>31 == 0x1: // fill
-			n = int(b & 0x3fffffff)
-		case b>>31 == 0: // tile
-			n = 1
-		}
-		max += uint(31 * n)
+	if e := w.apply(&max, maxBitsVisitor); e != nil {
+		panic(fmt.Errorf("bug - Wahl.Max: %v", e))
 	}
 	return max
 }
 
-// Returns the number of blocks
-func (w *Wahl) Len() int { return len(w.arr) }
+/// Wahl visitor & applications ////////////////////////////////////////////////
+
+// REVU seems logical to have TODO a ~visitor pattern for the blocks
+type visitFn func(ctx interface{}, bn int, val uint32) (done bool, err error)
+
+// apply will walk the blocks and apply the visit function in sequence.
+// Iteration is stopped on completion or error by the visit func (which is
+// returned).
+func (w *Wahl) apply(ctx interface{}, visit visitFn) error {
+	for i, block := range w.arr {
+		done, e := visit(ctx, i, block)
+		if e != nil {
+			return e
+		}
+		if done {
+			return nil
+		}
+	}
+	return nil
+}
+
+type wahlBlock struct {
+	fill bool
+	val  uint32 // tile value if fill is false, otherwise 0 or 1
+	rlen int    // 1 for tiles (to be consistent)
+}
+
+func WahlBlock(v uint32) wahlBlock {
+	var block = wahlBlock{false, v, 1} // assume tile
+	switch {
+	case v>>31 == 0: // tile
+		return block
+	case v>>30 == 0x3: // fill 1
+		block.val = 1
+	case v>>30 == 0x1: // fill 0
+		block.val = 0
+	}
+	block.fill = true
+	block.rlen = int(v & 0x3fffffff)
+	return block
+}
+
+// usage:
+// var max uint
+// w.apply(&max, maxBitnumVisitor)
+func maxBitsVisitor(ctx interface{}, bnum int, bval uint32) (bool, error) {
+	max, ok := ctx.(*uint)
+	if !ok {
+		return true, fmt.Errorf("Wahl.maxBitnumVisitor: ctx is not *uint")
+	}
+	*max += uint(31 * WahlBlock(bval).rlen)
+	return false, nil
+}
 
 // Note that bits are reversed and printed LSB -> MSB
 func (wah Wahl) Print(w io.Writer) {
@@ -375,12 +423,13 @@ func main() {
 
 	fmt.Println("-- test NewWahInit-- ")
 	var wahl = NewWahlInit(1, 7, 11, 13, 17, 19, 23, 29, 30, 31, 37, 2309, 2311)
+	wahl.Decompress() // decompress as Wahl is compressed by default
 	wahl.Print(os.Stdout)
 
 	fmt.Println("-- test compress -- ")
-	fmt.Printf("inital     - max: %d len:%d\n", wahl.Max(), wahl.Len())
+	fmt.Printf("inital     - max:         %d len:%d\n", wahl.Max(), wahl.Len())
 	wahl.Compress()
-	fmt.Printf("compressed - max: %d len:%d\n", wahl.Max(), wahl.Len())
+	fmt.Printf("compressed - max:         %d len:%d\n", wahl.Max(), wahl.Len())
 	wahl.Print(os.Stdout)
 
 	fmt.Println("-- test Set -- ")
