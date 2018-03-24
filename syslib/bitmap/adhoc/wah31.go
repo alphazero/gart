@@ -94,14 +94,12 @@ func (w *Wahl) Set(bits ...uint) {
 
 	// if the maximum bitnum in bits is > w.Max(), then add the necessary blocks.
 	var wmax = w.Max() // (initial) maximum bit position in bitmap
-	//	fmt.Printf("w.Max: %d\n", wmax)
 	var bitsmax = int(bits[len(bits)-1])
 	if bitsmax > wmax {
 		nblks := make([]uint32, ((bitsmax-wmax)/31)+1)
 		w.arr = append(w.arr, nblks...)
-		//		fmt.Printf("bitmax:%d wmax:%d nblks:%d\n", bitsmax, wmax, len(nblks))
 	}
-	// Note we may still have to add more blocks if any fill-0 blocks need to
+	// We may still have to add more blocks if any fill-0 blocks need to
 	// be split but bitsmax is guaranteed to be in range of the bitmap and the
 	// updated wmax will -not- be affected.
 	wmax = w.Max() // update it. it will be >= bitsmax
@@ -120,15 +118,11 @@ func (w *Wahl) Set(bits ...uint) {
 	// since we've sorted the bits arg, an index i of wahl blocks will only
 	// move forward.
 	var i int // current block
-	// [min, max] bitrange of current block and its runlength
 	var bmin, bmax, rn = brange(w.arr[i], -1)
-	//	fmt.Printf("n:%d bmin:%d bmax:%d rn:%d\n", i, bmin, bmax, rn)
 	for _, bitnum := range bits {
-		//		fmt.Printf("bitnum:%d\n", bitnum)
 		for bitnum > bmax {
 			i++
 			bmin, bmax, rn = brange(w.arr[i], int(bmax))
-			//			fmt.Printf("advance: n:%d bmin:%d bmax:%d rn:%d\n", i, bmin, bmax, rn)
 		}
 		switch block := w.arr[i]; {
 		case block>>30 == 0x2:
@@ -178,15 +172,12 @@ func (w *Wahl) Set(bits ...uint) {
 				bmax = bmin + 30
 			}
 		case block>>30 == 0x3: // fill-1 is already set, next bit!
-			//			fmt.Println("NOP: fill-1 already set")
 			continue
 		default: // tile needs to have bitpos 'bitnum' set
 			var bit = uint(bitnum % 31)
-			//			fmt.Printf("[%d]: TILE: set bit %d for bitnum:%d\n", i, bit, bitnum)
 			w.arr[i] |= 1 << (bit & 0x1f)
 		}
 	}
-
 	w.Compress()
 }
 
