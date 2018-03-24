@@ -331,6 +331,145 @@ func (w *Wahl) Compress() bool {
 	return false
 }
 
+func (w Wahl) And(other *Wahl) (*Wahl, error) {
+	if other == nil {
+		return nil, ErrInvalidArg
+	}
+	// XXX
+	fmt.Println("--- And --")
+	w.Print(os.Stdout)
+	other.Print(os.Stdout)
+
+	// yes, its santa's little helper
+	var _max = func(a, b int) int {
+		if a > b {
+			return a
+		}
+		return b
+	}
+
+	// alias bitmap names for notational convenience
+	var w1, w2 = w, other
+	var i, j int // i index w1, j index w2
+	var wlen1, wlen2 int = w1.Len(), w2.Len()
+	var res = make([]uint32, (_max(w1.Max(), w2.Len())/31)+1)
+	var k int // k index res
+outer:
+	for i < wlen1 && j < wlen2 {
+		var wb1 = WahlBlock(w1.arr[i])
+		var wb2 = WahlBlock(w2.arr[j])
+	inner:
+		for {
+			switch {
+			case !(wb1.fill || wb2.fill): // two tiles
+				res[k] = wb1.val & wb2.val
+				fmt.Printf("T/T  - res[%d] %032b\n", k, bits.Reverse32(res[k]))
+				k++
+				i++
+				j++
+				continue outer
+			case wb1.fill && wb2.fill: // two fills
+				fmt.Printf("F/F - w1 [%d] rlen:%d - w2 [%d] rlen:%d", i, wb1.rlen, j, wb2.rlen)
+				fill := uint32(0x80000000) | uint32((wb1.fval|wb2.fval)<<30)
+				switch {
+				case wb1.rlen > wb2.rlen:
+					rlen := uint32(wb2.rlen)
+					fill |= rlen
+					res[k] = fill
+					fmt.Printf(" rn1 > rn2 - res[%d] %032b ", k, bits.Reverse32(res[k]))
+					k++
+					j++
+					if j >= wlen2 {
+						continue outer // just a formality - it's done
+					}
+					wb1.rlen -= wb2.rlen
+					fmt.Printf("--> rlen1:%d\n", wb1.rlen)
+					wb2 = WahlBlock(w2.arr[j])
+					continue inner
+				case wb1.rlen < wb2.rlen:
+					rlen := uint32(wb1.rlen)
+					fill |= rlen
+					res[k] = fill
+					fmt.Printf("rn1 < rn2 - res[%d] %032b ", k, bits.Reverse32(res[k]))
+					k++
+					i++
+					if i >= wlen1 {
+						continue outer // just a formality - it's done
+					}
+					wb2.rlen -= wb1.rlen
+					fmt.Printf("--> rlen2:%d\n", wb2.rlen)
+					wb1 = WahlBlock(w1.arr[i])
+					continue inner
+				default: // a match made in heaven ..
+					rlen := uint32(wb1.rlen)
+					fill |= rlen
+					res[k] = fill
+					fmt.Printf("rn1 = rn2 - res[%d] %032b --> +ij\n ", k, bits.Reverse32(res[k]))
+					k++
+					i++
+					j++
+					continue outer
+				}
+			case wb1.fill: // w2 is a tile
+				fmt.Printf("F/T - w1 [%d] rlen:%d - ", i, wb1.rlen)
+				var tile uint32
+				if wb1.fval == 1 {
+					tile = wb2.val
+				}
+				res[k] = tile
+				fmt.Printf("res[%d] %032b ", k, bits.Reverse32(res[k]))
+				k++
+				j++
+				if j >= wlen2 {
+					continue outer // just a formality - it's done
+				}
+				wb2 = WahlBlock(w2.arr[j])
+				if wb1.rlen > 1 {
+					wb1.rlen--
+					fmt.Printf("--> rlen1:%d\n", wb1.rlen)
+					continue inner
+				}
+				i++
+				fmt.Printf("--> +ij\n")
+				if i >= wlen1 {
+					continue outer // just a formality - it's done
+				}
+				continue outer
+			case wb2.fill:
+				fmt.Printf("T/F - w2 [%d] rlen:%d - ", j, wb2.rlen)
+				var tile uint32
+				if wb2.fval == 1 {
+					tile = wb1.val
+				}
+				res[k] = tile
+				fmt.Printf("res[%d] %032b ", k, bits.Reverse32(res[k]))
+				k++
+				i++
+				if i >= wlen1 {
+					continue outer // just a formality - it's done
+				}
+				wb1 = WahlBlock(w1.arr[i])
+				if wb2.rlen > 1 {
+					wb2.rlen--
+					fmt.Printf("--> rlen2:%d\n", wb2.rlen)
+					continue inner
+				}
+				j++
+				fmt.Printf("--> +ij\n")
+				if j >= wlen2 {
+					continue outer // just a formality - it's done
+				}
+				continue outer
+			}
+		}
+	}
+	fmt.Println()
+	wahl := &Wahl{res}
+	wahl.Compress()
+
+	return wahl, nil
+}
+
 // Returns the maximal bit position
 func (w *Wahl) Max() int {
 	var max int = -1
@@ -425,21 +564,24 @@ func main() {
 		lotsofones[i] = uint(i + 999)
 	}
 	wahl0.Set(lotsofones...)
-	wahl0.Set(0, 61, 222, 1024)
-	wahl0.Decompress()
+	wahl0.Set(0, 61, 333, 1024)
 	wahl0.Print(os.Stdout)
-	wahl0.Compress()
-	wahl0.Print(os.Stdout)
-	return
 
 	fmt.Println("-- test NewWahInit-- ")
-	//	var wahl = NewWahlInit(1, 7, 11, 13, 17, 19, 23, 29, 30, 31, 37, 2309, 2311)
-	// TODO fix BUG when bitnum is multiple of 31
-	var wahl = NewWahlInit(0, 124, 155, 185, 186, 2309, 2311) // 7, 7, 11, 13, 17, 19, 23, 29, 30, 37, 2309, 2311)
-	//wahl.Decompress()                                         // decompress as Wahl is compressed by default
+	var wahl = NewWahlInit(0, 124, 155, 185, 186, 2309, 2311)
 	wahl.Print(os.Stdout)
-	return
-	// end BUG
+
+	fmt.Println("-- test AND -- ")
+
+	wahl_a := wahl0 // NewWahlInit(0, 30, 31)
+	wahl_b := wahl  //NewWahlInit(1, 30, 31, 32)
+	wahl2, e := wahl_a.And(wahl_b)
+	if e != nil {
+		exitOnError(e)
+	}
+	wahl2.Debug(os.Stdout)
+
+	return // XXX remove
 
 	fmt.Println("-- test compress -- ")
 	fmt.Printf("inital     - max:         %d len:%d\n", wahl.Max(), wahl.Len())
