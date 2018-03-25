@@ -313,7 +313,7 @@ func (w *Wahl) Compress() bool {
 
 	/// compressor //////////////////////////////////////////////////
 
-	fmt.Printf("-- compress -- BEGIN\n")
+	//	fmt.Printf("-- compress -- BEGIN\n")
 	var pass int
 	for pass < 2 {
 		var wlen = len(w.arr)
@@ -322,9 +322,9 @@ func (w *Wahl) Compress() bool {
 			return false
 		}
 
-		fmt.Printf("\t-Pass: %d ----- IN --\n", pass)
-		w.Print(os.Stdout)
-		fmt.Printf("\t--------------------\n")
+		//		fmt.Printf("\t-Pass: %d ----- IN --\n", pass)
+		//		w.Print(os.Stdout)
+		//		fmt.Printf("\t--------------------\n")
 
 		// Compress in-place.
 		// i: index of block to consider for compression
@@ -357,7 +357,7 @@ func (w *Wahl) Compress() bool {
 		}
 		// trim (maybe)
 		if j < wlen {
-			fmt.Printf("trim j:%d wlen:%d\n", j, wlen)
+			//			fmt.Printf("trim j:%d wlen:%d\n", j, wlen)
 			w.arr = w.arr[:j]
 		}
 		pass++
@@ -367,14 +367,14 @@ func (w *Wahl) Compress() bool {
 	k := len(w.arr) - 1
 	wb := WahlBlock(w.arr[k])
 	if (wb.fill && wb.fval == 0) || (!wb.fill && wb.val == 0x7fffffff) {
-		fmt.Printf("\tremove [%d] %s\n", k, WahlBlock(w.arr[k]))
+		//		fmt.Printf("\tremove [%d] %s\n", k, WahlBlock(w.arr[k]))
 		w.arr = w.arr[:k]
 	}
 
-	fmt.Println()
-	fmt.Printf("-------------- OUT -\n")
-	w.Print(os.Stdout)
-	fmt.Printf("-- compress -- END -\n")
+	//	fmt.Println()
+	//	fmt.Printf("-------------- OUT -\n")
+	//	w.Print(os.Stdout)
+	//	fmt.Printf("-- compress -- END -\n")
 	return false
 }
 
@@ -662,15 +662,18 @@ func main() {
 	}
 
 	var wahl_1 = NewWahl()
+	fmt.Println("-- set (0, 30, 63, 93)     ======================-- ")
+	wahl_1.Set(0, 30, 63, 93)
+	wahl_1.Print(os.Stdout)
 	fmt.Println("-- set [:111] (1000->1110) ======================-- ")
 	wahl_1.Set(lotsofones[:111]...)
-	//	wahl_1.Print(os.Stdout)
+	wahl_1.Print(os.Stdout)
 	fmt.Println("-- set [111:222] (1111->1221) ======================-- ")
 	wahl_1.Set(lotsofones[111:222]...)
-	//	wahl_1.Print(os.Stdout)
+	wahl_1.Print(os.Stdout)
 	fmt.Println("-- set [222:   ] (1222->1332) ======================-- ")
 	wahl_1.Set(lotsofones[222:]...)
-	//	wahl_1.Print(os.Stdout)
+	wahl_1.Print(os.Stdout)
 
 	return
 
