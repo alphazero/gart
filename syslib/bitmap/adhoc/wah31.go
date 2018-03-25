@@ -37,8 +37,8 @@ func (b wahlBlock) String() string {
 		} else {
 			typ = "fill-1"
 		}
-		//		return fmt.Sprintf("%030b %02b %-6s (%-4d) +%d", revbit>>2, revbit&0x3, typ, b.rlen, b.rlen*31)
-		return fmt.Sprintf("%030b %02b %-6s +%-5d", revbit>>2, revbit&0x3, typ, b.rlen*31)
+		return fmt.Sprintf("%030b %02b %-6s +%-5d",
+			revbit>>2, revbit&0x3, typ, b.rlen*31)
 	}
 	return fmt.Sprintf("%031b-  %-6s +31   ", revbit>>1, typ)
 }
@@ -287,7 +287,7 @@ func (w *Wahl) Compress() bool {
 	/// santa's little helpers //////////////////////////////////////
 
 	// returns number of consecuitive tiles with value v
-	var runlen = func(i int, v uint32) int {
+	var tileMerge = func(i int, v uint32) int {
 		n := 1
 		for i+n < len(w.arr) && n < 0x3fffffff {
 			if w.arr[i+n] != v {
@@ -298,7 +298,8 @@ func (w *Wahl) Compress() bool {
 		return n
 	}
 	// returns number of consecuitive fills with value v
-	var fillmerge = func(i int, fval int) (int, int) {
+	// and the total runlen
+	var fillMerge = func(i int, fval int) (int, int) {
 		var rn int
 		var nb = 0
 		for nb+i < len(w.arr) {
@@ -335,17 +336,17 @@ func (w *Wahl) Compress() bool {
 			var wb = WahlBlock(w.arr[i])
 			switch {
 			case wb.val == 0: // all 0 tile
-				n := runlen(i, wb.val)
+				n := tileMerge(i, wb.val)
 				w.arr[j] = 0x80000000 | uint32(n)
 				i += n
 				j++
 			case wb.val == 0x7fffffff: // all 1 tile
-				n := runlen(i, wb.val)
+				n := tileMerge(i, wb.val)
 				w.arr[j] = 0xc0000000 | uint32(n)
 				i += n
 				j++
 			case wb.fill:
-				rn, bn := fillmerge(i, wb.fval)
+				rn, bn := fillMerge(i, wb.fval)
 				fill := uint32(0x80000000) | uint32(wb.fval<<30) | uint32(rn)
 				w.arr[j] = fill
 				j++
@@ -358,7 +359,6 @@ func (w *Wahl) Compress() bool {
 		}
 		// trim (maybe)
 		if j < wlen {
-			//			fmt.Printf("trim j:%d wlen:%d\n", j, wlen)
 			w.arr = w.arr[:j]
 		}
 		pass++
@@ -368,7 +368,6 @@ func (w *Wahl) Compress() bool {
 	k := len(w.arr) - 1
 	wb := WahlBlock(w.arr[k])
 	if (wb.fill && wb.fval == 0) || (!wb.fill && wb.val == 0x7fffffff) {
-		//		fmt.Printf("\tremove [%d] %s\n", k, WahlBlock(w.arr[k]))
 		w.arr = w.arr[:k]
 	}
 
@@ -379,61 +378,8 @@ func (w *Wahl) Compress() bool {
 	return false
 }
 
-// Compress will (further) compress the bitmap.
-// Returns true if bitmap size is reduced.
-func (w *Wahl) Compress_works_not_gathering() bool {
-	var wlen = len(w.arr)
-
-	// trivial cases
-	if wlen <= 1 {
-		return false
-	}
-
-	// little helper returns the number consequitive of blocks with value v
-	var runlen = func(i int, v uint32) int {
-		n := 1
-		for i+n < wlen && n < 0x3fffffff {
-			if w.arr[i+n] != v {
-				return n
-			}
-			n++
-		}
-		return n
-	}
-
-	// Compress in-place.
-	// i: index of block to consider for compression
-	// j: index of the last (possibly) rewritten block
-	var i, j int
-	for i < wlen {
-		var x = w.arr[i]
-		switch {
-		case x == 0: // all 0 tile
-			n := runlen(i, x)
-			w.arr[j] = 0x80000000 | uint32(n)
-			i += n
-			j++
-		case x == 0x7fffffff: // all 1 tile
-			n := runlen(i, x)
-			w.arr[j] = 0xc0000000 | uint32(n)
-			i += n
-			j++
-		case x>>31 == 1: // already fill block
-			fallthrough
-		default: // specific non-monotonic bit pattern tile block
-			w.arr[j] = w.arr[i]
-			i++
-			j++
-		}
-	}
-	// trim (maybe)
-	if j < wlen {
-		w.arr = w.arr[:j]
-		return true
-	}
-	return false
-}
-
+// Bitwise logical AND, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
 func (w Wahl) And(other *Wahl) (*Wahl, error) {
 	if other == nil {
 		return nil, ErrInvalidArg
