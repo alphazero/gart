@@ -37,9 +37,10 @@ func (b wahlBlock) String() string {
 		} else {
 			typ = "fill-1"
 		}
-		return fmt.Sprintf("%030b %02b %-6s (%d) +%d", revbit>>2, revbit&0x3, typ, b.rlen, b.rlen*31)
+		//		return fmt.Sprintf("%030b %02b %-6s (%-4d) +%d", revbit>>2, revbit&0x3, typ, b.rlen, b.rlen*31)
+		return fmt.Sprintf("%030b %02b %-6s +%-5d", revbit>>2, revbit&0x3, typ, b.rlen*31)
 	}
-	return fmt.Sprintf("%031b-  %-6s +31", revbit>>1, typ)
+	return fmt.Sprintf("%031b-  %-6s +31   ", revbit>>1, typ)
 }
 
 func WahlBlock(v uint32) wahlBlock {
@@ -591,7 +592,8 @@ func (w Wahl) Print(writer io.Writer) {
 
 // Note that bits are reversed and printed LSB -> MSB
 func (w Wahl) Debug(writer io.Writer) {
-	if e := w.apply(debugVisitor(writer)); e != nil {
+	var max int = -1
+	if e := w.apply(debugVisitor(writer, &max)); e != nil {
 		panic(fmt.Errorf("bug - Wahl.Print: %v", e))
 	}
 	fmt.Fprintf(writer, "\n")
@@ -617,16 +619,12 @@ func printVisitor(w io.Writer) visitFn {
 	}
 }
 
-func debugVisitor(w io.Writer) visitFn {
+func debugVisitor(w io.Writer, max *int) visitFn {
 	return func(bnum int, bval uint32) (bool, error) {
 		block := WahlBlock(bval)
-		if block.fill {
-		} else {
-			fmt.Fprintf(w, "       01234567890123456789012345678901\n")
-			fmt.Fprintf(w, "       0---------1---------2---------3-\n")
-		}
-		fmt.Fprintf(w, "[%4d]:%s\n", bnum, block)
-		fmt.Fprintf(w, "\n")
+		r0 := *max + 1
+		*max += int(31 * block.rlen)
+		fmt.Fprintf(w, "[%4d]:%s (%d, %d)\n", bnum, block, r0, *max)
 		return false, nil
 	}
 }
@@ -673,7 +671,7 @@ func main() {
 	wahl_1.Print(os.Stdout)
 	fmt.Println("-- set [222:   ] (1222->1332) ======================-- ")
 	wahl_1.Set(lotsofones[222:]...)
-	wahl_1.Print(os.Stdout)
+	wahl_1.Debug(os.Stdout)
 
 	return
 
