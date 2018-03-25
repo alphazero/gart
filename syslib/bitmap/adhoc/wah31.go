@@ -276,8 +276,11 @@ func (w *Wahl) Decompress() bool {
 	return true
 }
 
-// Compress will (further) compress the bitmap.
+// Compress will (further) compress the bitmap. Current implementation is a
+// 2-pass compressor.
 // Returns true if bitmap size is reduced.
+//
+// REVU ? maybe Set shouldn't call compress directly anymore.
 func (w *Wahl) Compress() bool {
 
 	/// santa's little helpers //////////////////////////////////////
@@ -360,7 +363,14 @@ func (w *Wahl) Compress() bool {
 		pass++
 	}
 
-	// final remove trailing fill-0
+	// final remove (maybe) trailing fill-0
+	k := len(w.arr) - 1
+	wb := WahlBlock(w.arr[k])
+	if (wb.fill && wb.fval == 0) || (!wb.fill && wb.val == 0x7fffffff) {
+		fmt.Printf("\tremove [%d] %s\n", k, WahlBlock(w.arr[k]))
+		w.arr = w.arr[:k]
+	}
+
 	fmt.Println()
 	fmt.Printf("-------------- OUT -\n")
 	w.Print(os.Stdout)
