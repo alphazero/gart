@@ -109,7 +109,7 @@ func (w *Wahl) Len() int { return len(w.arr) }
 func (w *Wahl) Size() int { return len(w.arr) << 2 }
 
 // Allocates a new, zerovalue, Wahl object.
-func NewWahl() *Wahl { return &Wahl{[]uint32{0}} }
+func NewWahl() *Wahl { return &Wahl{[]uint32{}} }
 
 // Allocates a new (compressed) Wahl bitmap with the given initial bits.
 func NewWahlInit(bits ...uint) *Wahl {
@@ -519,6 +519,20 @@ outer:
 	return wahl, nil
 }
 
+// Returns the position of all set bits in the bitmap. The returned
+// bits are in ascending order. Returns array may be empty but never nil.
+func (w *Wahl) Bits() Bitnums {
+	var bits []uint
+	var p0 uint // bit position of the initial bit in the block
+	// REVU think about how to pre-allocate the bits array
+	//      without (a) using too much memory, and (b) requiring
+	//		any further appends in the visitor code. TODO
+	if e := w.apply(getBitsVisitor(&bits, &p0)); e != nil {
+		panic(fmt.Errorf("bug - Wahl.Bits: %v", e))
+	}
+	return Bitnums(bits)
+}
+
 // Returns the maximal bit position
 func (w *Wahl) Max() int {
 	var max int = -1
@@ -530,16 +544,9 @@ func (w *Wahl) Max() int {
 
 // Note that bits are reversed and printed LSB -> MSB
 func (w Wahl) Print(writer io.Writer) {
-	if e := w.apply(printVisitor(writer)); e != nil {
-		panic(fmt.Errorf("bug - Wahl.Print: %v", e))
-	}
-	fmt.Fprintf(writer, "\n")
-}
-
-// Note that bits are reversed and printed LSB -> MSB
-func (w Wahl) Debug(writer io.Writer) {
 	var max int = -1
-	if e := w.apply(debugVisitor(writer, &max)); e != nil {
+	//	if e := w.apply(debugVisitor(writer, &max)); e != nil {
+	if e := w.apply(printVisitor(writer, &max)); e != nil {
 		panic(fmt.Errorf("bug - Wahl.Print: %v", e))
 	}
 	fmt.Fprintf(writer, "\n")
@@ -547,8 +554,37 @@ func (w Wahl) Debug(writer io.Writer) {
 
 /// Wahl visitors //////////////////////////////////////////////////////////////
 
-// Visit function for Wahl.
+// Visit function type for Wahl blocks.
 type visitFn func(bn int, val uint32) (done bool, err error)
+
+func getBitsVisitor(bits *[]uint, p0 *uint) visitFn {
+	return func(bnum int, bval uint32) (bool, error) {
+		block := WahlBlock(bval)
+		if block.fill && block.fval == 1 {
+			bitcnt := uint(block.rlen * 31)
+			println(bitcnt)
+			var blockBits = make([]uint, bitcnt)
+			for i := uint(0); i < uint(len(blockBits)); i++ {
+				blockBits[i] = *p0 + i
+			}
+			*bits = append(*bits, blockBits...)
+		} else if !block.fill {
+			// need to check individual bits in tile
+			var blockBits [31]uint
+			var j int // indexes blockbits
+			for i := uint(0); i < 32; i++ {
+				if block.val&0x1 == 1 {
+					blockBits[j] = *p0 + i
+					j++
+				}
+				block.val >>= 1
+			}
+			*bits = append(*bits, blockBits[:j]...)
+		}
+		*p0 += uint(block.rlen * 31)
+		return false, nil
+	}
+}
 
 func maxBitsVisitor(max *int) visitFn {
 	return func(bnum int, bval uint32) (bool, error) {
@@ -557,15 +593,8 @@ func maxBitsVisitor(max *int) visitFn {
 	}
 }
 
-func printVisitor(w io.Writer) visitFn {
-	return func(bnum int, bval uint32) (bool, error) {
-		block := WahlBlock(bval)
-		fmt.Fprintf(w, "[%4d]: %s\n", bnum, block)
-		return false, nil
-	}
-}
-
-func debugVisitor(w io.Writer, max *int) visitFn {
+//func debugVisitor(w io.Writer, max *int) visitFn {
+func printVisitor(w io.Writer, max *int) visitFn {
 	return func(bnum int, bval uint32) (bool, error) {
 		block := WahlBlock(bval)
 		r0 := *max + 1
@@ -600,33 +629,43 @@ func main() {
 	// - find optimal way to use []int32 for wah
 	// - sketch out Wahl 32-bit encoding, compression, and logical ops
 
+	// lotsofones are bits in range (1000, 1332)
 	lotsofones := make([]uint, 333)
 	for i := 0; i < len(lotsofones); i++ {
 		lotsofones[i] = uint(i + 1000)
 	}
 
 	var wahl_1 = NewWahl()
-	fmt.Println("-- set (0, 30, 63, 93)     ======================-- ")
 	wahl_1.Set(0, 30, 63, 93)
+	wahl_1.Set(lotsofones[:33]...)
+	wahl_1.Bits().Print(os.Stdout)
 	wahl_1.Print(os.Stdout)
+
+	var wahl_2 = NewWahl()
+	wahl_2.Set(0, 1, 29, 31, 93, 124, 155, 185, 186, 1000, 1001, 1003, 1007, 2309, 2311)
+	wahl_2.Bits().Print(os.Stdout)
+	wahl_2.Print(os.Stdout)
+
+	wahl_1_and_2, e := wahl_1.And(wahl_2)
+	if e != nil {
+		exitOnError(e)
+	}
+	wahl_1_and_2.Bits().Print(os.Stdout)
+	wahl_1_and_2.Print(os.Stdout)
+
+	return
+
 	fmt.Println("-- set [:111] (1000->1110) ======================-- ")
 	wahl_1.Set(lotsofones[:111]...)
+	wahl_1.Bits().Print(os.Stdout)
 	wahl_1.Print(os.Stdout)
+
 	fmt.Println("-- set [111:222] (1111->1221) ======================-- ")
 	wahl_1.Set(lotsofones[111:222]...)
 	wahl_1.Print(os.Stdout)
 	fmt.Println("-- set [222:   ] (1222->1332) ======================-- ")
 	wahl_1.Set(lotsofones[222:]...)
-	wahl_1.Debug(os.Stdout)
-
-	return
-
-	var wahl_2 = NewWahl()
-	wahl_2.Set(0, 124, 155, 185, 186, 2309, 2311)
-	wahl_2.Set(lotsofones[:111]...)
-	wahl_2.Print(os.Stdout)
-
-	fmt.Println("-- test AND -- ")
+	wahl_1.Print(os.Stdout)
 
 	wahl_and, e := wahl_1.And(wahl_2)
 	if e != nil {
@@ -634,6 +673,16 @@ func main() {
 	}
 	wahl_and.Print(os.Stdout)
 
+}
+
+type Bitnums []uint
+
+func (a Bitnums) Print(w io.Writer) {
+	fmt.Fprintf(w, "{ ")
+	for _, pos := range a {
+		fmt.Fprintf(w, "%d ", pos)
+	}
+	fmt.Fprintf(w, "}\n")
 }
 
 func exitOnError(e error) {
