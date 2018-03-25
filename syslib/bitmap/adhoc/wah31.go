@@ -286,6 +286,90 @@ func (w *Wahl) Compress() bool {
 		return false
 	}
 
+	fmt.Printf("-- compress -- BEGIN\n")
+	fmt.Printf("-------------- IN --\n")
+	w.Print(os.Stdout)
+	fmt.Printf("--------------------\n")
+
+	// returns number of consecuitive tiles with value v
+	var runlen = func(i int, v uint32) int {
+		n := 1
+		for i+n < wlen && n < 0x3fffffff {
+			if w.arr[i+n] != v {
+				return n
+			}
+			n++
+		}
+		return n
+	}
+	// returns number of consecuitive fills with value v
+	var fillmerge = func(i int, fval int) (int, int) {
+		var rn int
+		var nb = 0
+		for nb+i < wlen {
+			wb := WahlBlock(w.arr[nb+i])
+			fmt.Printf("\t\t ? [%d] %s ? \n", nb+i, wb)
+			if !wb.fill || wb.fval != fval {
+				return rn, nb
+			}
+			nb++
+			rn += wb.rlen
+		}
+		return rn, nb
+	}
+
+	// Compress in-place.
+	// i: index of block to consider for compression
+	// j: index of the last (possibly) rewritten block
+	var i, j int
+	for i < wlen {
+		var wb = WahlBlock(w.arr[i])
+		switch {
+		case wb.val == 0: // all 0 tile
+			n := runlen(i, wb.val)
+			w.arr[j] = 0x80000000 | uint32(n)
+			i += n
+			j++
+		case wb.val == 0x7fffffff: // all 1 tile
+			n := runlen(i, wb.val)
+			w.arr[j] = 0xc0000000 | uint32(n)
+			i += n
+			j++
+		case wb.fill:
+			rn, bn := fillmerge(i, wb.fval)
+			fill := uint32(0x80000000) | uint32(wb.fval<<30) | uint32(rn)
+			w.arr[j] = fill
+			j++
+			i += bn
+		default: // specific non-monotonic bit pattern tile block
+			w.arr[j] = w.arr[i]
+			i++
+			j++
+		}
+	}
+	// trim (maybe)
+	if j < wlen {
+		fmt.Printf("trim j:%d wlen:%d\n", j, wlen)
+		w.arr = w.arr[:j]
+		//		return true
+	}
+	fmt.Println()
+	fmt.Printf("-------------- OUT -\n")
+	w.Print(os.Stdout)
+	fmt.Printf("-- compress -- END -\n")
+	return false
+}
+
+// Compress will (further) compress the bitmap.
+// Returns true if bitmap size is reduced.
+func (w *Wahl) Compress_works_not_gathering() bool {
+	var wlen = len(w.arr)
+
+	// trivial cases
+	if wlen <= 1 {
+		return false
+	}
+
 	// little helper returns the number consequitive of blocks with value v
 	var runlen = func(i int, v uint32) int {
 		n := 1
@@ -560,8 +644,17 @@ func main() {
 	}
 
 	var wahl_1 = NewWahl()
-	wahl_1.Set(lotsofones...)
-	wahl_1.Print(os.Stdout)
+	fmt.Println("-- set [:111] (1000->1110) ======================-- ")
+	wahl_1.Set(lotsofones[:111]...)
+	//	wahl_1.Print(os.Stdout)
+	fmt.Println("-- set [111:222] (1111->1221) ======================-- ")
+	wahl_1.Set(lotsofones[111:222]...)
+	//	wahl_1.Print(os.Stdout)
+	fmt.Println("-- set [222:   ] (1222->1332) ======================-- ")
+	wahl_1.Set(lotsofones[222:]...)
+	//	wahl_1.Print(os.Stdout)
+
+	return
 
 	var wahl_2 = NewWahl()
 	wahl_2.Set(0, 124, 155, 185, 186, 2309, 2311)
