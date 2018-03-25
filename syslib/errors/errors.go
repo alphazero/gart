@@ -9,8 +9,9 @@ import (
 /// defined generic errors /////////////////////////////////////////////////////
 
 var (
-	ErrInvalidArg = Error("invalid argument")
-	ErrNilArg     = Error("nil input argument")
+	ErrNotImplemented = Error("function not implemented")
+	ErrInvalidArg     = Error("invalid argument")
+	ErrNilArg         = Error("nil input argument")
 )
 
 /// defined generic bugs ///////////////////////////////////////////////////////
