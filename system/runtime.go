@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+
+	"github.com/alphazero/gart/syslib/errors"
 )
 
 var Debug bool = true
@@ -18,7 +20,7 @@ func init() {
 	// gart repo is in user's home dir.
 	user, e := user.Current()
 	if e != nil {
-		panic(FaultWithCause(e, "runtime.init(): unexpected error"))
+		panic(errors.FaultWithCause(e, "runtime.init(): unexpected error"))
 	}
 
 	// initialize non-const system vars

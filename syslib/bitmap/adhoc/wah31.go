@@ -9,14 +9,15 @@ import (
 	"os"
 	"unsafe"
 
+	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/sort"
 )
 
 var (
-	ErrInvalidBitnum  = fmt.Errorf("invalid bit number")
-	ErrInvalidArg     = fmt.Errorf("invalid arg")
-	ErrOverflow       = fmt.Errorf("data overflows the provided buffer")
-	ErrNotImplemented = fmt.Errorf("function not implemented")
+	ErrInvalidBitnum  = errors.Error("invalid bit number")
+	ErrInvalidArg     = errors.ErrInvalidArg //Error("invalid arg")
+	ErrOverflow       = errors.Error("data overflows the provided buffer")
+	ErrNotImplemented = errors.Error("function not implemented")
 )
 
 /// wahl block (helper) ////////////////////////////////////////////////////////
