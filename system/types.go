@@ -5,6 +5,8 @@ package system
 import (
 	"fmt"
 	"time"
+
+	"github.com/alphazero/gart/syslib/errors"
 )
 
 /// Runtime Context ////////////////////////////////////////////////////////////
@@ -105,7 +107,7 @@ type Oid struct {
 // Returns (nil, BugInvalidOidBytesData) if the minimal validation fails.
 func NewOid(bytes []byte) (*Oid, error) {
 	if len(bytes) < OidSize {
-		return nil, BugInvalidArg
+		return nil, errors.BugInvalidArg
 	}
 	// sans actual content to verify, the minimal validation of the data
 	// is that the slice can not possibly be all 0x00

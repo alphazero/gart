@@ -8,6 +8,7 @@ import (
 	"hash/crc64"
 	"unsafe"
 
+	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
 	"github.com/alphazero/gart/system"
 )
@@ -66,7 +67,7 @@ var (
 // panics on nil arg.
 func Checksum64(b []byte) uint64 {
 	if b == nil {
-		panic(system.BugNilArg)
+		panic(errors.BugNilArg)
 	}
 	if crc64q == nil {
 		crc64q = crc64.MakeTable(crc64qPoly)
@@ -77,7 +78,7 @@ func Checksum64(b []byte) uint64 {
 // panics on nil arg.
 func Checksum32(b []byte) uint32 {
 	if b == nil {
-		panic(system.BugNilArg)
+		panic(errors.BugNilArg)
 	}
 	if crc32q == nil {
 		crc32q = crc32.MakeTable(crc32qPoly)
