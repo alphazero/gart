@@ -522,7 +522,7 @@ func (w *Wahl) Encode(buf []byte) error {
 // ErrInvalidArg is returned if buf len < 4.
 func (w *Wahl) Decode(buf []byte) error {
 	if len(buf) < 4 {
-		return errors.ErrInvalidArg // minimum length
+		return errors.Error("Wahl.Decode: invalid arg - buf len:%d", len(buf))
 	}
 	w.arr = make([]uint32, len(buf)>>2)
 	for i := 0; i < len(w.arr); i++ {

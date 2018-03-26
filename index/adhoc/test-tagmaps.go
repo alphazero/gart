@@ -76,7 +76,7 @@ op_verified:
 	}
 
 	if e != nil {
-		exitOnError(errors.Bug("op: %q -  %v", option.op, e))
+		exitOnError(errors.Bug("op: %q - %v", option.op, e))
 	}
 
 	os.Exit(0)
@@ -84,7 +84,7 @@ op_verified:
 
 func createTagmaps(tags ...string) error {
 	for _, tag := range tags {
-		if e := index.CreateTagmap(tag); e != nil {
+		if e := index.CreateTagmapFile(tag); e != nil {
 			return e
 		}
 	}
@@ -92,12 +92,12 @@ func createTagmaps(tags ...string) error {
 }
 
 func readTagmap(tag string) error {
-	wahl, e := index.LoadTagmap(tag, index.Read)
+	tagmap, e := index.LoadTagmap(tag, true)
 	if e != nil {
 		return e
 	}
 
-	wahl.Print(os.Stdout)
+	tagmap.Header.Print(os.Stdout)
 
 	return nil
 }
