@@ -30,7 +30,6 @@ var (
 
 /// err/bug uniform formatters /////////////////////////////////////////////////
 
-<<<<<<< HEAD
 func NotImplemented(fmtstr string, a ...interface{}) error {
 	return fmterr("err", fmtstr+" is not implemented", a...)
 }
@@ -39,8 +38,6 @@ func Usage(fmtstr string, a ...interface{}) error {
 	return fmterr("usage:", fmtstr, a...)
 }
 
-=======
->>>>>>> gart-2.0-bitmap
 func Error(fmtstr string, a ...interface{}) error {
 	return fmterr("err", fmtstr, a...)
 }
