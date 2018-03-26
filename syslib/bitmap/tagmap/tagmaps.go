@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/index" // XXX temp - content to move to index
 	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
@@ -58,62 +59,6 @@ import (
 //
 func MapWahl(buf []byte) (*bitmap.Wahl, error) {
 	panic(errors.Fault("over thinking this :) see comment above ^^"))
-}
-
-/// op mode ///////////////////////////////////////////////////////////////////
-
-// REVU this is exactly the same thing as op mode for index.
-// can't be in gart/index as index package will include the object and
-// tagmap sub-packages.  TODO think about this ..
-type OpMode byte
-
-const (
-	Read OpMode = 1 << iota
-	Write
-	Verify
-	Compact
-)
-
-// panics on unimplemented op mode
-func (m OpMode) fopenFlag() int {
-	switch m {
-	case Read:
-		return os.O_RDONLY
-	case Write:
-		return os.O_RDWR
-	case Verify:
-	case Compact:
-	default:
-	}
-	panic(errors.NotImplemented("tagmap.OpMode: not implemented - mode  %d", m))
-}
-
-// panics on invalid opMode
-func (m OpMode) verify() error {
-	switch m {
-	case Read:
-	case Write:
-	case Verify:
-	case Compact:
-	default:
-		return errors.Bug("tagmap.OpMode: unknown mode - %d", m)
-	}
-	return nil
-}
-
-// Returns string rep. of opMode
-func (m OpMode) String() string {
-	switch m {
-	case Read:
-		return "Read"
-	case Write:
-		return "Write"
-	case Verify:
-		return "Verify"
-	case Compact:
-		return "Compact"
-	}
-	panic(errors.Bug("tagmap.OpMode: unknown mode - %d", m))
 }
 
 /// tagmap file header /////////////////////////////////////////////////////////
@@ -242,7 +187,7 @@ func CreateTagmap(tag string) error {
 // REVU both tagmap and object-index (mmap) share the same OpMode and open
 // 		sequence. TODO think about consolidation (later).
 //
-func LoadTagmap(tag string, opMode OpMode) (*bitmap.Wahl, error) {
+func LoadTagmap(tag string, opMode index.OpMode) (*bitmap.Wahl, error) {
 
 	mmf, e := OpenMappedFile(TagmapFilename(tag), opMode)
 	if e != nil {
@@ -269,7 +214,7 @@ func LoadTagmap(tag string, opMode OpMode) (*bitmap.Wahl, error) {
 type mappedFile struct {
 	*header
 	filename string
-	opMode   OpMode
+	opMode   index.OpMode
 	file     *os.File
 	finfo    os.FileInfo // size is int64
 	flags    int
@@ -279,8 +224,8 @@ type mappedFile struct {
 	modified bool
 }
 
-func OpenMappedFile(filename string, opMode OpMode) (*mappedFile, error) {
-	if e := opMode.verify(); e != nil {
+func OpenMappedFile(filename string, opMode index.OpMode) (*mappedFile, error) {
+	if e := opMode.Verify(); e != nil {
 		return nil, errors.ErrorWithCause(e, "OpenMappedFile")
 	}
 
@@ -288,11 +233,11 @@ func OpenMappedFile(filename string, opMode OpMode) (*mappedFile, error) {
 	var oflags int
 	var prot int
 	switch opMode {
-	case Read:
+	case index.Read:
 		prot = syscall.MAP_PRIVATE
 		prot = syscall.PROT_READ
 		oflags = os.O_RDONLY
-	case Write:
+	case index.Write:
 		flags = syscall.MAP_SHARED
 		prot = syscall.PROT_WRITE
 		oflags = os.O_RDWR
@@ -478,7 +423,7 @@ func createTagmaps(tags ...string) error {
 }
 
 func readTagmap(tag string) error {
-	wahl, e := LoadTagmap(tag, Read)
+	wahl, e := LoadTagmap(tag, index.Read)
 	if e != nil {
 		return e
 	}
