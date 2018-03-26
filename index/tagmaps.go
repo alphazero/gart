@@ -1,9 +1,8 @@
 // Doost!
 
-package main
+package index
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +11,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/alphazero/gart/index" // XXX temp - content to move to index
 	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
@@ -187,7 +185,7 @@ func CreateTagmap(tag string) error {
 // REVU both tagmap and object-index (mmap) share the same OpMode and open
 // 		sequence. TODO think about consolidation (later).
 //
-func LoadTagmap(tag string, opMode index.OpMode) (*bitmap.Wahl, error) {
+func LoadTagmap(tag string, opMode OpMode) (*bitmap.Wahl, error) {
 
 	mmf, e := OpenMappedFile(TagmapFilename(tag), opMode)
 	if e != nil {
@@ -210,11 +208,11 @@ func LoadTagmap(tag string, opMode index.OpMode) (*bitmap.Wahl, error) {
 
 /// memory mapped file /////////////////////////////////////////////////////////
 
-// REVU good idea to TODO move this to fs package and use same in object-index.
+// REVU good idea to TODO move this to fs package and use same in object-
 type mappedFile struct {
 	*header
 	filename string
-	opMode   index.OpMode
+	opMode   OpMode
 	file     *os.File
 	finfo    os.FileInfo // size is int64
 	flags    int
@@ -224,7 +222,7 @@ type mappedFile struct {
 	modified bool
 }
 
-func OpenMappedFile(filename string, opMode index.OpMode) (*mappedFile, error) {
+func OpenMappedFile(filename string, opMode OpMode) (*mappedFile, error) {
 	if e := opMode.Verify(); e != nil {
 		return nil, errors.ErrorWithCause(e, "OpenMappedFile")
 	}
@@ -233,11 +231,11 @@ func OpenMappedFile(filename string, opMode index.OpMode) (*mappedFile, error) {
 	var oflags int
 	var prot int
 	switch opMode {
-	case index.Read:
+	case Read:
 		prot = syscall.MAP_PRIVATE
 		prot = syscall.PROT_READ
 		oflags = os.O_RDONLY
-	case index.Write:
+	case Write:
 		flags = syscall.MAP_SHARED
 		prot = syscall.PROT_WRITE
 		oflags = os.O_RDWR
@@ -341,102 +339,4 @@ func (mmf *mappedFile) unmap() error {
 	mmf.buf = nil
 	mmf.offset = 0
 	return nil
-}
-
-/// adhoc test /////////////////////////////////////////////////////////////////
-
-var option = struct {
-	op   string
-	tags string
-}{}
-var ops = []string{"c", "r", "w", "q"}
-
-func init() {
-	flag.StringVar(&option.op, "op", option.op, "c:create, r:read, w:write, q:query")
-	flag.StringVar(&option.tags, "tags", option.tags, "csv list in \" \"s ")
-}
-
-func exitOnError(e error) {
-	fmt.Fprintf(os.Stderr, "exit on error: %v\n", e)
-	os.Exit(1)
-}
-
-func main() {
-	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
-
-	// parse flags and verify option
-	flag.Parse()
-
-	if option.op == "" {
-		exitOnError(errors.Usage("flag -op must be specified"))
-	}
-	option.op = strings.ToLower(option.op)
-	for _, op := range ops {
-		if op == option.op {
-			goto op_verified
-		}
-	}
-	exitOnError(errors.Usage("invalid op:%q", option.op))
-
-op_verified:
-	option.tags = strings.TrimSuffix(option.tags, ",")
-	var tagnames = strings.Split(option.tags, ",")
-	for i, s := range tagnames {
-		tag := strings.Trim(s, " ")
-		if tag == "" {
-			exitOnError(errors.Usage("option -tags has zero-len tagname: %q", tagnames))
-		}
-		tagnames[i] = tag
-	}
-	if len(tagnames) == 0 {
-		exitOnError(errors.Usage("option -tags must be non-empty"))
-	}
-
-	var e error
-	switch option.op {
-	case "c":
-		e = createTagmaps(tagnames...)
-	case "r":
-		e = readTagmap(tagnames[0])
-	case "w":
-		e = writeTagmap(tagnames[0])
-	case "q":
-		e = queryTagmaps(tagnames...)
-	default:
-		exitOnError(errors.Bug("verified op is not known: %q", option.op))
-	}
-
-	if e != nil {
-		exitOnError(errors.Bug("op: %q -  %v", option.op, e))
-	}
-
-	os.Exit(0)
-}
-
-func createTagmaps(tags ...string) error {
-	for _, tag := range tags {
-		if e := CreateTagmap(tag); e != nil {
-			return e
-		}
-	}
-	return nil
-}
-
-func readTagmap(tag string) error {
-	wahl, e := LoadTagmap(tag, index.Read)
-	if e != nil {
-		return e
-	}
-
-	wahl.Print(os.Stdout)
-
-	return nil
-}
-
-func writeTagmap(tag string) error {
-	return errors.NotImplemented("writeTagmap")
-}
-
-func queryTagmaps(tags ...string) error {
-	return errors.NotImplemented("queryTagmaps")
 }
