@@ -60,6 +60,7 @@ sketch:
 								2 - we don't really need nanosec precision for card files.
 		index\
 			index.go		
+			op-mode.go
 							why not: (or use system instead of gart)
 								type gart.Oid
 								type gart.Index
