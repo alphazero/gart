@@ -6,9 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	//	"syscall"
+	"time"
+	"unsafe"
 
+	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/syslib/fs"
 	"github.com/alphazero/gart/system"
 )
 
@@ -96,7 +102,71 @@ op_verified:
 /// op prototypes //////////////////////////////////////////////////////////////
 
 func createTagmaps(repoDir string, tags ...string) error {
-	return errors.NotImplemented("createTagmaps")
+	for _, tag := range tags {
+		if e := createTagmap(repoDir, tag); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+const headerSize = 512
+
+type header struct {
+	ftype    uint64
+	crc64    uint64
+	created  int64
+	updated  int64
+	reserved [480]byte
+}
+
+func (h header) encode(buf []byte) error {
+	if len(buf) < headerSize {
+		return errors.Error("header.encode: insufficient buffer length: %d", len(buf))
+	}
+	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
+	*(*int64)(unsafe.Pointer(&buf[16])) = h.created
+	*(*int64)(unsafe.Pointer(&buf[24])) = h.updated
+
+	h.crc64 = digest.Checksum64(buf[16:])
+	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
+	return nil
+}
+
+func tagFilename(path, tag string) string {
+	name := fmt.Sprintf("%x.bitmap", digest.SumUint64([]byte(tag)))
+	filename := filepath.Join(path, name)
+	return filename
+}
+
+func createTagmap(repoDir string, tag string) error {
+
+	filename := tagFilename(repoDir, tag)
+
+	file, e := fs.OpenNewFile(filename, os.O_WRONLY|os.O_APPEND)
+	if e != nil {
+		return fmt.Errorf("oidx.CreateIndex: %s", e)
+	}
+	defer file.Close()
+
+	var now = time.Now().UnixNano()
+	var h = &header{
+		ftype:   0x5807263e43839459,
+		created: now,
+		updated: now,
+	}
+
+	var buf [headerSize]byte
+	if e := h.encode(buf[:]); e != nil {
+		return e
+	}
+
+	_, e = file.Write(buf[:])
+	if e != nil {
+		return errors.ErrorWithCause(e, "createTagmap: tag: %s", tag)
+	}
+
+	return errors.NotImplemented("createTagmap - filename: %s", filename)
 }
 
 func readTagmap(repoDir string, tag string) error {
