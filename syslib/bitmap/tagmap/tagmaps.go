@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -30,6 +31,34 @@ import (
 //
 // - tagmap manager
 //		- AND 2 or more tagmaps and get 'keyset'
+
+/// dev mode stub for Wahl ////////////////////////////////////////////////////
+
+// REVU how is this useful per original notion of using the mappedFile's []byte
+// buffer as the Wahl's block array. (Copying it via Wahl.decode([]byte) is ok
+// and we already have that!)
+//
+// But if aliasing via unsafe the mmf.buf:
+//
+// It works for Read but then wahl must be modified so that it can not change.
+//
+// If used for update, then bitmap size will change and it can not be pointing
+// to the mappedFile's []byte array.
+//
+// It is possible to use mmaps to efficiently page through a very large bitmap
+// index (e.g. map large multiple of 4KB pages) for Query ops, but then Wahl
+// will need to be substantially changed.
+//
+// Let's be Reasonable and remember "Keep it simple!" dictum:
+// - this prototype as of commit 9eb07df in branch gart-2.0-tagmap-proto has
+//   some useful bits so switching to just reading the full file is OK.
+//
+// - if we want to fully use what we have as of 9eb07df, then -simply- call
+//	 wahl.Deocde(mmf.buf[:headerSize]) and we're done with READ ops.
+//
+func MapWahl(buf []byte) (*bitmap.Wahl, error) {
+	panic(errors.Fault("over thinking this :) see comment above ^^"))
+}
 
 /// op mode ///////////////////////////////////////////////////////////////////
 
@@ -89,7 +118,7 @@ func (m OpMode) String() string {
 
 /// tagmap file header /////////////////////////////////////////////////////////
 
-const headerSize = 32
+const headerSize = 48
 const mmap_tagmap_ftype = 0x5807263e43839459
 
 // tagmap header is the minimal content of a valid gart tagmap file.
@@ -100,6 +129,15 @@ type header struct {
 	updated int64  // unix nanos
 	mapSize uint64 // bytes - number of blocks * 4
 	mapMax  uint64 // max bitnum in bitmap
+}
+
+func (h *header) Print() {
+	fmt.Printf("file type:   %016x\n", h.ftype)
+	fmt.Printf("crc64:       %016x\n", h.crc64)
+	fmt.Printf("created:     %016x (%s)\n", h.created, time.Unix(0, h.created))
+	fmt.Printf("updated:     %016x (%s)\n", h.updated, time.Unix(0, h.updated))
+	fmt.Printf("bitmap-size: %d\n", h.mapSize)
+	fmt.Printf("bitmap-max:  %d\n", h.mapMax)
 }
 
 // encode writes the header data to the given buffer.
@@ -116,6 +154,7 @@ func (h *header) encode(buf []byte) error {
 	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
 	return nil
 }
+
 func (h *header) decode(buf []byte) error {
 	if len(buf) < headerSize {
 		return errors.Error("header.decode: insufficient buffer length: %d", len(buf))
@@ -123,13 +162,12 @@ func (h *header) decode(buf []byte) error {
 	*h = *(*header)(unsafe.Pointer(&buf[0]))
 
 	// verify
-	// ftype
+	// TODO created, updated can be also checked.
+
 	if h.ftype != mmap_tagmap_ftype {
 		errors.Bug("header.decode: invalid ftype: %x - expect: %x",
 			h.ftype, mmap_tagmap_ftype)
 	}
-	// TODO created, updated can be also checked.
-	// crc
 	crc64 := digest.Checksum64(buf[16:])
 	if crc64 != h.crc64 {
 		errors.Bug("header.decode: invalid checksum: %d - expect: %d",
@@ -204,9 +242,25 @@ func CreateTagmap(tag string) error {
 // REVU both tagmap and object-index (mmap) share the same OpMode and open
 // 		sequence. TODO think about consolidation (later).
 //
-func OpenTagmap(tag string, opMode OpMode) (*mappedFile, error) {
+func LoadTagmap(tag string, opMode OpMode) (*bitmap.Wahl, error) {
 
-	return OpenMappedFile(TagmapFilename(tag), opMode)
+	mmf, e := OpenMappedFile(TagmapFilename(tag), opMode)
+	if e != nil {
+		return nil, e
+	}
+	defer mmf.UnmapAndClose()
+
+	fmt.Printf("debug - OpenTagmap: %q\n", tag)
+	mmf.header.Print()
+	fmt.Printf("% 02x\n", mmf)
+	fmt.Printf("----------------------------------------\n")
+
+	var wahl bitmap.Wahl
+	if e := wahl.Decode(mmf.buf[headerSize:]); e != nil {
+		return nil, e
+	}
+
+	return &wahl, nil
 }
 
 /// memory mapped file /////////////////////////////////////////////////////////
@@ -281,26 +335,23 @@ func OpenMappedFile(filename string, opMode OpMode) (*mappedFile, error) {
 // unmapAndClose first updates header timestamp and (re)writes
 // the header bytes (if opMode is Read & modified). If so, the
 // bool retval will reflect that.
-func (mmf *mappedFile) UnmapAndClose() (bool, error) {
-	// NOTE the write of header is here is very important
-	// REVU this should be done in AddObject (which is the only
-	// place that actually modifies the header! It does not belong here.
-	// TODO first try it in ref/mmap.go
-	fmt.Printf("debug - mappedFile.unamp -- IN\n")
-	var updated bool
+func (mmf *mappedFile) UnmapAndClose() error {
 	if mmf.modified {
-		mmf.header.updated = time.Now().UnixNano()
-		mmf.header.encode(mmf.buf)
-		updated = true
+		panic(errors.Bug("REVU - UnmapAndClose called with modified set"))
 	}
 	if e := mmf.unmap(); e != nil {
-		return updated, e
+		return e
 	}
 	if e := mmf.file.Close(); e != nil {
-		return updated, e
+		return e
 	}
-	mmf.file = nil
-	return updated, nil
+	mmf.file = nil // TODO object-index mmap also needs to clear all this
+	mmf.opMode = 0 // this should be enough if opMode.verify is used everywhere
+	mmf.flags = 0
+	mmf.prot = 0
+	mmf.offset = 0
+	mmf.modified = false
+	return nil
 }
 
 // if mmf.buf != nil, function first unmaps and then maps again at given
@@ -427,18 +478,13 @@ func createTagmaps(tags ...string) error {
 }
 
 func readTagmap(tag string) error {
-	mmf, e := OpenTagmap(tag, Read)
+	wahl, e := LoadTagmap(tag, Read)
 	if e != nil {
 		return e
 	}
-	fmt.Printf("% 02x\n", mmf)
-	updated, e := mmf.UnmapAndClose()
-	if e != nil {
-		return e
-	}
-	if updated {
-		return errors.Bug("UnmapAndClose() returned updated true")
-	}
+
+	wahl.Print(os.Stdout)
+
 	return nil
 }
 
