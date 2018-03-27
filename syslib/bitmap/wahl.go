@@ -111,8 +111,13 @@ func NewWahlInit(bits ...uint) *Wahl {
 // Set method will not perform a final compress before returning given that
 // function's relative computational costs. It is advisable to perform a compress
 // after the bitmap setting is done.
+// REVU this should return a bool if something changed.
 func (w *Wahl) Set(bits ...uint) {
-	if len(bits) > 1 {
+	switch len(bits) {
+	case 0:
+		return
+	case 1: // nop
+	default:
 		sort.Uints(bits)
 	}
 
@@ -506,11 +511,14 @@ func (w Wahl) Print(writer io.Writer) {
 // REVU also New from array (buf or blocks) for (memory mapped) files.
 
 // Writes the bitmap blocks to the given []byte slice.
-// ErrInvalidArg is returned if buf len < w.Size().
+// Error is returned if buf is nil or buf.len < wahl.Size().
 func (w *Wahl) Encode(buf []byte) error {
+	if buf == nil {
+		return errors.Error("Wahl.Encode: invalid arg - buf is nil")
+	}
 	var wlen = len(w.arr)
 	if len(buf) < (wlen << 2) {
-		return errors.ErrInvalidArg
+		return errors.Error("Wahl.Encode: invalid arg - buf.len: %d", len(buf))
 	}
 	for i := 0; i < wlen; i++ {
 		*(*uint32)(unsafe.Pointer(&buf[i<<2])) = w.arr[i]
@@ -518,11 +526,11 @@ func (w *Wahl) Encode(buf []byte) error {
 	return nil
 }
 
-// Reads the bitmap blocks from the given []byte slice.
-// ErrInvalidArg is returned if buf len < 4.
+// Reads 32-bit words for the bitmap blocks from the given []byte slice.
+// Returns error on nil input arg.
 func (w *Wahl) Decode(buf []byte) error {
-	if len(buf) < 4 {
-		return errors.Error("Wahl.Decode: invalid arg - buf len:%d", len(buf))
+	if buf == nil {
+		return errors.Error("Wahl.Decode: invalid arg - buf is nil")
 	}
 	w.arr = make([]uint32, len(buf)>>2)
 	for i := 0; i < len(w.arr); i++ {

@@ -5,10 +5,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 
 	"github.com/alphazero/gart/index"
+	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/errors"
 )
 
@@ -84,28 +86,91 @@ op_verified:
 
 func createTagmaps(tags ...string) error {
 	for _, tag := range tags {
-		if e := index.CreateTagmapFile(tag); e != nil {
+		tagmap, e := index.CreateTagmap(tag)
+		if e != nil {
 			return e
 		}
+		/*
+			if tagmap.Header == nil {
+				return errors.Bug("createTagmaps: header is nil - tag:%q", tag)
+			}
+			if tagmap.Bitmap == nil {
+				return errors.Bug("createTagmaps: bitmap is nil - tag:%q", tag)
+			}
+		*/
+		fmt.Printf("created tagmap for %q\n", tag)
+		tagmap.Print(os.Stdout)
+		fmt.Println()
 	}
 	return nil
 }
 
 func readTagmap(tag string) error {
-	tagmap, e := index.LoadTagmap(tag, true)
+	var create bool = false
+	tagmap, e := index.LoadTagmap(tag, create)
 	if e != nil {
 		return e
 	}
 
-	tagmap.Header.Print(os.Stdout)
+	tagmap.Print(os.Stdout)
 
 	return nil
 }
 
 func writeTagmap(tag string) error {
-	return errors.NotImplemented("writeTagmap")
+	var wahl = bitmap.NewWahl()
+	keys := randomKeys(999, 1, 1132)
+	wahl.Set(keys...)
+	wahl.Compress()
+	wahl.Print(os.Stdout)
+	fmt.Printf("/// ^^ test data ^^ ///\n")
+
+	// REVU zerolen invalid arg in wahl.decode should be fixed in tagmaps.
+	//      CreateTagmap -will- create tagmaps with len 0.
+	tagmap, e := index.LoadTagmap(tag, true)
+	if e != nil {
+		return errors.ErrorWithCause(e, "writeTagmap: LoadTagmap")
+	}
+	fmt.Printf("debug - writeTagmap: loaded tagamp for %q\n", tag)
+	tagmap.Print(os.Stdout)
+	fmt.Println()
+
+	tagmap.Update(keys...) // REVU wahl.Set (and thus Tagmap.Update need to return an updated..
+
+	fmt.Printf("debug - writeTagmap: updatd tagamp for %q\n", tag)
+	tagmap.Print(os.Stdout)
+	fmt.Println()
+
+	/* TODO
+	bool, e := tagmap.Save()
+	if e != nil {
+		exitOnError(e)
+	}
+
+	return nil
+	*/
+	return errors.Error("TODO: Tagmap #Save")
 }
 
 func queryTagmaps(tags ...string) error {
 	return errors.NotImplemented("queryTagmaps")
+}
+
+var random = rand.New(rand.NewSource(0))
+
+/// little helpers /////////////////////////////////////////////////////////////
+func randomKeys(cnt, from, to int) []uint {
+	keyset := make(map[uint]uint)
+	dn := to - from
+	for len(keyset) < cnt {
+		key := uint(random.Intn(dn) + to)
+		keyset[key] = key
+	}
+	keys := make([]uint, len(keyset))
+	var i int
+	for _, k := range keyset {
+		keys[i] = k
+		i++
+	}
+	return keys
 }
