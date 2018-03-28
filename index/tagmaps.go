@@ -82,6 +82,29 @@ func (h *tagmapHeader) decode(buf []byte) error {
 
 /// tagmap file ////////////////////////////////////////////////////////////////
 
+// Tagmap encapsulates tagmap file metadata (in header) and the in-mem bitmap
+// of the tagmap. It also provides functions to update, save, and print the
+// tagmap.
+type Tagmap struct {
+	header   *tagmapHeader
+	tag      string
+	bitmap   *bitmap.Wahl
+	fname    string
+	modified bool
+	//	finfo  os.FileInfo
+}
+
+// multi-line print function suitable for debugging, prints both the header
+// and bitmap details.
+func (t *Tagmap) Print(w io.Writer) {
+	fmt.Fprintf(w, "-- Tagmap (%q)\n", t.tag)
+	t.header.Print(w)
+	fmt.Fprintf(w, "filename:   %q\n", t.fname)
+	fmt.Fprintf(w, "modified:   %t\n", t.modified)
+	fmt.Fprintf(w, "-- bitmap --\n")
+	t.bitmap.Print(w)
+}
+
 // Returns the absolute path filename for the given tag. The full path is a
 // variation on git's approach to blob file paths: tag name is converted to
 // lower-case form; (b) the blake2b uint64 hash of that is used to construct
@@ -98,7 +121,6 @@ func TagmapFilename(tag string) string {
 // Creates the initial tagmap file for the given tag in the canonical
 // repo location. Tag names in gart are case-insensitive and the tag
 // (name) will always be converted to lower-case form.
-// REVU this should be CreateTagmap so *Tagmap is returned.
 func CreateTagmap(tag string) (*Tagmap, error) {
 
 	var tagmap = &Tagmap{}
@@ -142,35 +164,6 @@ func CreateTagmap(tag string) (*Tagmap, error) {
 	}
 
 	return tagmap, nil
-}
-
-type Tagmap struct {
-	header   *tagmapHeader
-	tag      string
-	bitmap   *bitmap.Wahl
-	fname    string
-	modified bool
-	//	finfo  os.FileInfo
-}
-
-func (t *Tagmap) Print(w io.Writer) {
-	fmt.Fprintf(w, "-- Tagmap (%q)\n", t.tag)
-	t.header.Print(w)
-	fmt.Fprintf(w, "filename:   %q\n", t.fname)
-	fmt.Fprintf(w, "modified:   %t\n", t.modified)
-	fmt.Fprintf(w, "-- bitmap --\n")
-	t.bitmap.Print(w)
-}
-
-// Updates the Tagmap's bitmap.
-// panics with a Bug if Tagmap bitmap is nil
-func (t *Tagmap) Update(keys ...uint) {
-	if t.bitmap == nil {
-		panic(errors.Bug("Tagmap.Update: bitmap is nil"))
-	}
-	t.bitmap.Set(keys...)
-	t.modified = true
-	return
 }
 
 // Loads the tagmap (in form of bitmap.Wahl) from file and closes the file.
@@ -233,6 +226,17 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 	}
 
 	return tagmap, nil
+}
+
+// Updates the Tagmap's bitmap. Update does not compress the bitmap.
+// panics with a Bug if Tagmap bitmap is nil
+func (t *Tagmap) Update(keys ...uint) {
+	if t.bitmap == nil {
+		panic(errors.Bug("Tagmap.Update: bitmap is nil"))
+	}
+	t.bitmap.Set(keys...)
+	t.modified = true
+	return
 }
 
 // TODO create swap file, write to it, close it, done.
