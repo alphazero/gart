@@ -100,7 +100,7 @@ type Tagmap struct {
 	header   *tagmapHeader
 	tag      string
 	bitmap   *bitmap.Wahl
-	source   string // REVU either use 'source' or source for index types.
+	source   string
 	modified bool
 }
 
@@ -109,7 +109,7 @@ type Tagmap struct {
 func (t *Tagmap) Print(w io.Writer) {
 	fmt.Fprintf(w, "-- Tagmap (%q)\n", t.tag)
 	t.header.Print(w)
-	fmt.Fprintf(w, "filename:   %q\n", t.source)
+	fmt.Fprintf(w, "source:     %q\n", t.source)
 	fmt.Fprintf(w, "modified:   %t\n", t.modified)
 	fmt.Fprintf(w, "-- bitmap --\n")
 	t.bitmap.Print(w)
@@ -194,7 +194,6 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 			if !create {
 				return nil, e
 			}
-			fmt.Printf("debug - LoadTagmap: create new tagmap for tag %q\n", tag)
 			tagmap, e := CreateTagmap(tag)
 			if e != nil {
 				return nil, errorWithCause(e, "LoadTagmap: on CreateTagmap - tag:%q", tag)
@@ -243,7 +242,7 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 	if header.mapSize != wahlSize {
 		return nil, bug("mapSize", wahlSize, header.mapSize)
 	}
-	wahlMax := uint64(wahl.Max()) // REVU cast here and wahl's int returns are correct.
+	wahlMax := uint64(wahl.Max())
 	if header.mapMax != wahlMax {
 		return nil, bug("mapMax", wahlMax, header.mapMax)
 	}
@@ -261,7 +260,7 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 
 // Updates the Tagmap's bitmap. Update does not compress the bitmap.
 // panics with a Bug if Tagmap bitmap is nil
-// REVU should this return a bool?
+// TODO this should return a bool if Wahl.Set is changed.
 func (t *Tagmap) Update(keys ...uint) {
 	if t.bitmap == nil {
 		panic(errors.Bug("Tagmap.Update: bitmap is nil"))
@@ -344,5 +343,5 @@ func (t *Tagmap) Save() (bool, error) {
 		return false, errorWithCause(e, "Tagmap.save - os.Replace %q %q", swapfile, t.source)
 	}
 
-	return true, nil
+	return true, nil // : π U
 }
