@@ -56,7 +56,7 @@ func (h *tagmapHeader) encode(buf []byte) error {
 	*(*uint64)(unsafe.Pointer(&buf[32])) = h.mapSize
 	*(*uint64)(unsafe.Pointer(&buf[40])) = h.mapMax
 
-	h.crc64 = digest.Checksum64(buf[16:])
+	h.crc64 = digest.Checksum64(buf[16:tagmapHeaderSize])
 	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
 	return nil
 }
@@ -71,13 +71,20 @@ func (h *tagmapHeader) decode(buf []byte) error {
 	// TODO created, updated can be also checked.
 
 	if h.ftype != mmap_tagmap_ftype {
-		errors.Bug("tagmapHeader.decode: invalid ftype: %x - expect: %x",
+		return errors.Bug("tagmapHeader.decode: invalid ftype: %x - expect: %x",
 			h.ftype, mmap_tagmap_ftype)
 	}
-	crc64 := digest.Checksum64(buf[16:])
+	crc64 := digest.Checksum64(buf[16:tagmapHeaderSize])
 	if crc64 != h.crc64 {
-		errors.Bug("tagmapHeader.decode: invalid checksum: %d - expect: %d",
+		return errors.Bug("tagmapHeader.decode: invalid checksum: %d - expect: %d",
 			h.crc64, crc64)
+	}
+	if h.created == 0 {
+		return errors.Bug("tagmapHeader.decode: invalid created: %d", h.created)
+	}
+	if h.updated < h.created {
+		return errors.Bug("tagmapHeader.decode: invalid updated: %d < created:%d",
+			h.updated, h.created)
 	}
 
 	return nil
