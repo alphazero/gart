@@ -61,14 +61,15 @@ func (h *tagmapHeader) encode(buf []byte) error {
 	return nil
 }
 
+// encode writes the header structure to the buffer provided. Checksum is for header
+// data only.
 func (h *tagmapHeader) decode(buf []byte) error {
 	if len(buf) < tagmapHeaderSize {
 		return errors.Error("tagmapHeader.decode: insufficient buffer length: %d", len(buf))
 	}
 	*h = *(*tagmapHeader)(unsafe.Pointer(&buf[0]))
 
-	// verify
-	// TODO created, updated can be also checked.
+	/// verify //////////////////////////////////////////////////////
 
 	if h.ftype != mmap_tagmap_ftype {
 		return errors.Bug("tagmapHeader.decode: invalid ftype: %x - expect: %x",
@@ -99,7 +100,7 @@ type Tagmap struct {
 	header   *tagmapHeader
 	tag      string
 	bitmap   *bitmap.Wahl
-	fname    string // REVU either use 'source' or fname for index types.
+	source   string // REVU either use 'source' or source for index types.
 	modified bool
 }
 
@@ -108,7 +109,7 @@ type Tagmap struct {
 func (t *Tagmap) Print(w io.Writer) {
 	fmt.Fprintf(w, "-- Tagmap (%q)\n", t.tag)
 	t.header.Print(w)
-	fmt.Fprintf(w, "filename:   %q\n", t.fname)
+	fmt.Fprintf(w, "filename:   %q\n", t.source)
 	fmt.Fprintf(w, "modified:   %t\n", t.modified)
 	fmt.Fprintf(w, "-- bitmap --\n")
 	t.bitmap.Print(w)
@@ -171,7 +172,7 @@ func CreateTagmap(tag string) (*Tagmap, error) {
 		header: h,
 		tag:    tag,
 		bitmap: bitmap.NewWahl(),
-		fname:  filename,
+		source: filename,
 	}
 
 	return tagmap, nil
@@ -252,7 +253,7 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 		header: &header,
 		tag:    tag,
 		bitmap: &wahl,
-		fname:  filename,
+		source: filename,
 	}
 
 	return tagmap, nil
@@ -300,7 +301,7 @@ func (t *Tagmap) Save() (bool, error) {
 	/// swapfile ////////////////////////////////////////////////////
 
 	var size = int64(tagmapHeaderSize + t.header.mapSize)
-	var swapfile = fs.SwapfileName(t.fname)
+	var swapfile = fs.SwapfileName(t.source)
 	var ops = os.O_RDWR //| os.O_APPEND
 	sfile, e := fs.OpenNewFile(swapfile, ops)
 	if e != nil {
@@ -339,8 +340,8 @@ func (t *Tagmap) Save() (bool, error) {
 	}
 
 	// swap it
-	if e := os.Rename(swapfile, t.fname); e != nil {
-		return false, errorWithCause(e, "Tagmap.save - os.Replace %q %q", swapfile, t.fname)
+	if e := os.Rename(swapfile, t.source); e != nil {
+		return false, errorWithCause(e, "Tagmap.save - os.Replace %q %q", swapfile, t.source)
 	}
 
 	return true, nil
