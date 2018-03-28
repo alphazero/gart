@@ -179,9 +179,10 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 	filename := TagmapFilename(tag)
 	file, e := os.OpenFile(filename, os.O_RDONLY, system.FilePerm)
 	if e != nil {
-		if !os.IsNotExist(e) && !create {
-			return nil, e
-		} else {
+		if os.IsNotExist(e) {
+			if !create {
+				return nil, e
+			}
 			fmt.Printf("debug - LoadTagmap: create new tagmap for tag %q\n", tag)
 			tagmap, e := CreateTagmap(tag)
 			if e != nil {
@@ -189,6 +190,7 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 			}
 			return tagmap, nil
 		}
+		return nil, e
 	}
 	defer file.Close()
 
@@ -226,13 +228,11 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 	bug := func(what string, have, expect uint64) error {
 		return errors.Bug("index.LoadTagmap: %s verify - wahl:%d header:%d", what, have, expect)
 	}
-	fmt.Printf("debug - %d %d\n", wahl.Size(), uint64(wahl.Size()))
 	wahlSize := uint64(wahl.Size()) // REVU maybe wahl should just return uint64?
 	if header.mapSize != wahlSize {
 		return nil, bug("mapSize", wahlSize, header.mapSize)
 	}
 	wahlMax := uint64(wahl.Max()) // REVU maybe wahl should just return uint64?
-	fmt.Printf("debug - %d %d\n", wahl.Max(), uint64(wahl.Max()))
 	if header.mapMax != wahlMax {
 		return nil, bug("mapMax", wahlMax, header.mapMax)
 	}

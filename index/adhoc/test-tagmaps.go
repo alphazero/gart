@@ -68,7 +68,7 @@ op_verified:
 	case "c":
 		e = createTagmaps(tagnames...)
 	case "r":
-		e = readTagmap(tagnames[0])
+		e = readTagmap(tagnames...)
 	case "w":
 		e = writeTagmap(tagnames[0])
 	case "q":
@@ -88,16 +88,10 @@ func createTagmaps(tags ...string) error {
 	for _, tag := range tags {
 		tagmap, e := index.CreateTagmap(tag)
 		if e != nil {
-			return e
+			// just print the errors
+			fmt.Fprintf(os.Stderr, "on CreateTagmap %q - %v\n", tag, e)
+			continue
 		}
-		/*
-			if tagmap.Header == nil {
-				return errors.Bug("createTagmaps: header is nil - tag:%q", tag)
-			}
-			if tagmap.Bitmap == nil {
-				return errors.Bug("createTagmaps: bitmap is nil - tag:%q", tag)
-			}
-		*/
 		fmt.Printf("created tagmap for %q\n", tag)
 		tagmap.Print(os.Stdout)
 		fmt.Println()
@@ -105,14 +99,17 @@ func createTagmaps(tags ...string) error {
 	return nil
 }
 
-func readTagmap(tag string) error {
+func readTagmap(tags ...string) error {
 	var create bool = false
-	tagmap, e := index.LoadTagmap(tag, create)
-	if e != nil {
-		return e
+	for _, tag := range tags {
+		tagmap, e := index.LoadTagmap(tag, create)
+		if e != nil {
+			// just print the errors
+			fmt.Fprintf(os.Stderr, "on LoadTagmap(%q, false) - %v\n", tag, e)
+			continue
+		}
+		tagmap.Print(os.Stdout)
 	}
-
-	tagmap.Print(os.Stdout)
 
 	return nil
 }
