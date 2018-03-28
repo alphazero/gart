@@ -239,7 +239,13 @@ func (t *Tagmap) Update(keys ...uint) {
 	return
 }
 
-// TODO create swap file, write to it, close it, done.
-func SaveTagmap(tag string, wahl *bitmap.Wahl) error {
-	return errors.NotImplemented("index.SaveTagmap")
+// Tagmap#Save saves the tagmap if modified. If modified, the Wahl bitmap
+// is compressed; the tagmap is saved to a swap file; and finally the swapfile
+// is swapped with the original source file.
+//
+// Function returns a bool indicating if IO was performed, and, errors if
+// any. If error is not nil, the bool result should be ignored as a swap file
+// is used.
+func (t *Tagmap) Save(tag string, wahl *bitmap.Wahl) (bool, error) {
+	return false, errors.NotImplemented("index.SaveTagmap")
 }
