@@ -89,9 +89,8 @@ type Tagmap struct {
 	header   *tagmapHeader
 	tag      string
 	bitmap   *bitmap.Wahl
-	fname    string
+	fname    string // REVU either use 'source' or fname for index types.
 	modified bool
-	//	finfo  os.FileInfo
 }
 
 // multi-line print function suitable for debugging, prints both the header
@@ -144,6 +143,8 @@ func CreateTagmap(tag string) (*Tagmap, error) {
 		ftype:   mmap_tagmap_ftype,
 		created: now,
 		updated: now,
+		mapSize: 0,
+		mapMax:  0,
 	}
 
 	var buf [tagmapHeaderSize]byte
@@ -170,6 +171,9 @@ func CreateTagmap(tag string) (*Tagmap, error) {
 // File is openned in private, read-only mode.
 func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 
+	// for notational convenient alias the errors func.
+	var errorWithCause = errors.ErrorWithCause
+
 	/// open file ///////////////////////////////////////////////////
 
 	filename := TagmapFilename(tag)
@@ -181,7 +185,7 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 			fmt.Printf("debug - LoadTagmap: create new tagmap for tag %q\n", tag)
 			tagmap, e := CreateTagmap(tag)
 			if e != nil {
-				return nil, errors.ErrorWithCause(e, "LoadTagmap: on CreateTagmap - tag:%q", tag)
+				return nil, errorWithCause(e, "LoadTagmap: on CreateTagmap - tag:%q", tag)
 			}
 			return tagmap, nil
 		}
@@ -208,18 +212,34 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 	/// decode content //////////////////////////////////////////////
 
 	// decode verifies header
-	var hdr tagmapHeader
-	if e := hdr.decode(buf); e != nil {
-		return nil, errors.ErrorWithCause(e, "index.LoadTagmap: hdr.decode")
+	var header tagmapHeader
+	if e := header.decode(buf); e != nil {
+		return nil, errorWithCause(e, "index.LoadTagmap: hdr.decode")
 	}
 
 	var wahl bitmap.Wahl
 	if e := wahl.Decode(buf[tagmapHeaderSize:]); e != nil {
-		return nil, errors.ErrorWithCause(e, "index.LoadTagmap: Wahl.Decode")
+		return nil, errorWithCause(e, "index.LoadTagmap: Wahl.Decode")
 	}
 
+	// verify: compare header & actual bitmap
+	bug := func(what string, have, expect uint64) error {
+		return errors.Bug("index.LoadTagmap: %s verify - wahl:%d header:%d", what, have, expect)
+	}
+	fmt.Printf("debug - %d %d\n", wahl.Size(), uint64(wahl.Size()))
+	wahlSize := uint64(wahl.Size()) // REVU maybe wahl should just return uint64?
+	if header.mapSize != wahlSize {
+		return nil, bug("mapSize", wahlSize, header.mapSize)
+	}
+	wahlMax := uint64(wahl.Max()) // REVU maybe wahl should just return uint64?
+	fmt.Printf("debug - %d %d\n", wahl.Max(), uint64(wahl.Max()))
+	if header.mapMax != wahlMax {
+		return nil, bug("mapMax", wahlMax, header.mapMax)
+	}
+
+	// Good to go.
 	var tagmap = &Tagmap{
-		header: &hdr,
+		header: &header,
 		tag:    tag,
 		bitmap: &wahl,
 		fname:  filename,
@@ -230,12 +250,16 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 
 // Updates the Tagmap's bitmap. Update does not compress the bitmap.
 // panics with a Bug if Tagmap bitmap is nil
+// REVU should this return a bool?
 func (t *Tagmap) Update(keys ...uint) {
 	if t.bitmap == nil {
 		panic(errors.Bug("Tagmap.Update: bitmap is nil"))
 	}
-	t.bitmap.Set(keys...)
+	t.bitmap.Set(keys...) // REVU (same) should this return a bool?
+	t.header.mapMax = uint64(t.bitmap.Max())
+	t.header.mapSize = uint64(t.bitmap.Size())
 	t.modified = true
+
 	return
 }
 
@@ -247,5 +271,18 @@ func (t *Tagmap) Update(keys ...uint) {
 // any. If error is not nil, the bool result should be ignored as a swap file
 // is used.
 func (t *Tagmap) Save(tag string, wahl *bitmap.Wahl) (bool, error) {
+
+	if !t.modified {
+		return false, nil
+	}
+
+	// compress bitmap - this may change bitmap Max bit and map size.
+	t.bitmap.Compress()
+
+	// update header
+	t.header.updated = time.Now().UnixNano()
+	t.header.mapSize = uint64(t.bitmap.Size())
+	t.header.mapMax = uint64(t.bitmap.Max())
+
 	return false, errors.NotImplemented("index.SaveTagmap")
 }
