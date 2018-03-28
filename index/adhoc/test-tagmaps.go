@@ -132,18 +132,20 @@ func writeTagmap(tag string) error {
 	tagmap.Print(os.Stdout)
 	fmt.Println()
 
-	tagmap.Update(keys...) // REVU wahl.Set (and thus Tagmap.Update need to return an updated..
+	if updated := tagmap.Update(keys...); updated {
+		fmt.Printf("debug - writeTagmap: updated tagamp for %q\n", tag)
+		tagmap.Print(os.Stdout)
+		fmt.Println()
 
-	fmt.Printf("debug - writeTagmap: updatd tagamp for %q\n", tag)
-	tagmap.Print(os.Stdout)
-	fmt.Println()
-
-	ok, e := tagmap.Save()
-	if e != nil {
-		exitOnError(e)
-	}
-	if ok {
-		fmt.Printf("debug - writeTagmap: wrote tagamp for %q\n", tag)
+		ok, e := tagmap.Save()
+		if e != nil {
+			exitOnError(e)
+		}
+		if ok {
+			fmt.Printf("debug - writeTagmap: wrote tagamp for %q\n", tag)
+		}
+	} else {
+		fmt.Printf("debug - writeTagmap: not-updated - tagamp for %q\n", tag)
 	}
 
 	return nil

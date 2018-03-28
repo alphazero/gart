@@ -259,18 +259,21 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 }
 
 // Updates the Tagmap's bitmap. Update does not compress the bitmap.
+// Returns true if bitmap changed.
 // panics with a Bug if Tagmap bitmap is nil
-// TODO this should return a bool if Wahl.Set is changed.
-func (t *Tagmap) Update(keys ...uint) {
+func (t *Tagmap) Update(keys ...uint) bool {
 	if t.bitmap == nil {
 		panic(errors.Bug("Tagmap.Update: bitmap is nil"))
 	}
-	t.bitmap.Set(keys...) // REVU (same) should this return a bool?
-	t.header.mapMax = uint64(t.bitmap.Max())
-	t.header.mapSize = uint64(t.bitmap.Size())
-	t.modified = true
 
-	return
+	if t.bitmap.Set(keys...) {
+		t.header.mapMax = uint64(t.bitmap.Max())
+		t.header.mapSize = uint64(t.bitmap.Size())
+		t.modified = true
+		return true
+	}
+
+	return false // REVU don't return t.modified - it could have been set before
 }
 
 // Tagmap#Save saves the tagmap if modified. If modified, the Wahl bitmap

@@ -111,19 +111,18 @@ func NewWahlInit(bits ...uint) *Wahl {
 // Set method will not perform a final compress before returning given that
 // function's relative computational costs. It is advisable to perform a compress
 // after the bitmap setting is done.
-// REVU this should return a bool if something changed.
-func (w *Wahl) Set(bits ...uint) {
-	switch len(bits) {
-	case 0:
-		return
-	case 1: // nop
-	default:
+func (w *Wahl) Set(bits ...uint) bool {
+	var bitslen = len(bits)
+	if bitslen == 0 {
+		return false
+	}
+	if bitslen > 1 {
 		sort.Uints(bits)
 	}
 
 	// add additional blocks to w.arr if necessary
 	var wmax = w.Max() // (initial) maximum bit position in bitmap
-	var bitsmax = int(bits[len(bits)-1])
+	var bitsmax = int(bits[bitslen-1])
 	if bitsmax > wmax {
 		nblks := make([]uint32, ((bitsmax-wmax)/31)+1)
 		w.arr = append(w.arr, nblks...)
@@ -133,7 +132,7 @@ func (w *Wahl) Set(bits ...uint) {
 	// updated wmax will -not- be affected.
 	wmax = w.Max() // update it. it will be >= bitsmax
 
-	// returns range of the block 'b' & the prior max
+	// helper func returns range of the block 'b' & the prior max
 	var brange = func(b uint32, max0 int) (uint, uint, int) {
 		min := uint(max0) + 1
 		n := 1
@@ -201,10 +200,15 @@ func (w *Wahl) Set(bits ...uint) {
 		case block>>30 == 0x3: // fill-1 is already set, next bit!
 			continue
 		default: // tile needs to have bitpos 'bitnum' set
+			// REVU it is likely faster to just set the bit (even if already set)
+			// than branch to check if it needs to be se.
+			// Consequence of this is that this function always returns true 'updated'.
 			var bit = uint(bitnum % 31)
 			w.arr[i] |= 1 << (bit & 0x1f)
 		}
 	}
+
+	return true
 }
 
 // DecompressTo decompresses the Wahl bitmap by writing directly to the given
