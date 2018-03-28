@@ -490,9 +490,15 @@ func (w *Wahl) Bits() Bitnums {
 
 // Returns the maximal bit position
 func (w *Wahl) Max() int {
+	// Note: since bit positions start from 0, the max register is initialized
+	// a -1. However, as a necessary convention (signed vs unsigned conversions)
+	// an empty zero-len Wahl bitmap will have a 'max' bit position of 0.
 	var max int = -1
 	if e := w.apply(maxBitsVisitor(&max)); e != nil {
 		panic(errors.Bug("Wahl.Max: %v", e))
+	}
+	if max == -1 {
+		max = 0
 	}
 	return max
 }
