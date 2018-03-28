@@ -138,15 +138,15 @@ func writeTagmap(tag string) error {
 	tagmap.Print(os.Stdout)
 	fmt.Println()
 
-	/* TODO
-	bool, e := tagmap.Save()
+	ok, e := tagmap.Save()
 	if e != nil {
 		exitOnError(e)
 	}
+	if ok {
+		fmt.Printf("debug - writeTagmap: wrote tagamp for %q\n", tag)
+	}
 
 	return nil
-	*/
-	return errors.Error("TODO: Tagmap #Save")
 }
 
 func queryTagmaps(tags ...string) error {

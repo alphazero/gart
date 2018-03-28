@@ -52,6 +52,9 @@ func (h *tagmapHeader) encode(buf []byte) error {
 	*(*uint64)(unsafe.Pointer(&buf[0])) = h.ftype
 	*(*int64)(unsafe.Pointer(&buf[16])) = h.created
 	*(*int64)(unsafe.Pointer(&buf[24])) = h.updated
+	// skip crc64
+	*(*uint64)(unsafe.Pointer(&buf[32])) = h.mapSize
+	*(*uint64)(unsafe.Pointer(&buf[40])) = h.mapMax
 
 	h.crc64 = digest.Checksum64(buf[16:])
 	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
@@ -228,11 +231,11 @@ func LoadTagmap(tag string, create bool) (*Tagmap, error) {
 	bug := func(what string, have, expect uint64) error {
 		return errors.Bug("index.LoadTagmap: %s verify - wahl:%d header:%d", what, have, expect)
 	}
-	wahlSize := uint64(wahl.Size()) // REVU maybe wahl should just return uint64?
+	wahlSize := uint64(wahl.Size())
 	if header.mapSize != wahlSize {
 		return nil, bug("mapSize", wahlSize, header.mapSize)
 	}
-	wahlMax := uint64(wahl.Max()) // REVU maybe wahl should just return uint64?
+	wahlMax := uint64(wahl.Max()) // REVU cast here and wahl's int returns are correct.
 	if header.mapMax != wahlMax {
 		return nil, bug("mapMax", wahlMax, header.mapMax)
 	}
@@ -270,7 +273,7 @@ func (t *Tagmap) Update(keys ...uint) {
 // Function returns a bool indicating if IO was performed, and, errors if
 // any. If error is not nil, the bool result should be ignored as a swap file
 // is used.
-func (t *Tagmap) Save(tag string, wahl *bitmap.Wahl) (bool, error) {
+func (t *Tagmap) Save() (bool, error) {
 
 	if !t.modified {
 		return false, nil
@@ -284,5 +287,54 @@ func (t *Tagmap) Save(tag string, wahl *bitmap.Wahl) (bool, error) {
 	t.header.mapSize = uint64(t.bitmap.Size())
 	t.header.mapMax = uint64(t.bitmap.Max())
 
-	return false, errors.NotImplemented("index.SaveTagmap")
+	// for notational convenient alias the errors func.
+	var errorWithCause = errors.ErrorWithCause
+
+	/// swapfile ////////////////////////////////////////////////////
+
+	var size = int64(tagmapHeaderSize + t.header.mapSize)
+	var swapfile = fs.SwapfileName(t.fname)
+	var ops = os.O_RDWR //| os.O_APPEND
+	sfile, e := fs.OpenNewFile(swapfile, ops)
+	if e != nil {
+		return false, errorWithCause(e, "Tagmap.Save: swapfile %q open-new", swapfile)
+	}
+	if e := sfile.Truncate(size); e != nil {
+		return false, errorWithCause(e, "Tagmap.Save: swapfile trunacte")
+	}
+	if xoff, e := sfile.Seek(0, os.SEEK_SET); e != nil || xoff != 0 {
+		return false, errorWithCause(e, "Tagmap.Save: swapfile seek head - xoff:%d", xoff)
+	}
+
+	// mmap it
+
+	var fd = int(sfile.Fd())
+	buf, e := syscall.Mmap(fd, 0, int(size), syscall.PROT_WRITE, syscall.MAP_SHARED)
+	if e != nil {
+		return false, errorWithCause(e, "Tagmap.Save: swapfile mmap")
+	}
+	fmt.Printf("debug -- buffer size: %d\n", len(buf))
+
+	// encode buffer and unmap and close swapfile
+
+	if e := t.header.encode(buf[:tagmapHeaderSize]); e != nil {
+		return false, errorWithCause(e, "Tagmap.Save: header.encode")
+	}
+	if e := t.bitmap.Encode(buf[tagmapHeaderSize:]); e != nil {
+		return false, errorWithCause(e, "Tagmap.Save: bitmap.encode")
+	}
+
+	if e := syscall.Munmap(buf); e != nil {
+		return false, errorWithCause(e, "Tagmap.Save: unmap")
+	}
+	if e := sfile.Close(); e != nil {
+		return false, errorWithCause(e, "Tagmap.Save: swapfile %q close", swapfile)
+	}
+
+	// swap it
+	if e := os.Rename(swapfile, t.fname); e != nil {
+		return false, errorWithCause(e, "Tagmap.save - os.Replace %q %q", swapfile, t.fname)
+	}
+
+	return true, nil
 }
