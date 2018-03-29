@@ -98,6 +98,15 @@ type Oid struct {
 	dat [OidSize]byte
 }
 
+func (oid *Oid) Bytes() []byte { return oid.dat[:] }
+func (oid *Oid) Encode(buf []byte) error {
+	if len(buf) < OidSize {
+		return errors.ErrInvalidArg
+	}
+	copy(buf, oid.dat[:])
+	return nil
+}
+
 // NewOid expects a slice of atleast OidSize bytes, which will be validated
 // and then copied for the allocated Oid.
 //
