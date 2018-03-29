@@ -268,7 +268,7 @@ func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 //
 // Returns index.ErrObjectIndexClosed if index has already been closed.
 func (oidx *oidxFile) closeIndex() error {
-	return errors.NotImplemented("oidxFile.Close")
+	return oidx.unmapAndClose()
 }
 
 // addObject appends the given oid to the object index. Index must have been
@@ -333,7 +333,10 @@ func (oidx *oidxFile) mmap(offset int64, length int, remap bool) error {
 
 func (oidx *oidxFile) unmap() error {
 	if oidx.buf == nil {
-		return errors.Error("oidxFile.unmap: buf is nil")
+		return errors.Bug("oidxFile.unmap: buf is nil")
+	}
+	if oidx.modified {
+		return errors.Bug("oidxFile.unmap: modified is true")
 	}
 	if e := syscall.Munmap(oidx.buf); e != nil {
 		return errors.ErrorWithCause(e, "oidxFile.unmap")
@@ -344,7 +347,23 @@ func (oidx *oidxFile) unmap() error {
 }
 
 func (oidx *oidxFile) unmapAndClose() error {
-	return errors.NotImplemented("oidxFile.unmapAndClose")
+	if oidx.modified {
+		oidx.header.updated = time.Now().UnixNano()
+		oidx.header.encode(oidx.buf)
+	}
+	if e := oidx.unmap(); e != nil {
+		return errors.ErrorWithCause(e, "oidxFile.unmapAndClose")
+	}
+	if e := oidx.file.Close(); e != nil {
+		return errors.ErrorWithCause(e, "oidxFile.unmapAndClose")
+	}
+	oidx.header = nil
+	oidx.file = nil
+	oidx.finfo = nil
+	oidx.prot = 0
+	oidx.flags = 0
+	oidx.opMode = 0 // invalid
+	return nil
 }
 
 // oidxFile.extendBy extends the file size by delta, and then remaps the
