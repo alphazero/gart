@@ -4,8 +4,19 @@ package index
 
 import (
 	"fmt"
+	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system" // TODO  REVU decision for OID in system ..
 )
+
+/// index package errors ///////////////////////////////////////////////////////
+
+var (
+	ErrObjectIndexExist    = errors.Error("%s exists", idxFilename)
+	ErrObjectIndexNotExist = errors.Error("%s does not exist", idxFilename)
+	ErrObjectIndexClosed   = errors.Error("object index is closeed")
+)
+
+/// types //////////////////////////////////////////////////////////////////////
 
 // TODO
 // significant todo here is nailing down the 'query' for selecting all object ids

@@ -5,8 +5,8 @@ package index
 import (
 	"fmt"
 	//	"io"
-	//	"os"
-	//	"path/filepath"
+	"os"
+	"path/filepath"
 	//	"syscall"
 	"time"
 	"unsafe"
@@ -28,19 +28,12 @@ import (
 // and these bit (positions) correspond to the 'keys' of object.idx, from which
 // we maps the tagmap.bits -> object.keys -> Oids -> Cards.
 
-func init() {
-	// verify system size assumptions central to objects.idx file
-	if system.OidSize != 32 {
-		panic(errors.Fault("index/objects.go: Oid-Size:%d", system.OidSize))
-	}
-
-}
-
 /// consts and vars ///////////////////////////////////////////////////////////
 
 // object.idx file
 const mmap_idx_file_code uint64 = 0x8fe452c6d1f55c66 // sha256("mmaped-index-file")[:8]
-const idxFilename = "object.idx"                     // REVU belongs to toplevle gart package
+const idxFileBasename = "object.idx"                 // REVU belongs to toplevle gart package
+var idxFilename string
 
 // objectsHeader related consts
 const (
@@ -48,6 +41,17 @@ const (
 	objectsPageSize   = 0x1000
 	objectsRecordSize = system.OidSize
 )
+
+/// object.idx specific inits //////////////////////////////////////////////////
+
+func init() {
+	// verify system size assumptions central to objects.idx file
+	if system.OidSize != 32 {
+		panic(errors.Fault("index/objects.go: Oid-Size:%d", system.OidSize))
+	}
+
+	idxFilename = filepath.Join(system.IndexObjectsPath, idxFileBasename)
+}
 
 /// object.idx file objectsHeader /////////////////////////////////////////////////////
 
@@ -115,4 +119,73 @@ func (h *objectsHeader) decode(buf []byte) error {
 	}
 
 	return errors.NotImplemented("index.objectsHeader.decode")
+}
+
+/// object.idx file ////////////////////////////////////////////////////////////
+
+// oidxFile structure captures the persistent and run-time meta-data and data of
+// the object.idx file. The file is memory mapped and supports distinct opModes.
+// This structure and associated functions and the logical object index itself
+// are only used by the index package and not top-level gart tools (yet).
+type oidxFile struct {
+	*objectsHeader
+	filename string
+	opMode   OpMode
+	file     *os.File
+	finfo    os.FileInfo // size is int64
+	flags    int
+	prot     int
+	buf      []byte
+	offset   int64
+	modified bool
+}
+
+// CreateObjectIndex creates the initial (header only/empty) object.idx file.
+// The file is closed on return.
+//
+// Returns index.ErrObjectIndexExists if index file already exists.
+func createObjectIndex() error {
+	return errors.NotImplemented("index.CreateObjectIndex")
+}
+
+// OpenObjectIndex opens the objects.idx in the given OpMode and returns
+// the handle to the index.
+//
+// Returns index.ErrObjectIndexNotExist if the index does not exist.
+// Function also returns any other error encountered in its execution.
+// In case of error results, the oidxFile pointer will be nil and file closed.
+func openObjectIndex(opMode OpMode) (*oidxFile, error) {
+	return nil, errors.NotImplemented("index.OpenObjectIndex")
+}
+
+// closeIndex closes the index, at which point the reference to the pointer
+// should be discarded.
+//
+// Returns index.ErrObjectIndexClosed if index has already been closed.
+func (oidx *oidxFile) closeIndex() error {
+	return errors.NotImplemented("oidxFile.Close")
+}
+
+// addObject appends the given oid to the object index. Index must have been
+// openned in OpMode#Write. The underlying file will be extended by a page
+// if required.
+//
+//
+func (oidx *oidxFile) addObject(oid []byte) error {
+	return errors.NotImplemented("oidxFile.AddObject")
+}
+
+// lookupOidByKey returns a mapping of uint64 keys to []byte slice data of
+// object ids (Oid.data). The returning mapping may have less elements than
+// the number of input keys if the index does not contain a mapping for the
+// key.
+//
+// Returns (map, index.ErrNoSuchObject) if one or more of the input keys are not bound.
+// The map may still contain other mappings and will not be nil though possibly
+// empty.
+//
+// Returns index.ErrObjectIndexClosed or any other encountered error, in which
+// the resultant map will be nil.
+func (oidx *oidxFile) lookupOidByKey(key ...uint64) (map[uint64][]byte, error) {
+	return nil, errors.NotImplemented("oidxFile.Lookup")
 }
