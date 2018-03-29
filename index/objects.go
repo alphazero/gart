@@ -277,7 +277,27 @@ func (oidx *oidxFile) closeIndex() error {
 //
 //
 func (oidx *oidxFile) addObject(oid []byte) error {
-	return errors.NotImplemented("oidxFile.AddObject")
+	if oidx.opMode != Write {
+		return errors.Bug("oidxFile.AddObject: invalid op-mode:%s", oidx.opMode)
+	}
+
+	var offset = ((oidx.header.ocnt) << 5) + objectsHeaderSize
+	if oidx.header.ocnt&0x7f == 0 {
+		// need new page
+		if e := oidx.extendBy(objectsPageSize); e != nil {
+			return e
+		}
+		oidx.header.pcnt++
+	}
+	n := copy(oidx.buf[offset:], oid)
+	if n != objectsRecordSize {
+		panic(errors.Fault("n is %d!", n))
+	}
+	oidx.header.ocnt++
+	if !oidx.modified {
+		oidx.modified = true
+	}
+	return nil
 }
 
 // lookupOidByKey returns a mapping of uint64 keys to []byte slice data of
