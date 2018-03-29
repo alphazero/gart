@@ -14,6 +14,7 @@ import (
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
+	"github.com/alphazero/gart/syslib/sort"
 	"github.com/alphazero/gart/system"
 )
 
@@ -288,7 +289,7 @@ func (oidx *oidxFile) closeIndex() error {
 // if required.
 //
 //
-func (oidx *oidxFile) addObject(oid []byte) error {
+func (oidx *oidxFile) addObject(oid *system.Oid) error {
 	if oidx.opMode != Write {
 		return errors.Bug("oidxFile.AddObject: invalid op-mode:%s", oidx.opMode)
 	}
@@ -301,9 +302,9 @@ func (oidx *oidxFile) addObject(oid []byte) error {
 		}
 		oidx.header.pcnt++
 	}
-	n := copy(oidx.buf[offset:], oid)
-	if n != objectsRecordSize {
-		panic(errors.Fault("n is %d!", n))
+	if e := oid.Encode(oidx.buf[offset:]); e != nil {
+		panic(errors.FaultWithCause(e,
+			"oidx.AddObject: oid: %s - offset: %d - buflen: %d", oid, offset, len(oidx.buf)))
 	}
 	oidx.header.ocnt++
 	if !oidx.modified {
@@ -317,14 +318,40 @@ func (oidx *oidxFile) addObject(oid []byte) error {
 // the number of input keys if the index does not contain a mapping for the
 // key.
 //
-// Returns (map, index.ErrNoSuchObject) if one or more of the input keys are not bound.
-// The map may still contain other mappings and will not be nil though possibly
-// empty.
+// Returns nil, Bug if no keys are specified.
+// Returns nil, Bug for key values ==0 or > oidx.object count.
 //
 // Returns index.ErrObjectIndexClosed or any other encountered error, in which
 // the resultant map will be nil.
-func (oidx *oidxFile) lookupOidByKey(key ...uint64) (map[uint64][]byte, error) {
-	return nil, errors.NotImplemented("oidxFile.Lookup")
+func (oidx *oidxFile) getObjectOids(keys ...uint64) (map[uint64]*system.Oid, error) {
+	if oidx.opMode != Read {
+		return nil, errors.Bug("oidxFile.getObjectIds: invalid op-mode:%s", oidx.opMode)
+	}
+	if oidx.file == nil {
+		return nil, ErrObjectIndexClosed
+	}
+
+	var klen = len(keys)
+	if klen == 0 {
+		return nil, errors.Bug("oidx.getObjectOids: no keys specified")
+	}
+	var oids = make(map[uint64]*system.Oid, klen)
+
+	sort.Uint64s(keys)
+	for i, k := range keys {
+		if k == 0 || k >= oidx.header.ocnt {
+			return nil, errors.Bug("oidx.getObjectOids: invalid key[%d]: %d", i, k)
+		}
+
+		offset := (k << 5) + objectsHeaderSize
+		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
+		if e != nil {
+			return nil, errors.ErrorWithCause(e, "oidx.getObjectOids")
+		}
+		oids[k] = oid
+	}
+
+	return oids, nil
 }
 
 /// oidx internals /////////////////////////////////////////////////////////////
