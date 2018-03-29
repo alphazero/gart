@@ -7,7 +7,7 @@ import (
 	//	"io"
 	"os"
 	"path/filepath"
-	//	"syscall"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -135,9 +135,9 @@ func (h *objectsHeader) decode(buf []byte) error {
 // This structure and associated functions and the logical object index itself
 // are only used by the index package and not top-level gart tools (yet).
 type oidxFile struct {
-	*objectsHeader
-	filename string
+	header   *objectsHeader
 	opMode   OpMode
+	source   string
 	file     *os.File
 	finfo    os.FileInfo // size is int64
 	flags    int
@@ -196,7 +196,58 @@ func createObjectIndex() error {
 // Function also returns any other error encountered in its execution.
 // In case of error results, the oidxFile pointer will be nil and file closed.
 func openObjectIndex(opMode OpMode) (*oidxFile, error) {
-	return nil, errors.NotImplemented("index.OpenObjectIndex")
+
+	/// verify opmod and init accordingly ///////////////////////////
+
+	if e := opMode.verify(); e != nil {
+		return nil, e
+	}
+
+	var flags int
+	var oflags int
+	var prot int
+	switch opMode {
+	case Read:
+		flags = syscall.MAP_PRIVATE
+		prot = syscall.PROT_READ
+		oflags = os.O_RDONLY
+	case Write:
+		flags = syscall.MAP_SHARED
+		prot = syscall.PROT_WRITE
+		oflags = os.O_RDWR
+	default:
+		panic("bug - unsupported opMode")
+	}
+
+	/// open file and map objectFile /////////////////////////////////
+
+	file, e := os.OpenFile(oidxFilename, oflags, system.FilePerm)
+	if e != nil {
+		return nil, e
+	}
+	// note: close file on any error below
+	finfo, e := file.Stat()
+	if e != nil {
+		file.Close()
+		return nil, e
+	}
+
+	var oidx = &oidxFile{
+		source: oidxFilename,
+		opMode: opMode,
+		file:   file,
+		finfo:  finfo,
+		prot:   prot,
+		flags:  flags,
+	}
+
+	var offset int64 = 0
+	if e := oidx.mmap(offset, int(finfo.Size()), false); e != nil {
+		file.Close()
+		return nil, e
+	}
+
+	return oidx, nil
 }
 
 // closeIndex closes the index, at which point the reference to the pointer
@@ -229,4 +280,93 @@ func (oidx *oidxFile) addObject(oid []byte) error {
 // the resultant map will be nil.
 func (oidx *oidxFile) lookupOidByKey(key ...uint64) (map[uint64][]byte, error) {
 	return nil, errors.NotImplemented("oidxFile.Lookup")
+}
+
+/// oidx internals /////////////////////////////////////////////////////////////
+
+// oidxFile.mmap mmaps the source file. This may be a re-map operation if buf
+// is not nil and remap is explicitly requested. buf != nil and remap == false
+// is considered a Bug. Otherwise, this is the first mapping.
+//
+// Returns
+func (oidx *oidxFile) mmap(offset int64, length int, remap bool) error {
+	if oidx.buf != nil {
+		if !remap {
+			return errors.Bug("oidxFile.mmap: mmap with existing mapping - remap: %t", remap)
+		}
+		if e := oidx.unmap(); e != nil {
+			return e
+		}
+	}
+	var fd = int(oidx.file.Fd())
+	buf, e := syscall.Mmap(fd, offset, length, oidx.prot, oidx.flags)
+	if e != nil {
+		return e
+	}
+	// Note: unmap on any errors below
+
+	oidx.buf = buf
+	oidx.offset = offset
+	// REVU modified should be reset here, no?
+	if !remap {
+		if e := oidx.header.decode(oidx.buf); e != nil {
+			oidx.unmap()
+			return e
+		}
+	}
+
+	return nil
+}
+
+func (oidx *oidxFile) unmap() error {
+	if oidx.buf == nil {
+		return errors.Error("oidxFile.unmap: buf is nil")
+	}
+	if e := syscall.Munmap(oidx.buf); e != nil {
+		return errors.ErrorWithCause(e, "oidxFile.unmap")
+	}
+	oidx.buf = nil
+	oidx.offset = 0
+	return nil
+}
+
+/// op mode ////////////////////////////////////////////////////////////////////
+
+// OpMode is a flag type indicating index file access modes. It is used by
+// tagmaps and object-index files.
+type OpMode byte
+
+const (
+	Read OpMode = 1 << iota
+	Write
+	Verify
+	Compact
+)
+
+// panics on invalid opMode
+func (m OpMode) verify() error {
+	switch m {
+	case Read:
+	case Write:
+	case Verify:
+	case Compact:
+	default:
+		return errors.Bug("index.OpMode: unknown mode - %d", m)
+	}
+	return nil
+}
+
+// Returns string rep. of opMode
+func (m OpMode) String() string {
+	switch m {
+	case Read:
+		return "Read"
+	case Write:
+		return "Write"
+	case Verify:
+		return "Verify"
+	case Compact:
+		return "Compact"
+	}
+	panic(errors.Bug("index.OpMode: unknown mode - %d", m))
 }
