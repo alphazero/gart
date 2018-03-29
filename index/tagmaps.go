@@ -22,7 +22,7 @@ import (
 /// tagmap file header /////////////////////////////////////////////////////////
 
 const tagmapHeaderSize = 48
-const mmap_tagmap_ftype = 0x5807263e43839459
+const mmap_tagmap_ftype uint64 = 0x5807263e43839459
 
 // tagmap header is the minimal content of a valid gart tagmap file.
 type tagmapHeader struct {
