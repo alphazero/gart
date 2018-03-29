@@ -13,6 +13,7 @@ import (
 
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/syslib/fs"
 	"github.com/alphazero/gart/system"
 )
 
@@ -31,9 +32,12 @@ import (
 /// consts and vars ///////////////////////////////////////////////////////////
 
 // object.idx file
-const mmap_idx_file_code uint64 = 0x8fe452c6d1f55c66 // sha256("mmaped-index-file")[:8]
-const idxFileBasename = "object.idx"                 // REVU belongs to toplevle gart package
-var idxFilename string
+const (
+	mmap_idx_file_code uint64 = 0x8fe452c6d1f55c66 // sha256("mmaped-index-file")[:8]
+	oidxFileBasename          = "object.idx"       // REVU belongs to toplevle gart package
+)
+
+var oidxFilename string // set by init()
 
 // objectsHeader related consts
 const (
@@ -50,11 +54,14 @@ func init() {
 		panic(errors.Fault("index/objects.go: Oid-Size:%d", system.OidSize))
 	}
 
-	idxFilename = filepath.Join(system.IndexObjectsPath, idxFileBasename)
+	oidxFilename = filepath.Join(system.IndexObjectsPath, oidxFileBasename)
 }
 
 /// object.idx file objectsHeader /////////////////////////////////////////////////////
 
+// object.idx file's header is a page size (4KB) structure and is the minimal object
+// index file. The crc64 field is the checksum of the header only. The reserved bits
+// are for a projected merkel checksum of actual object index data chunks.
 type objectsHeader struct {
 	ftype    uint64
 	crc64    uint64 // objectsHeader crc
@@ -145,7 +152,41 @@ type oidxFile struct {
 //
 // Returns index.ErrObjectIndexExists if index file already exists.
 func createObjectIndex() error {
-	return errors.NotImplemented("index.CreateObjectIndex")
+
+	// for convenience
+	errorWithCause := errors.ErrorWithCause
+
+	// create object index file
+	file, e := fs.OpenNewFile(oidxFilename, os.O_WRONLY|os.O_APPEND)
+	if e != nil {
+		return errorWithCause(e, "oidx.CreateIndex")
+	}
+	defer file.Close()
+
+	// encode and write header
+	var now = time.Now().UnixNano()
+	var header = &objectsHeader{
+		ftype:   mmap_idx_file_code, // TODO uniformly call these _file
+		created: now,
+		updated: now,
+		pcnt:    0,
+		ocnt:    0,
+	}
+	var buf [objectsHeaderSize]byte
+	if e := header.encode(buf[:]); e != nil {
+		if ec := os.Remove(oidxFilename); ec != nil {
+			panic(errors.Fault(
+				"oidx.CreateIndex: os.Remove - %s - while recovering from: %s", ec, e))
+		}
+		return errorWithCause(e, "oidx.CreateIndex")
+	}
+
+	_, e = file.Write(buf[:])
+	if e != nil {
+		return errorWithCause(e, "oidx.CreateIndex")
+	}
+
+	return nil
 }
 
 // OpenObjectIndex opens the objects.idx in the given OpMode and returns

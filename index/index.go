@@ -11,8 +11,8 @@ import (
 /// index package errors ///////////////////////////////////////////////////////
 
 var (
-	ErrObjectIndexExist    = errors.Error("%s exists", idxFilename)
-	ErrObjectIndexNotExist = errors.Error("%s does not exist", idxFilename)
+	ErrObjectIndexExist    = errors.Error("%s exists", oidxFilename)
+	ErrObjectIndexNotExist = errors.Error("%s does not exist", oidxFilename)
 	ErrObjectIndexClosed   = errors.Error("object index is closeed")
 )
 
