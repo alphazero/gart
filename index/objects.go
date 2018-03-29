@@ -4,7 +4,7 @@ package index
 
 import (
 	"fmt"
-	//	"io"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -72,13 +72,13 @@ type objectsHeader struct {
 	reserved [4048]byte
 }
 
-func (h *objectsHeader) Print() {
-	fmt.Printf("file type:  %016x\n", h.ftype)
-	fmt.Printf("crc64:      %016x\n", h.crc64)
-	fmt.Printf("created:    %016x (%s)\n", h.created, time.Unix(0, h.created))
-	fmt.Printf("updated:    %016x (%s)\n", h.updated, time.Unix(0, h.updated))
-	fmt.Printf("page cnt: : %d\n", h.pcnt)
-	fmt.Printf("object cnt: %d\n", h.ocnt)
+func (h *objectsHeader) Print(w io.Writer) {
+	fmt.Fprintf(w, "file type:  %016x\n", h.ftype)
+	fmt.Fprintf(w, "crc64:      %016x\n", h.crc64)
+	fmt.Fprintf(w, "created:    %016x (%s)\n", h.created, time.Unix(0, h.created))
+	fmt.Fprintf(w, "updated:    %016x (%s)\n", h.updated, time.Unix(0, h.updated))
+	fmt.Fprintf(w, "page cnt: : %d\n", h.pcnt)
+	fmt.Fprintf(w, "object cnt: %d\n", h.ocnt)
 }
 
 func (h *objectsHeader) encode(buf []byte) error {
@@ -145,6 +145,19 @@ type oidxFile struct {
 	buf      []byte
 	offset   int64
 	modified bool
+}
+
+func (oidx *oidxFile) Print(w io.Writer) {
+}
+
+func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
+	var p = int(page)
+	var width = 16
+	var poff = p << 12
+	var pend = poff + 0x1000 // page size 4K
+	for i := poff; i < pend; i += width {
+		fmt.Fprintf(w, "%08x % 02x\n", i, oidx.buf[i:i+width])
+	}
 }
 
 // CreateObjectIndex creates the initial (header only/empty) object.idx file.
@@ -330,6 +343,43 @@ func (oidx *oidxFile) unmap() error {
 	return nil
 }
 
+func (oidx *oidxFile) unmapAndClose() error {
+	return errors.NotImplemented("oidxFile.unmapAndClose")
+}
+
+// oidxFile.extendBy extends the file size by delta, and then remaps the
+// oidxFile buffer.
+func (oidx *oidxFile) extendBy(delta int64) error {
+
+	errorWithCause := errors.ErrorWithCause
+
+	size := oidx.finfo.Size() + delta
+	if e := oidx.file.Truncate(size); e != nil {
+		fmt.Fprintf(os.Stderr, "debug - error on truncate to %d - will unmap and close file", size)
+		oidx.unmapAndClose()
+		return errorWithCause(e, "oidxFile.extendBy")
+	}
+	// update state
+	finfo, e := oidx.file.Stat()
+	if e != nil {
+		fmt.Fprintf(os.Stderr, "debug - error on file.Stat - will unmap and close file")
+		oidx.unmapAndClose()
+		return errorWithCause(e, "oidxFile.extendBy")
+	}
+	oidx.finfo = finfo
+	// remap
+	if e := oidx.mmap(0, int(oidx.finfo.Size()), true); e != nil {
+		fmt.Fprintf(os.Stderr, "debug - error on remap - will unmap and close file")
+		oidx.unmapAndClose()
+		return errorWithCause(e, "oidxFile.extendBy")
+	}
+
+	return nil
+}
+
+// CreateIndex will create the objects.idx file in the <home>/index/ directory.
+// Error is returned if in-arg home is zerolen or if the file already exists.
+// The initial index file is simply the header.
 /// op mode ////////////////////////////////////////////////////////////////////
 
 // OpMode is a flag type indicating index file access modes. It is used by
