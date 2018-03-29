@@ -67,8 +67,8 @@ type objectsHeader struct {
 	crc64    uint64 // objectsHeader crc
 	created  int64
 	updated  int64
-	pcnt     uint64 // page count	=> pcnt
-	ocnt     uint64 // record count => ocnt
+	pcnt     uint64 // page count - 1..n
+	ocnt     uint64 // record count - 1..n
 	reserved [4048]byte
 }
 
@@ -148,6 +148,18 @@ type oidxFile struct {
 }
 
 func (oidx *oidxFile) Print(w io.Writer) {
+	oidx.header.Print(w)
+	fmt.Fprintf(w, "---------------------\n")
+	fmt.Fprintf(w, "opMode:     %s\n", oidx.opMode)
+	fmt.Fprintf(w, "source:     %q\n", oidx.source)
+	fmt.Fprintf(w, "buf-len:    %d\n", len(oidx.buf))
+	fmt.Fprintf(w, "offset:     %s\n", oidx.offset)
+	fmt.Fprintf(w, "modified:   %t\n", oidx.modified)
+	fmt.Fprintf(w, "-page: 1   ----------\n")
+	oidx.hexdump(w, 1)
+	fmt.Fprintf(w, "...                  \n")
+	fmt.Fprintf(w, "-page: %2d ----------\n", oidx.header.pcnt)
+	oidx.hexdump(w, oidx.header.pcnt)
 }
 
 func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
