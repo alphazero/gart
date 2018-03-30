@@ -5,11 +5,27 @@
 simplified, minimal, repo structure:
 
 .gart/
-	index/
+	tags/
+		systemics.dat -- maybe
 		tagdict.dat
+	index/
 		objects.idx
 		cards/
+			00/
+			..
+			ff/
 		tagmaps/
+			00/
+			..
+			ff/
+
+-- why tags/ and index? 
+
+tags are inherently independent of the index. The index relies on tags. 
+
+Also tag manangement can be a fairly substantial sub-system. From basic typo-correction, 
+command-line tag completion, to tag inference from content & similarity to other objects.
+
 
 == 1.0 ==
 
