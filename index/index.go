@@ -94,7 +94,6 @@ func Initialize(reinit bool) error {
 	return nil
 }
 
-// REVU: turns out OpMode is not just for objects.go.
 func OpenIndexManager(opMode OpMode) (*indexManager, error) {
 
 	oidx, e := openObjectIndex(opMode)
@@ -123,7 +122,7 @@ func (idx *indexManager) UsingTags(tags ...string) (*indexManager, error) {
 		if _, ok := idx.tagmaps[tag]; ok {
 			continue // already loaded
 		}
-		tagmap, e := LoadTagmap(tag, false)
+		tagmap, e := loadTagmap(tag, false)
 		if e != nil {
 			return idx, errors.ErrorWithCause(e, "index.UsingTags: tag[%d]:%q", i, tag)
 		}
@@ -147,7 +146,7 @@ func (idx *indexManager) IndexObject(oid *system.Oid, tags ...string) (bool, err
 // Return error if any of the tags are undefined.
 func (idx *indexManager) SelectObjects(tags ...string) ([]*system.Oid, error) {
 
-	tagmap0, e := LoadTagmap(tags[0], false)
+	tagmap0, e := loadTagmap(tags[0], false)
 	if e != nil {
 		return nil, e
 	}
@@ -156,7 +155,7 @@ func (idx *indexManager) SelectObjects(tags ...string) ([]*system.Oid, error) {
 
 	var resmap = tagmap0.bitmap
 	for _, tag := range tags[1:] {
-		tagmap, e := LoadTagmap(tag, false)
+		tagmap, e := loadTagmap(tag, false)
 		if e != nil {
 			return nil, e
 		}
