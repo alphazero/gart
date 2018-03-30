@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"syscall"
 	"time"
 	"unsafe"
@@ -18,7 +17,7 @@ import (
 	"github.com/alphazero/gart/system"
 )
 
-// object.idx file is a sequential list of object ids. The adjusted offset of
+// objects.idx file is a sequential list of object ids. The adjusted offset of
 // the fixed witdth Oid data (32B) is the implicit 'key' for the object. The
 // adjustment is accounting for the objects.idx objectsHeader.
 //
@@ -27,18 +26,16 @@ import (
 //
 // On queries of objects for a given specification of tags (e.g AND or more
 // selective logical expressions) an array of 'bits' is obtained from the Tagmap
-// and these bit (positions) correspond to the 'keys' of object.idx, from which
+// and these bit (positions) correspond to the 'keys' of objects.idx, from which
 // we maps the tagmap.bits -> object.keys -> Oids -> Cards.
 
 /// consts and vars ///////////////////////////////////////////////////////////
 
-// object.idx file
 const (
 	mmap_idx_file_code uint64 = 0x8fe452c6d1f55c66 // sha256("mmaped-index-file")[:8]
-	oidxFileBasename          = "object.idx"       // REVU belongs to toplevle gart package
 )
 
-var oidxFilename string // set by init()
+var oidxFilename string = system.ObjectIndexPath
 
 // objectsHeader related consts
 const (
@@ -47,20 +44,18 @@ const (
 	objectsRecordSize = system.OidSize
 )
 
-/// object.idx specific inits //////////////////////////////////////////////////
+/// objects.idx specific inits /////////////////////////////////////////////////
 
 func init() {
 	// verify system size assumptions central to objects.idx file
 	if system.OidSize != 32 {
 		panic(errors.Fault("index/objects.go: Oid-Size:%d", system.OidSize))
 	}
-
-	oidxFilename = filepath.Join(system.IndexObjectsPath, oidxFileBasename)
 }
 
-/// object.idx file objectsHeader /////////////////////////////////////////////////////
+/// objects.idx file objectsHeader /////////////////////////////////////////////
 
-// object.idx file's header is a page size (4KB) structure and is the minimal object
+// objects.idx file's header is a page size (4KB) structure and is the minimal object
 // index file. The crc64 field is the checksum of the header only. The reserved bits
 // are for a projected merkel checksum of actual object index data chunks.
 type objectsHeader struct {
@@ -129,10 +124,10 @@ func (h *objectsHeader) decode(buf []byte) error {
 	return errors.NotImplemented("index.objectsHeader.decode")
 }
 
-/// object.idx file ////////////////////////////////////////////////////////////
+/// objects.idx file ///////////////////////////////////////////////////////////
 
 // oidxFile structure captures the persistent and run-time meta-data and data of
-// the object.idx file. The file is memory mapped and supports distinct opModes.
+// the objects.idx file. The file is memory mapped and supports distinct opModes.
 // This structure and associated functions and the logical object index itself
 // are only used by the index package and not top-level gart tools (yet).
 type oidxFile struct {
@@ -173,7 +168,7 @@ func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
 	}
 }
 
-// CreateObjectIndex creates the initial (header only/empty) object.idx file.
+// CreateObjectIndex creates the initial (header only/empty) objects.idx file.
 // The file is closed on return.
 //
 // Returns index.ErrObjectIndexExists if index file already exists.

@@ -4,15 +4,20 @@ package index
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/syslib/fs"
 	"github.com/alphazero/gart/system" // TODO  REVU decision for OID in system ..
 )
 
 /// index package errors ///////////////////////////////////////////////////////
 
 var (
-	ErrObjectIndexExist    = errors.Error("%s exists", oidxFilename)
-	ErrObjectIndexNotExist = errors.Error("%s does not exist", oidxFilename)
+	ErrIndexInitialized    = errors.Error("index is already initialized")
+	ErrIndexNotInitialized = errors.Error("index is not initialized")
+	ErrObjectIndexExist    = errors.Error("%s exists", system.ObjectIndexPath)
+	ErrObjectIndexNotExist = errors.Error("%s does not exist", system.ObjectIndexPath)
 	ErrObjectIndexClosed   = errors.Error("object index is closeed")
 )
 
@@ -30,19 +35,64 @@ type indexManager struct {
 	tagmaps map[string]*Tagmap
 }
 
-// index.Initialize creates the various necessary indexes for gart in the
-// canonical system.RepoDir.
-func InitializeRepo() error {
+// index.Initialize creates the canonical index files for the repo. The index
+// directory itself is assumed to exist per toplevel gart initialization.
+//
+// If reinit is false & the index is already intialized, ErrIndexInitialized
+// is returned.
+//
+// If reinit is true * the index is not initialized, ErrIndexNotInitialized
+// is returned.
+//
+// Function may also return an error with cause.
+func Initialize(reinit bool) error {
+
+	switch reinit {
+	case true:
+		if e := fs.VerifyFile(system.ObjectIndexPath); e != nil {
+			return ErrIndexNotInitialized
+		}
+		if e := fs.VerifyDir(system.IndexTagmapsPath); e != nil {
+			return ErrIndexNotInitialized
+		}
+		if e := fs.VerifyDir(system.IndexCardsPath); e != nil {
+			return ErrIndexNotInitialized
+		}
+		if e := os.Remove(system.IndexPath); e != nil {
+			return errors.FaultWithCause(e,
+				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
+		}
+		if e := os.Mkdir(system.IndexPath, system.DirPerm); e != nil {
+			return errors.FaultWithCause(e,
+				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
+		}
+	default:
+		if e := fs.VerifyFile(system.ObjectIndexPath); e == nil {
+			return ErrIndexInitialized
+		}
+		if e := fs.VerifyDir(system.IndexTagmapsPath); e == nil {
+			return ErrIndexInitialized
+		}
+		if e := fs.VerifyDir(system.IndexCardsPath); e == nil {
+			return ErrIndexInitialized
+		}
+	}
+
+	var dirs = []string{system.IndexCardsPath, system.IndexTagmapsPath}
+	for _, dir := range dirs {
+		if e := os.Mkdir(dir, system.DirPerm); e != nil {
+			return errors.FaultWithCause(e,
+				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, dir)
+		}
+	}
+
 	if e := createObjectIndex(); e != nil {
 		return errors.ErrorWithCause(e,
 			"index.InitializeRepo: error creating objects index")
 	}
 
-	// REVU what else?
-	//		Tagmaps are per tag. Should it create Tagdict?
-	//		TODO tagmaps for 'systemic' tags could be done here.
-	//		Card files are per object. Is there to be a Cards object?
-
+	// TODO refactor 1.0/tag/tagmap.go (actually should be tagdict.go)
+	//      and check if TagDictionaryPath exists.
 	return nil
 }
 
