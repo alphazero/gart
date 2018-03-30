@@ -91,8 +91,6 @@ func Initialize(reinit bool) error {
 			"index.InitializeRepo: error creating objects index")
 	}
 
-	// TODO refactor 1.0/tag/tagmap.go (actually should be tagdict.go)
-	//      and check if TagDictionaryPath exists.
 	return nil
 }
 

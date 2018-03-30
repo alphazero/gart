@@ -13,16 +13,8 @@ import (
 	"github.com/alphazero/gart/syslib/errors"
 )
 
-/* XXX
-
-.gart/
-	index/
-		tagdict.dat
-		objects.idx
-		cards/
-		tagmaps/
-*/
-
+// REVU basic logging at some point is TODO
+// REVU this can be set with go run/build, btw
 var Debug bool = true
 
 // panics if any errors are encountered.
@@ -36,13 +28,13 @@ func init() {
 	/// initialize non-const system vars ////////////////////////////
 
 	// paths
-
 	RepoPath = filepath.Join(user.HomeDir, RepoDir)
+
+	TagsPath = filepath.Join(user.HomeDir, TagsDir)
+	TagDictionaryPath = filepath.Join(TagsPath, TagDictionaryFilename)
+
 	IndexPath = filepath.Join(user.HomeDir, IndexDir)
-	// both objects.idx and tagdict.dat are in .gart/index/
 	ObjectIndexPath = filepath.Join(IndexPath, ObjectIndexFilename)
-	TagDictionaryPath = filepath.Join(IndexPath, TagDictionaryFilename)
-	// mutli-file card and tagmap files are nested in .gart/index/<idx-type>
 	IndexCardsPath = filepath.Join(IndexPath, "cards")
 	IndexTagmapsPath = filepath.Join(IndexPath, "tagmaps")
 
@@ -53,11 +45,12 @@ func init() {
 
 	Debugf("system/runtime.go: system.init() ---------------------")
 	Debugf("RepoPath:          %q", RepoPath)
+	Debugf("TagsPath:          %q", TagsPath)
+	Debugf("TagDictionaryPath: %q", TagDictionaryPath)
 	Debugf("IndexPath:         %q", IndexPath)
 	Debugf("IndexCardsPath:    %q", IndexCardsPath)
 	Debugf("IndexTagmapsPath:  %q", IndexTagmapsPath)
 	Debugf("ObjectIndexPath:   %q", ObjectIndexPath)
-	Debugf("TagDictionaryPath: %q", TagDictionaryPath)
 	Debugf("system/runtime.go: system.init() ------------- end ---")
 }
 

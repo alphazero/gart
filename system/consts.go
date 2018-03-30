@@ -7,7 +7,7 @@ package system
 // Repository home, top-level directory, and well-defined index file  names
 const (
 	RepoDir               = ".gart"
-	TagsDir               = "tags" // TODO deprecated
+	TagsDir               = "tags"
 	IndexDir              = "index"
 	ObjectIndexFilename   = "objects.idx"
 	TagDictionaryFilename = "tagdict.dat"
@@ -16,9 +16,9 @@ const (
 // To support os portability these immutable system facts are vars.
 // Initialized in (runtime.go) init().
 var (
-	RepoPath  string
-	IndexPath string
-	//	IndexObjectsPath string // TODO deprecated
+	RepoPath          string
+	TagsPath          string
+	IndexPath         string
 	ObjectIndexPath   string
 	TagDictionaryPath string
 	IndexCardsPath    string
