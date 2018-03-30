@@ -13,6 +13,16 @@ import (
 	"github.com/alphazero/gart/syslib/errors"
 )
 
+/* XXX
+
+.gart/
+	index/
+		tagdict.dat
+		objects.idx
+		cards/
+		tagmaps/
+*/
+
 var Debug bool = true
 
 // panics if any errors are encountered.
@@ -23,17 +33,32 @@ func init() {
 		panic(errors.FaultWithCause(e, "runtime.init(): unexpected error"))
 	}
 
-	// initialize non-const system vars
-	RepoPath = filepath.Join(user.HomeDir, RepoDir)
-	IndexCardsPath = filepath.Join(RepoPath, IndexDir, "cards")
-	IndexObjectsPath = filepath.Join(RepoPath, IndexDir, "objects")
-	IndexTagmapsPath = filepath.Join(RepoPath, IndexDir, "tagmaps")
+	/// initialize non-const system vars ////////////////////////////
 
-	Debugf("system.init() ---------------------")
-	Debugf("RepoPath:         %q", RepoPath)
-	Debugf("IndexCardsPath:   %q", IndexCardsPath)
-	Debugf("IndexObjectsPath: %q", IndexObjectsPath)
-	Debugf("IndexTagmapsPath: %q", IndexTagmapsPath)
+	// paths
+
+	RepoPath = filepath.Join(user.HomeDir, RepoDir)
+	IndexPath = filepath.Join(user.HomeDir, IndexDir)
+	// both objects.idx and tagdict.dat are in .gart/index/
+	ObjectIndexPath = filepath.Join(IndexPath, ObjectIndexFilename)
+	TagDictionaryPath = filepath.Join(IndexPath, TagDictionaryFilename)
+	// mutli-file card and tagmap files are nested in .gart/index/<idx-type>
+	IndexCardsPath = filepath.Join(IndexPath, "cards")
+	IndexTagmapsPath = filepath.Join(IndexPath, "tagmaps")
+
+	// errors
+
+	ErrIndexExist = errors.Error("%q exists", IndexPath)
+	ErrIndexNotExist = errors.Error("%q does not exist", IndexPath)
+
+	Debugf("system/runtime.go: system.init() ---------------------")
+	Debugf("RepoPath:          %q", RepoPath)
+	Debugf("IndexPath:         %q", IndexPath)
+	Debugf("IndexCardsPath:    %q", IndexCardsPath)
+	Debugf("IndexTagmapsPath:  %q", IndexTagmapsPath)
+	Debugf("ObjectIndexPath:   %q", ObjectIndexPath)
+	Debugf("TagDictionaryPath: %q", TagDictionaryPath)
+	Debugf("system/runtime.go: system.init() ------------- end ---")
 }
 
 func Debugf(fmtstr string, a ...interface{}) {

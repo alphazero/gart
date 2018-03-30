@@ -4,20 +4,25 @@ package system
 
 /// system wide constants //////////////////////////////////////////////////////
 
-// Repository home and top-level directory names
+// Repository home, top-level directory, and well-defined index file  names
 const (
-	RepoDir  = ".gart"
-	TagsDir  = "tags"
-	IndexDir = "index"
+	RepoDir               = ".gart"
+	TagsDir               = "tags" // TODO deprecated
+	IndexDir              = "index"
+	ObjectIndexFilename   = "objects.idx"
+	TagDictionaryFilename = "tagdict.dat"
 )
 
 // To support os portability these immutable system facts are vars.
 // Initialized in (runtime.go) init().
 var (
-	RepoPath         string
-	IndexCardsPath   string
-	IndexObjectsPath string
-	IndexTagmapsPath string
+	RepoPath  string
+	IndexPath string
+	//	IndexObjectsPath string // TODO deprecated
+	ObjectIndexPath   string
+	TagDictionaryPath string
+	IndexCardsPath    string
+	IndexTagmapsPath  string
 )
 
 // permissions of gart file-system artifacts

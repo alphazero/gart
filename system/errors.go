@@ -8,9 +8,13 @@ import (
 
 /// defined errors /////////////////////////////////////////////////////////////
 
+// These errors will be initialized by package init()
 var (
-	ErrTagNotFound = errors.Error("Tag for name not found")
+	ErrIndexExist    error
+	ErrIndexNotExist error
 )
+
+//var	ErrTagNotFound = errors.Error("Tag for name not found") // REVU ???
 
 /// defined bugs ///////////////////////////////////////////////////////////////
 
