@@ -110,7 +110,6 @@ func Initialize(reinit bool) error {
 }
 
 func OpenIndexManager(opMode OpMode) (*indexManager, error) {
-
 	oidx, e := openObjectIndex(opMode)
 	if e != nil {
 		return nil, e
@@ -122,28 +121,31 @@ func OpenIndexManager(opMode OpMode) (*indexManager, error) {
 		tagmaps: make(map[string]*Tagmap),
 	}
 
+	system.Debugf("index.OpenIndexManager: opMode: %s - openned.", opMode)
 	return idxmgr, nil
 }
 
 // Preloads the associated Tagmaps for the tags. This doesn't necessary mean
 // that we can't query using tags not specified here. (REVU it shouldn't.)
 //
-// Intended usecase is for a gart-tool to say:
-//
-//    index.OpenIndexManager(OpMode.Read).UsingTags(tags...)
-//
-func (idx *indexManager) UsingTags(tags ...string) (*indexManager, error) {
+// If this is the first time (in system life-time) that the tag is specified,
+// the associated tagmap will be created.
+func (idx *indexManager) UsingTags(tags ...string) error {
+	debug := func(s string) { system.Debugf("index.OpenIndexManager: " + s) }
+
 	for i, tag := range tags {
 		if _, ok := idx.tagmaps[tag]; ok {
+			debug(tag + " is already loaded")
 			continue // already loaded
 		}
-		tagmap, e := loadTagmap(tag, false)
+		tagmap, e := loadTagmap(tag, true) // REVU
 		if e != nil {
-			return idx, errors.ErrorWithCause(e, "index.UsingTags: tag[%d]:%q", i, tag)
+			return errors.ErrorWithCause(e, "index.UsingTags: tag[%d]:%q", i, tag)
 		}
+		debug(tag + " loaded")
 		idx.tagmaps[tag] = tagmap
 	}
-	return idx, nil
+	return nil
 }
 
 // Indexes the object identified by the Oid.
