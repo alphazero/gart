@@ -121,7 +121,7 @@ func (h *objectsHeader) decode(buf []byte) error {
 			h.updated, h.created)
 	}
 
-	return errors.NotImplemented("index.objectsHeader.decode")
+	return nil
 }
 
 /// objects.idx file ///////////////////////////////////////////////////////////
@@ -254,6 +254,7 @@ func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 	}
 
 	var oidx = &oidxFile{
+		header: &objectsHeader{},
 		source: oidxFilename,
 		opMode: opMode,
 		file:   file,
