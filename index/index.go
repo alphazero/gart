@@ -114,6 +114,9 @@ func OpenIndexManager(opMode OpMode) (*indexManager, error) {
 	if e != nil {
 		return nil, e
 	}
+	if system.Debug {
+		oidx.Print(os.Stderr)
+	}
 
 	var idxmgr = &indexManager{
 		opMode:  opMode,
@@ -123,6 +126,26 @@ func OpenIndexManager(opMode OpMode) (*indexManager, error) {
 
 	system.Debugf("index.OpenIndexManager: opMode: %s - openned.", opMode)
 	return idxmgr, nil
+}
+
+func (idx *indexManager) Close() error {
+
+	if idx.oidx == nil || idx.tagmaps == nil {
+		return errors.Bug("indexManager.Close: invalid state - already closed")
+	}
+
+	if system.Debug {
+		idx.oidx.Print(os.Stderr)
+	}
+	var e = idx.oidx.closeIndex()
+
+	system.Debugf("index.OpenIndexManager: opMode: %s - closed (e: %s).", idx.opMode, e)
+	// invalidate instance regardless of any errors
+	idx.opMode = 0
+	idx.oidx = nil
+	idx.tagmaps = nil
+
+	return e
 }
 
 // Preloads the associated Tagmaps for the tags. This doesn't necessary mean
@@ -150,8 +173,36 @@ func (idx *indexManager) UsingTags(tags ...string) error {
 
 // Indexes the object identified by the Oid.
 // REVU see gart-add in /1.0/ for refresh on systemics..
-func (idx *indexManager) IndexObject(oid *system.Oid, tags ...string) (bool, error) {
-	return false, errors.NotImplemented("indexManager.IndexObject")
+// REVU check assumptions - 1.0 assumed key 0 to be invalid? or was it 0xfff something?
+// REVU per thought re uint vs int API level fields, TODO revisit uint64 'key' for
+//      for index.Card (cardfile.go) and api here and use int64 instead.
+//		IFF done, then key < 0 would be invalid. 2^63 keys is OK.
+func (idx *indexManager) IndexObject(oid *system.Oid, tags ...string) (uint64, bool, error) {
+
+	var key uint64 = 0 // TODO replace with 'invalid key value' per TODO above
+	var newObject bool
+
+	// REVU for now delegate opMode validation to the oidx
+	if oid == nil {
+		return key, newObject, errors.InvalidArg("indexManager.IndexObject", "oid", "nil")
+	}
+
+	// REVU for now it is ok if no tags are defined
+	// TODO systemics need to be added here as well
+
+	// TODO we need to check index.Cards here for this OID
+	//      If new, we add it, returning key, true, nil
+	// 		If not, we update tags, returning key, false, nil
+
+	newObject = true // XXX temp
+	if newObject {
+		var e error // key ..
+		key, e = idx.oidx.addObject(oid)
+		if e != nil {
+			return key, newObject, errors.ErrorWithCause(e, "IndexManager.IndexObject")
+		}
+	}
+	return key, newObject, nil
 }
 
 // REVU need to revisit system/types.go
@@ -194,5 +245,4 @@ func (idx *indexManager) SelectObjects(tags ...string) ([]*system.Oid, error) {
 	// oids = GetObjectIds(resmap.Bits())
 
 	return oids, nil
-
 }

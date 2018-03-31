@@ -113,18 +113,26 @@ func addObject(filename string, tags ...string) error {
 	if e != nil {
 		return e
 	}
+	defer func() {
+		if e := idx.Close(); e != nil {
+			panic(errors.BugWithCause(e, "on deferred close of indexManager"))
+		}
+		log("debug - closed indexManager")
+	}()
+
 	if e := idx.UsingTags(tags...); e != nil {
 		return e
 	}
 
-	ok, e := idx.IndexObject(oid, tags...)
+	key, added, e := idx.IndexObject(oid, tags...)
 	if e != nil {
 		return e
 	}
-	if !ok {
-		log("debug - object (oid:%s) with tags (%q) already indexed", oid.Fingerprint(), tags)
+	if !added {
+		log("debug - object (oid:%s, key:%d) already indexed",
+			oid.Fingerprint(), key)
 	}
-	log("debug - indexed object (oid:%s) with tags (%q)", oid.Fingerprint(), tags)
+	log("debug - indexed object (oid:%s, key:%d)", oid.Fingerprint(), key)
 
 	return nil
 }

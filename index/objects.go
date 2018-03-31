@@ -149,13 +149,17 @@ func (oidx *oidxFile) Print(w io.Writer) {
 	fmt.Fprintf(w, "opMode:     %s\n", oidx.opMode)
 	fmt.Fprintf(w, "source:     %q\n", oidx.source)
 	fmt.Fprintf(w, "buf-len:    %d\n", len(oidx.buf))
-	fmt.Fprintf(w, "offset:     %s\n", oidx.offset)
+	fmt.Fprintf(w, "offset:     %d\n", oidx.offset)
 	fmt.Fprintf(w, "modified:   %t\n", oidx.modified)
-	fmt.Fprintf(w, "-page: 1   ----------\n")
-	oidx.hexdump(w, 1)
-	fmt.Fprintf(w, "...                  \n")
-	fmt.Fprintf(w, "-page: %2d ----------\n", oidx.header.pcnt)
-	oidx.hexdump(w, oidx.header.pcnt)
+	if oidx.header.pcnt > 0 {
+		fmt.Fprintf(w, "-page: 1   ----------\n")
+		oidx.hexdump(w, 1)
+	}
+	if oidx.header.pcnt > 1 {
+		fmt.Fprintf(w, "...                  \n")
+		fmt.Fprintf(w, "-page: %2d ----------\n", oidx.header.pcnt)
+		oidx.hexdump(w, oidx.header.pcnt)
+	}
 }
 
 func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
@@ -163,7 +167,20 @@ func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
 	var width = 16
 	var poff = p << 12
 	var pend = poff + 0x1000 // page size 4K
-	for i := poff; i < pend; i += width {
+	var lim = int(((oidx.header.ocnt) << 5) + objectsHeaderSize)
+	var truncated bool = true
+	if lim > pend {
+		lim = pend
+		truncated = false
+	}
+	for i := poff; i < lim; i += width {
+		fmt.Fprintf(w, "%08x % 02x\n", i, oidx.buf[i:i+width])
+	}
+	if truncated {
+		var i = lim
+		fmt.Fprintf(w, "%08x % 02x\n", i, oidx.buf[i:i+width])
+		fmt.Fprintf(w, " ...\n")
+		i = pend - width
 		fmt.Fprintf(w, "%08x % 02x\n", i, oidx.buf[i:i+width])
 	}
 }
@@ -284,17 +301,19 @@ func (oidx *oidxFile) closeIndex() error {
 // openned in OpMode#Write. The underlying file will be extended by a page
 // if required.
 //
-//
-func (oidx *oidxFile) addObject(oid *system.Oid) error {
+// Returns the 'key' of the new object, and nil on success.
+// On error, the uint64 value should be ignored.
+func (oidx *oidxFile) addObject(oid *system.Oid) (uint64, error) {
+	var key uint64 // TODO this needs to be < 0 as invalid after cardfile fix.
 	if oidx.opMode != Write {
-		return errors.Bug("oidxFile.AddObject: invalid op-mode:%s", oidx.opMode)
+		return key, errors.Bug("oidxFile.AddObject: invalid op-mode:%s", oidx.opMode)
 	}
 
 	var offset = ((oidx.header.ocnt) << 5) + objectsHeaderSize
 	if oidx.header.ocnt&0x7f == 0 {
 		// need new page
 		if e := oidx.extendBy(objectsPageSize); e != nil {
-			return e
+			return key, e
 		}
 		oidx.header.pcnt++
 	}
@@ -302,11 +321,14 @@ func (oidx *oidxFile) addObject(oid *system.Oid) error {
 		panic(errors.FaultWithCause(e,
 			"oidx.AddObject: oid: %s - offset: %d - buflen: %d", oid, offset, len(oidx.buf)))
 	}
+
+	system.Debugf("oidxFile.addObject: ocnt:%d\n", oidx.header.ocnt)
+	key = oidx.header.ocnt // REVU this starts keys with 0 so mod to int64 is TODO
 	oidx.header.ocnt++
 	if !oidx.modified {
 		oidx.modified = true
 	}
-	return nil
+	return key, nil
 }
 
 // lookupOidByKey returns a mapping of uint64 keys to []byte slice data of
@@ -405,6 +427,7 @@ func (oidx *oidxFile) unmapAndClose() error {
 	if oidx.modified {
 		oidx.header.updated = time.Now().UnixNano()
 		oidx.header.encode(oidx.buf)
+		oidx.modified = false
 	}
 	if e := oidx.unmap(); e != nil {
 		return errors.ErrorWithCause(e, "oidxFile.unmapAndClose")
