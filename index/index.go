@@ -47,21 +47,28 @@ type indexManager struct {
 // Function may also return an error with cause.
 func Initialize(reinit bool) error {
 
-	system.Debugf("index.Initialize: reinit:%t", reinit)
+	system.Debugf("index.Initialize: reinit: %t", reinit)
+
+	_debug0 := func(path, s string) {
+		system.Debugf("index.Initialize(%t): verify-file:%q %s", reinit, path, s)
+	}
 
 	switch reinit {
 	case true:
+		_debug := func(path string) { _debug0(path, "does not exist") }
 		if e := fs.VerifyFile(system.ObjectIndexPath); e != nil {
+			_debug(system.ObjectIndexPath)
 			return ErrIndexNotInitialized
 		}
 		if e := fs.VerifyDir(system.IndexTagmapsPath); e != nil {
+			_debug(system.IndexTagmapsPath)
 			return ErrIndexNotInitialized
 		}
 		if e := fs.VerifyDir(system.IndexCardsPath); e != nil {
+			_debug(system.IndexCardsPath)
 			return ErrIndexNotInitialized
 		}
-		// REVU this is dangerous - a bug in system.runtime.go had 'IndexPath' as
-		// USER-HOME << !!! as /Users/alphazero/index - TODO think about this.
+		system.Debugf("warn - rm -rf %q", system.IndexPath)
 		if e := os.RemoveAll(system.IndexPath); e != nil {
 			return errors.FaultWithCause(e,
 				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
@@ -71,16 +78,17 @@ func Initialize(reinit bool) error {
 				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
 		}
 	default:
+		_debug := func(path string) { _debug0(path, "exists") }
 		if e := fs.VerifyFile(system.ObjectIndexPath); e == nil {
-			system.Debugf("index.Initialize: verify-file:%q not exists", system.ObjectIndexPath)
+			_debug(system.ObjectIndexPath)
 			return ErrIndexInitialized
 		}
 		if e := fs.VerifyDir(system.IndexTagmapsPath); e == nil {
-			system.Debugf("index.Initialize: verify-dir:%q not exists", system.IndexTagmapsPath)
+			_debug(system.IndexTagmapsPath)
 			return ErrIndexInitialized
 		}
 		if e := fs.VerifyDir(system.IndexCardsPath); e == nil {
-			system.Debugf("index.Initialize: verify-dir:%q not exists", system.IndexCardsPath)
+			_debug(system.IndexCardsPath)
 			return ErrIndexInitialized
 		}
 	}
