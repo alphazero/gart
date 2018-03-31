@@ -47,7 +47,7 @@ func main() {
 		exitOnError(errors.Usage("flag -op must be specified"))
 	}
 	if option.op != "i" && option.op != "q" && option.file == "" {
-		exitOnError(errors.Usage("file must be specified for add & update"))
+		exitOnError(errors.Usage("file must be specified for add & update ops."))
 	}
 
 	option.op = strings.ToLower(option.op)
@@ -108,14 +108,31 @@ func initializeIndex(force bool) error {
 }
 func addObject(filename string, tags ...string) error {
 	var oid = fileOid(filename)
-	log("debug - todo - addObject - oid:%s", oid)
-	return errors.NotImplemented("adhoc-test.addObject: not implemented")
+
+	idx, e := index.OpenIndexManager(index.Write)
+	if e != nil {
+		return e
+	}
+	if e := idx.UsingTags(tags...); e != nil {
+		return e
+	}
+
+	ok, e := idx.IndexObject(oid, tags...)
+	if e != nil {
+		return e
+	}
+	if !ok {
+		log("debug - object (oid:%s) with tags (%q) already indexed", oid.Fingerprint(), tags)
+	}
+	log("debug - indexed object (oid:%s) with tags (%q)", oid.Fingerprint(), tags)
+
+	return nil
 }
 func updateObjectTags(oid *system.Oid, tags ...string) error {
-	return errors.NotImplemented("adhoc-test.updateObjectTags: not implemented")
+	return errors.NotImplemented("adhoc-test.updateObjectTags")
 }
 func queryByTag(tags ...string) error {
-	return errors.NotImplemented("adhoc-test.queryByTag: not implemented")
+	return errors.NotImplemented("adhoc-test.queryByTag")
 }
 
 /// little helpers /////////////////////////////////////////////////////////////
