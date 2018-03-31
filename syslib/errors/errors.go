@@ -30,6 +30,10 @@ var (
 
 /// err/bug uniform formatters /////////////////////////////////////////////////
 
+func InvalidArg(where, what, why string) error {
+	return fmterr("err", "%s: invalid arg - %s is %s", where, what, why)
+}
+
 func NotImplemented(fmtstr string, a ...interface{}) error {
 	return fmterr("err", fmtstr+" is not implemented", a...)
 }

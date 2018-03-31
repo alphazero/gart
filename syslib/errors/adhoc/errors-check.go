@@ -21,4 +21,5 @@ func main() {
 	e := fmt.Errorf("not really an error")
 	msg := "Salaam Samad Sultan of LOVE"
 	fmt.Printf("%s\n", errors.ErrorWithCause(e, "adhoc.main: errors check - msg %s", msg))
+	fmt.Printf("%s\n", errors.InvalidArg("adhoc.main", "foo", "<= 0"))
 }
