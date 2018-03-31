@@ -47,6 +47,8 @@ type indexManager struct {
 // Function may also return an error with cause.
 func Initialize(reinit bool) error {
 
+	system.Debugf("index.Initialize: reinit:%t", reinit)
+
 	switch reinit {
 	case true:
 		if e := fs.VerifyFile(system.ObjectIndexPath); e != nil {
@@ -58,7 +60,9 @@ func Initialize(reinit bool) error {
 		if e := fs.VerifyDir(system.IndexCardsPath); e != nil {
 			return ErrIndexNotInitialized
 		}
-		if e := os.Remove(system.IndexPath); e != nil {
+		// REVU this is dangerous - a bug in system.runtime.go had 'IndexPath' as
+		// USER-HOME << !!! as /Users/alphazero/index - TODO think about this.
+		if e := os.RemoveAll(system.IndexPath); e != nil {
 			return errors.FaultWithCause(e,
 				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
 		}
@@ -68,12 +72,15 @@ func Initialize(reinit bool) error {
 		}
 	default:
 		if e := fs.VerifyFile(system.ObjectIndexPath); e == nil {
+			system.Debugf("index.Initialize: verify-file:%q not exists", system.ObjectIndexPath)
 			return ErrIndexInitialized
 		}
 		if e := fs.VerifyDir(system.IndexTagmapsPath); e == nil {
+			system.Debugf("index.Initialize: verify-dir:%q not exists", system.IndexTagmapsPath)
 			return ErrIndexInitialized
 		}
 		if e := fs.VerifyDir(system.IndexCardsPath); e == nil {
+			system.Debugf("index.Initialize: verify-dir:%q not exists", system.IndexCardsPath)
 			return ErrIndexInitialized
 		}
 	}
