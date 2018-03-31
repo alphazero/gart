@@ -135,7 +135,7 @@ valid:
 }
 
 func (oid *Oid) Fingerprint() string {
-	s := fmt.Sprintf("%x", oid) // just in case String() changes ..
+	s := fmt.Sprintf("%x", oid.dat) // just in case String() changes ..
 	return s[:7] + ".." + s[len(s)-4:]
 }
 func (oid *Oid) String() string { return fmt.Sprintf("%x", oid.dat) }
