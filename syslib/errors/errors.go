@@ -35,7 +35,7 @@ func NotImplemented(fmtstr string, a ...interface{}) error {
 }
 
 func Usage(fmtstr string, a ...interface{}) error {
-	return fmterr("usage:", fmtstr, a...)
+	return fmterr("usage", fmtstr, a...)
 }
 
 func Error(fmtstr string, a ...interface{}) error {
@@ -63,5 +63,6 @@ func FaultWithCause(e error, fmtstr string, a ...interface{}) error {
 }
 
 func fmterr(what, fmtstr string, a ...interface{}) error {
-	return fmt.Errorf(what+" - "+fmtstr, a...)
+	//	return fmt.Errorf(what+" - "+fmtstr, a...)
+	return fmt.Errorf(what+": "+fmtstr, a...)
 }

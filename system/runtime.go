@@ -30,10 +30,10 @@ func init() {
 	// paths
 	RepoPath = filepath.Join(user.HomeDir, RepoDir)
 
-	TagsPath = filepath.Join(user.HomeDir, TagsDir)
+	TagsPath = filepath.Join(RepoPath, TagsDir)
 	TagDictionaryPath = filepath.Join(TagsPath, TagDictionaryFilename)
 
-	IndexPath = filepath.Join(user.HomeDir, IndexDir)
+	IndexPath = filepath.Join(RepoPath, IndexDir)
 	ObjectIndexPath = filepath.Join(IndexPath, ObjectIndexFilename)
 	IndexCardsPath = filepath.Join(IndexPath, "cards")
 	IndexTagmapsPath = filepath.Join(IndexPath, "tagmaps")
