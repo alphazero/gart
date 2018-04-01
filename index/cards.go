@@ -2,6 +2,11 @@
 
 package index
 
+import (
+	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/system"
+)
+
 // An index.Card describes, in full, a gart object. Cards are stored as individual
 // files in .gart/index/cards/ directory in a manner similar to git blobs. Cards
 // are human readable, carriage return (\n) delimited files. (Given that typical
@@ -80,9 +85,205 @@ package index
 // REVU the simplest thing that would work:
 //
 //		a card simply is:
-//		object type : in { blob, file }
+//		object type : string : in { blob, file }
+//		object key : int : in [0, n]
+//		version : int : in [1, n]
+//		-- type specific data formats
 //		list of paths for file objects
 //		or
 //		embedded blob
 //
 //		and that's it.
+
+// abcd1234/data/1
+// data: len/bytes/crc
+type cardFile struct {
+	key     int64
+	otype   system.Otype
+	version int
+	datalen uint64
+	datacrc uint64
+	data    []byte // read from file, also used for text
+	paths   *Paths // non-nil if otype == system.File
+
+	oid      *system.Oid
+	modified bool
+}
+
+type cardbase interface {
+	Oid() *system.Oid
+	Key() int64
+	Type() system.Otype
+	Version() int
+}
+
+type TextCard interface {
+	cardbase
+	Text() string
+}
+
+type FileCard interface {
+	cardbase
+	Paths() []string
+	AddPath(string) (bool, error)
+	RemovePath(string) (bool, error)
+}
+
+func NewTextCard(oid *system.Oid, key int64, text string) (*cardFile, error) {
+	return newCardfile(oid, system.Text, key, []byte(text))
+}
+
+func NewFileCard(oid *system.Oid, key int64, path string) (*cardFile, error) {
+	return newCardfile(oid, system.Text, key, []byte(path))
+}
+
+func newCardfile(oid *system.Oid, otype system.Otype, key int64, data []byte) (*cardFile, error) {
+	if e := otype.Verify(); e != nil {
+		return nil, e
+	}
+	if key < 0 {
+		return nil, errors.InvalidArg("index.newCardfile", "key", "< 0")
+	}
+
+	var textdata []byte
+	var paths *Paths
+	switch otype {
+	case system.Text:
+		textdata = data
+	case system.File:
+		paths = NewPaths()
+		if e := paths.decode(data); e != nil {
+			return nil, errors.ErrorWithCause(e, "index.newCardFile: on newPaths(data)")
+		}
+	case system.URL, system.URI:
+		return nil, errors.NotImplemented("index.newCardFile: card type:%s", otype)
+	}
+
+	card := &cardFile{
+		oid:      oid,
+		key:      key,
+		otype:    otype,
+		version:  1,
+		datalen:  uint64(len(data)),
+		data:     textdata,
+		paths:    paths,
+		modified: true,
+	}
+
+	// TODO create oid based dir/filename for card.
+
+	return card, nil
+}
+
+func (c *cardFile) Oid() *system.Oid   { return c.oid }
+func (c *cardFile) Key() int64         { return c.key }
+func (c *cardFile) Type() system.Otype { return c.otype }
+func (c *cardFile) Version() int       { return c.version }
+
+func (c *cardFile) TextCard() TextCard {
+	c.assertType(system.Text)
+	return c
+}
+
+func (c *cardFile) FileCard() FileCard {
+	c.assertType(system.File)
+	return c
+}
+
+// panics
+func (c *cardFile) assertType(otype system.Otype) {
+	if c.otype != system.Text {
+		panic(errors.Bug("cardFile.assertType: otype is %s not %s", c.otype, otype))
+	}
+}
+
+func (c *cardFile) Text() string {
+	c.assertType(system.Text)
+	return string(c.data)
+}
+
+func (c *cardFile) Paths() []string {
+	c.assertType(system.File)
+	return c.paths.arr
+}
+
+func (c *cardFile) AddPath(path string) (bool, error) {
+	c.assertType(system.File)
+	return c.paths.add(path)
+}
+
+func (c *cardFile) RemovePath(path string) (bool, error) {
+	c.assertType(system.File)
+	return c.paths.remove(path)
+}
+
+/// Paths //////////////////////////////////////////////////////////////////////
+
+type Paths struct {
+	arr []string
+}
+
+func NewPaths() *Paths {
+	return &Paths{make([]string, 0)}
+}
+func (p *Paths) add(path string) (bool, error) {
+	return false, errors.NotImplemented("Paths.add")
+}
+
+func (p *Paths) remove(path string) (bool, error) {
+	return false, errors.NotImplemented("Paths.remove")
+}
+
+func (v Paths) size() int { return len(v.arr) }
+func (v Paths) buflen() int {
+	if len(v.arr) == 0 {
+		return 0
+	}
+	var blen int
+	for _, s := range v.arr {
+		blen += len(s) + 1 // carriage-return delim
+	}
+	return blen
+}
+
+// REVU copies the bytes so it is safe with mmap.
+// REVU exported for testing TODO doesn't need to be exported
+func (p *Paths) decode(buf []byte) error {
+	if buf == nil {
+		return errors.InvalidArg("Paths.decode", "buf", "nil")
+	}
+	readLine := func(buf []byte) (int, []byte) {
+		var xof int
+		for xof < len(buf) {
+			if buf[xof] == '\n' {
+				break
+			}
+			xof++
+		}
+		return xof + 1, buf[:xof]
+	}
+	var xof int
+	for xof < len(buf) {
+		n, path := readLine(buf[xof:])
+		p.arr = append(p.arr, string(path))
+		xof += n
+	}
+	return nil
+}
+
+func (v Paths) encode(buf []byte) error {
+	if buf == nil {
+		return errors.InvalidArg("Paths.encode", "buf", "nil")
+	}
+	if len(buf) < v.buflen() {
+		return errors.InvalidArg("Paths.encode", "buf", "< path.buflen")
+	}
+	var xof int
+	for _, s := range v.arr {
+		copy(buf[xof:], []byte(s))
+		xof += len(s)
+		buf[xof] = '\n'
+		xof++
+	}
+	return nil
+}
