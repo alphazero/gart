@@ -76,3 +76,13 @@ package index
 //		so parsing is deterministic.
 //
 // TODO sleep on this.
+//
+// REVU the simplest thing that would work:
+//
+//		a card simply is:
+//		object type : in { blob, file }
+//		list of paths for file objects
+//		or
+//		embedded blob
+//
+//		and that's it.
