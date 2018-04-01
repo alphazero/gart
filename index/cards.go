@@ -152,7 +152,7 @@ func newCardfile(oid *system.Oid, otype system.Otype, key int64, data []byte) (*
 		textdata = data
 	case system.File:
 		paths = NewPaths()
-		if e := paths.decode(data); e != nil {
+		if e := paths.Decode(data); e != nil {
 			return nil, errors.ErrorWithCause(e, "index.newCardFile: on newPaths(data)")
 		}
 	case system.URL, system.URI:
@@ -204,86 +204,17 @@ func (c *cardFile) Text() string {
 
 func (c *cardFile) Paths() []string {
 	c.assertType(system.File)
-	return c.paths.arr
+	return c.paths.List()
 }
 
 func (c *cardFile) AddPath(path string) (bool, error) {
 	c.assertType(system.File)
-	return c.paths.add(path)
+	return c.paths.Add(path)
 }
 
 func (c *cardFile) RemovePath(path string) (bool, error) {
 	c.assertType(system.File)
-	return c.paths.remove(path)
+	return c.paths.Remove(path)
 }
 
 /// Paths //////////////////////////////////////////////////////////////////////
-
-type Paths struct {
-	arr []string
-}
-
-func NewPaths() *Paths {
-	return &Paths{make([]string, 0)}
-}
-func (p *Paths) add(path string) (bool, error) {
-	return false, errors.NotImplemented("Paths.add")
-}
-
-func (p *Paths) remove(path string) (bool, error) {
-	return false, errors.NotImplemented("Paths.remove")
-}
-
-func (v Paths) size() int { return len(v.arr) }
-func (v Paths) buflen() int {
-	if len(v.arr) == 0 {
-		return 0
-	}
-	var blen int
-	for _, s := range v.arr {
-		blen += len(s) + 1 // carriage-return delim
-	}
-	return blen
-}
-
-// REVU copies the bytes so it is safe with mmap.
-// REVU exported for testing TODO doesn't need to be exported
-func (p *Paths) decode(buf []byte) error {
-	if buf == nil {
-		return errors.InvalidArg("Paths.decode", "buf", "nil")
-	}
-	readLine := func(buf []byte) (int, []byte) {
-		var xof int
-		for xof < len(buf) {
-			if buf[xof] == '\n' {
-				break
-			}
-			xof++
-		}
-		return xof + 1, buf[:xof]
-	}
-	var xof int
-	for xof < len(buf) {
-		n, path := readLine(buf[xof:])
-		p.arr = append(p.arr, string(path))
-		xof += n
-	}
-	return nil
-}
-
-func (v Paths) encode(buf []byte) error {
-	if buf == nil {
-		return errors.InvalidArg("Paths.encode", "buf", "nil")
-	}
-	if len(buf) < v.buflen() {
-		return errors.InvalidArg("Paths.encode", "buf", "< path.buflen")
-	}
-	var xof int
-	for _, s := range v.arr {
-		copy(buf[xof:], []byte(s))
-		xof += len(s)
-		buf[xof] = '\n'
-		xof++
-	}
-	return nil
-}
