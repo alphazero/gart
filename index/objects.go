@@ -307,7 +307,7 @@ func (oidx *oidxFile) nextKey() int64 { return oidx.header.ocnt }
 // Returns the 'key' of the new object, and nil on success.
 // On error, the uint64 value should be ignored.
 func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
-	var key int64 // TODO this needs to be < 0 as invalid after cardfile fix.
+	var key int64 = -1
 	if oidx.opMode != Write {
 		return key, errors.Bug("oidxFile.AddObject: invalid op-mode:%s", oidx.opMode)
 	}
@@ -325,7 +325,7 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 			"oidx.AddObject: oid: %s - offset: %d - buflen: %d", oid, offset, len(oidx.buf)))
 	}
 
-	system.Debugf("oidxFile.addObject: ocnt:%d\n", oidx.header.ocnt)
+	system.Debugf("oidxFile.addObject: ocnt:%d", oidx.header.ocnt)
 	key = oidx.header.ocnt // REVU this starts keys with 0
 	oidx.header.ocnt++
 	if !oidx.modified {
