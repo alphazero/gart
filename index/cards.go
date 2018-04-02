@@ -242,7 +242,14 @@ func (c *cardFile) save() (bool, error) {
 	defer os.Remove(swapfile)
 	defer sfile.Close()
 
-	var bufsize int64 // REVU compute it
+	// write header and get length
+	header := fmt.Sprintf("%s\n", c.otype)
+	header += fmt.Sprintf("%s\n", c.oid.String())
+	header += fmt.Sprintf("%d\n", c.version)
+	header += fmt.Sprintf("%d\n", c.datalen)
+	var headerSize = len(header)
+	var bufsize = int64(headerSize)
+
 	if e := sfile.Truncate(bufsize); e != nil {
 		return false, errors.Error("cardFile.save: file.Truncate(%d): %s", bufsize, e)
 	}
@@ -256,7 +263,9 @@ func (c *cardFile) save() (bool, error) {
 
 	/// encode card ///////////////////////////////////////////////////////////////
 
-	if e := c.encode(buf); e != nil {
+	copy(buf, []byte(header))
+
+	if e := c.encode(buf[headerSize:]); e != nil {
 		return false, errors.Error("cardFile.save: encode: %s", e)
 	}
 
@@ -270,7 +279,6 @@ func (c *cardFile) save() (bool, error) {
 	return true, nil
 }
 
-func encodeTextCard(buf []byte) error { panic("do it") }
 func encodeFileCard(buf []byte) error { panic("do it") }
 
 /// TextCard support ///////////////////////////////////////////////////////////
@@ -293,14 +301,22 @@ func NewTextCard(oid *system.Oid, text string) (*textCard, error) {
 	if e != nil {
 		return nil, e
 	}
-	cardFile.datalen = uint64(len(text))
-	cardFile.encode = encodeTextCard
-
 	card := &textCard{
 		cardFile: cardFile,
 		text:     text,
 	}
+	cardFile.datalen = uint64(len(text))
+	cardFile.encode = card.encode
+
 	return card, nil
+}
+
+func (c *textCard) encode(buf []byte) error {
+	if len(buf) < len(c.text) {
+		return errors.InvalidArg("textCard.encode", "len(buf)", "len(c.text)")
+	}
+	copy(buf, []byte(c.text))
+	return nil
 }
 
 func (c *textCard) Text() string {
@@ -309,7 +325,7 @@ func (c *textCard) Text() string {
 
 func (c *textCard) Print(w io.Writer) {
 	c.cardFile.Print(w)
-	fmt.Fprintf(w, "text-len:  %d\n", len(c.text))
+	fmt.Fprintf(w, "text-len:  %d (debug)\n", len(c.text))
 	fmt.Fprintf(w, "text:      %q\n", c.text)
 }
 
@@ -335,14 +351,18 @@ func NewFileCard(oid *system.Oid, path string) (*fileCard, error) {
 	}
 	paths := NewPaths()
 	paths.Add(path)
-	cardFile.datalen = uint64(paths.Buflen())
-	cardFile.encode = encodeFileCard
-
 	card := &fileCard{
 		cardFile: cardFile,
 		paths:    paths,
 	}
+	cardFile.datalen = uint64(paths.Buflen())
+	cardFile.encode = card.encode
+
 	return card, nil
+}
+
+func (c *fileCard) encode(buf []byte) error {
+	return c.paths.Encode(buf)
 }
 
 func (c *fileCard) Print(w io.Writer) {

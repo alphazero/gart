@@ -124,7 +124,7 @@ func addObject(filename string, tags ...string) error {
 		return e
 	}
 
-	key, added, e := idx.IndexObject(oid, tags...)
+	key, added, e := idx.IndexFile(oid, tags...)
 	if e != nil {
 		return e
 	}

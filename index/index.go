@@ -197,7 +197,28 @@ func (idx *indexManager) IndexText(text string, tags ...string) (int64, bool, er
 }
 
 func (idx *indexManager) IndexFile(filename string, tags ...string) (int64, bool, error) {
-	return -1, false, errors.NotImplemented("indexManager.IndexFile")
+	md, e := digest.SumFile(filename)
+	if e != nil {
+		panic(errors.BugWithCause(e, "indexManager.IndexFile: unexpected"))
+	}
+	oid, e := system.NewOid(md[:])
+	if e != nil {
+		panic(errors.BugWithCause(e, "indexManager.IndexFile: unexpected"))
+	}
+	var card Card
+	var isNew bool
+	if !cardExists(oid) {
+		var e error
+		card, e = NewFileCard(oid, filename)
+		if e != nil {
+			return -1, true, errors.Bug("indexManager.IndexFile: - %s", e)
+		}
+	} else {
+		card, e = loadCard(oid)
+	}
+
+	key, e := idx.indexObject(card, isNew, tags...)
+	return key, isNew, e
 }
 
 // REVU see gart-add in /1.0/ for refresh on systemics..
