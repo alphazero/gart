@@ -173,7 +173,7 @@ func (idx *indexManager) UsingTags(tags ...string) error {
 }
 
 // Indexes the object identified by the Oid & system.Otype
-func (idx *indexManager) IndexText(text string, tags ...string) (int64, bool, error) {
+func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, error) {
 	md := digest.Sum([]byte(text))
 	oid, e := system.NewOid(md[:])
 	if e != nil {
@@ -181,22 +181,23 @@ func (idx *indexManager) IndexText(text string, tags ...string) (int64, bool, er
 	}
 
 	var card Card
-	var isNew bool
-	if !cardExists(oid) {
+	var isNew = !cardExists(oid)
+	if isNew {
 		var e error
 		card, e = NewTextCard(oid, text)
 		if e != nil {
-			return -1, true, errors.Bug("indexManager.IndexText: - %s", e)
+			return nil, true, errors.Bug("indexManager.IndexText: - %s", e)
 		}
 	} else {
 		card, e = loadCard(oid)
 	}
 
 	key, e := idx.indexObject(card, isNew, tags...)
-	return key, isNew, e
+	system.Debugf("insertText: key:%d", key)
+	return card, isNew, e
 }
 
-func (idx *indexManager) IndexFile(filename string, tags ...string) (int64, bool, error) {
+func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool, error) {
 	md, e := digest.SumFile(filename)
 	if e != nil {
 		panic(errors.BugWithCause(e, "indexManager.IndexFile: unexpected"))
@@ -206,19 +207,21 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (int64, bool
 		panic(errors.BugWithCause(e, "indexManager.IndexFile: unexpected"))
 	}
 	var card Card
-	var isNew bool
-	if !cardExists(oid) {
+	var isNew = !cardExists(oid)
+	if isNew {
+		system.Debugf("IndexFile: new card for %s", oid.Fingerprint())
 		var e error
 		card, e = NewFileCard(oid, filename)
 		if e != nil {
-			return -1, true, errors.Bug("indexManager.IndexFile: - %s", e)
+			return card, true, errors.Bug("indexManager.IndexFile: - %s", e)
 		}
 	} else {
 		card, e = loadCard(oid)
 	}
 
 	key, e := idx.indexObject(card, isNew, tags...)
-	return key, isNew, e
+	system.Debugf("insertFile: key:%d", key)
+	return card, isNew, e
 }
 
 // REVU see gart-add in /1.0/ for refresh on systemics..
@@ -250,7 +253,7 @@ func (idx *indexManager) indexObject(card Card, isNew bool, tags ...string) (int
 	// update all tagmaps for card.Key
 	var key = card.Key()
 	for _, tag := range tags {
-		system.Debugf("TODO - set tagmap bit %d for tag %s ", key, tag)
+		system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
 	}
 
 	return key, nil
