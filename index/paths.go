@@ -131,7 +131,7 @@ func (v Paths) Encode(buf []byte) error {
 		return errors.InvalidArg("Paths.encode", "buf", "nil")
 	}
 	if len(buf) < v.Buflen() {
-		return errors.InvalidArg("Paths.encode", "buf", "< path.buflen")
+		return errors.Error("Paths.Encode: invalid arg - len(buf):%d paths.Buflen:%d", len(buf), v.Buflen())
 	}
 	var xof int
 	for _, s := range v.List() {
