@@ -81,7 +81,7 @@ func OpenNewFile(fname string, ops int) (*os.File, error) {
 // Any other errors are returned with (nil, false, e) regardless of abort
 // in-arg.
 func OpenNewSwapfile(fname string, abort bool) (*os.File, bool, error) {
-	var ops = os.O_WRONLY | os.O_APPEND
+	var ops = os.O_RDWR | os.O_APPEND
 	var tries int
 	var existed bool
 try:
