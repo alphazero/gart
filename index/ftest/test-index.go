@@ -107,8 +107,6 @@ func initializeIndex(force bool) error {
 	return index.Initialize(force)
 }
 func addObject(filename string, tags ...string) error {
-	var oid = fileOid(filename)
-
 	idx, e := index.OpenIndexManager(index.Write)
 	if e != nil {
 		return e
@@ -124,15 +122,15 @@ func addObject(filename string, tags ...string) error {
 		return e
 	}
 
-	key, added, e := idx.IndexFile(oid, tags...)
+	card, added, e := idx.IndexFile(filename, tags...)
 	if e != nil {
 		return e
 	}
 	if !added {
-		log("debug - object (oid:%s, key:%d) already indexed",
-			oid.Fingerprint(), key)
+		log("debug - object (oid:%s, key:%d) already indexed", card.Oid(), card.Key())
+		return nil
 	}
-	log("debug - indexed object (oid:%s, key:%d)", oid.Fingerprint(), key)
+	log("debug - indexed object (key:%d added:%t)", card.Oid(), card.Key())
 
 	return nil
 }
