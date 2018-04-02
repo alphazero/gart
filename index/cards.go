@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/syslib/fs"
 	"github.com/alphazero/gart/system"
 )
 
@@ -126,6 +128,7 @@ type cardFile struct {
 	buf    []byte // from mmap
 
 	modified bool
+	encode   func([]byte) error
 }
 
 func (c *cardFile) Print(w io.Writer) {
@@ -191,20 +194,84 @@ func (c *cardFile) setKey(key int64) error {
 	return nil
 }
 
+func (c *cardFile) debugStr() string {
+	return fmt.Sprintf("%s-card:(oid:%s key:%d)", c.otype, c.oid.Fingerprint(), c.key)
+}
+
+/// io ops /////////////////////////////////////////////////////////////////////
+
 // REVU this would have to partially create cardFile and then pass it to newTypeCard
 func loadCard(oid *system.Oid) (Card, error) {
 	panic(errors.NotImplemented("wip"))
 }
 
-// REVU this would have to override encode(buf) of cardFile and write data
-func (c *textCard) save() (bool, error) {
-	panic(errors.NotImplemented("wip"))
+func (c *cardFile) save() (bool, error) {
+	system.Debugf("cardFile.save: %s - BEGIN\n", c.debugStr())
+
+	// check state validity
+
+	if !c.modified {
+		system.Debugf("cardFile.save: card is not modified\n")
+		return false, nil
+	}
+	if c.key < 0 {
+		return false, errors.Bug("cardFile.save: invalid key: %d", c.key)
+	}
+
+	// create card dir if required
+
+	if c.source == "" {
+		system.Debugf("cardFile.save: source not defined - assume newCard\n")
+		if cardExists(c.oid) {
+			return false, errors.Bug("cardFile.save: source is nil for existing card")
+		}
+		c.source = cardFilename(c.oid)
+		dir := filepath.Dir(c.source)
+		if e := os.MkdirAll(dir, system.DirPerm); e != nil {
+			return false, errors.Bug("cardFile.save: os.Mkdirall: %s", e)
+		}
+	}
+
+	/// create swapfile & mmap it /////////////////////////////////////////////////
+
+	swapfile := fs.SwapfileName(c.source)
+	sfile, _, e := fs.OpenNewSwapfile(swapfile, true)
+	if e != nil {
+		return false, errors.Error("cardFile.save: fs.OpenNewSwapFile: %s", e)
+	}
+	defer os.Remove(swapfile)
+	defer sfile.Close()
+
+	var bufsize int64 // REVU compute it
+	if e := sfile.Truncate(bufsize); e != nil {
+		return false, errors.Error("cardFile.save: file.Truncate(%d): %s", bufsize, e)
+	}
+
+	var fd = int(sfile.Fd())
+	buf, e := syscall.Mmap(fd, 0, int(bufsize), syscall.PROT_WRITE, syscall.MAP_SHARED)
+	if e != nil {
+		return false, errors.Error("cardFile.save: syscall.Mmap: %s", e)
+	}
+	defer syscall.Munmap(buf)
+
+	/// encode card ///////////////////////////////////////////////////////////////
+
+	if e := c.encode(buf); e != nil {
+		return false, errors.Error("cardFile.save: encode: %s", e)
+	}
+
+	/// swap //////////////////////////////////////////////////////////////////////
+
+	if e := os.Rename(swapfile, c.source); e != nil {
+		return false, errors.Error("cardFile.save: os.Rename: %s", e)
+	}
+
+	c.modified = false
+	return true, nil
 }
 
-// REVU this would have to override encode(buf) of cardFile and invoke paths.encode
-func (c *fileCard) save() (bool, error) {
-	panic(errors.NotImplemented("wip"))
-}
+func encodeTextCard(buf []byte) error { panic("do it") }
+func encodeFileCard(buf []byte) error { panic("do it") }
 
 /// TextCard support ///////////////////////////////////////////////////////////
 
@@ -227,6 +294,7 @@ func NewTextCard(oid *system.Oid, text string) (*textCard, error) {
 		return nil, e
 	}
 	cardFile.datalen = uint64(len(text))
+	cardFile.encode = encodeTextCard
 
 	card := &textCard{
 		cardFile: cardFile,
@@ -268,6 +336,7 @@ func NewFileCard(oid *system.Oid, path string) (*fileCard, error) {
 	paths := NewPaths()
 	paths.Add(path)
 	cardFile.datalen = uint64(paths.Buflen())
+	cardFile.encode = encodeFileCard
 
 	card := &fileCard{
 		cardFile: cardFile,
