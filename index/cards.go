@@ -3,6 +3,9 @@
 package index
 
 import (
+	"fmt"
+	"io"
+
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
 )
@@ -110,39 +113,14 @@ type cardFile struct {
 	modified bool
 }
 
-type cardbase interface {
-	Oid() *system.Oid
-	Key() int64
-	Type() system.Otype
-	Version() int
-}
+/// cardFile ///////////////////////////////////////////////////////////////////
 
-type TextCard interface {
-	cardbase
-	Text() string
-}
-
-type FileCard interface {
-	cardbase
-	Paths() []string
-	AddPath(string) (bool, error)
-	RemovePath(string) (bool, error)
-}
-
-func NewTextCard(oid *system.Oid, key int64, text string) (*cardFile, error) {
-	return newCardfile(oid, system.Text, key, []byte(text))
-}
-
-func NewFileCard(oid *system.Oid, key int64, path string) (*cardFile, error) {
-	return newCardfile(oid, system.Text, key, []byte(path))
-}
-
-func newCardfile(oid *system.Oid, otype system.Otype, key int64, data []byte) (*cardFile, error) {
+func newCard(oid *system.Oid, otype system.Otype, key int64, data []byte) (*cardFile, error) {
 	if e := otype.Verify(); e != nil {
 		return nil, e
 	}
 	if key < 0 {
-		return nil, errors.InvalidArg("index.newCardfile", "key", "< 0")
+		return nil, errors.InvalidArg("index.newCard", "key", "< 0")
 	}
 
 	var textdata []byte
@@ -153,10 +131,10 @@ func newCardfile(oid *system.Oid, otype system.Otype, key int64, data []byte) (*
 	case system.File:
 		paths = NewPaths()
 		if e := paths.Decode(data); e != nil {
-			return nil, errors.ErrorWithCause(e, "index.newCardFile: on newPaths(data)")
+			return nil, errors.ErrorWithCause(e, "index.newCard: on newPaths(data)")
 		}
 	case system.URL, system.URI:
-		return nil, errors.NotImplemented("index.newCardFile: card type:%s", otype)
+		return nil, errors.NotImplemented("index.newCard: card type:%s", otype)
 	}
 
 	card := &cardFile{
@@ -175,31 +153,87 @@ func newCardfile(oid *system.Oid, otype system.Otype, key int64, data []byte) (*
 	return card, nil
 }
 
+func (c *cardFile) Print(w io.Writer) {
+	switch c.otype {
+	case system.Text:
+		c.textCardPrint(w)
+	case system.File:
+		c.fileCardPrint(w)
+	default:
+		panic(errors.Bug("cardFile.Print: type %s not supported", c.otype))
+	}
+}
+
+/// Card support ///////////////////////////////////////////////////////////////
+
+type Card interface {
+	Oid() *system.Oid
+	Key() int64
+	Type() system.Otype
+	Version() int
+	Print(io.Writer)
+}
+
 func (c *cardFile) Oid() *system.Oid   { return c.oid }
 func (c *cardFile) Key() int64         { return c.key }
 func (c *cardFile) Type() system.Otype { return c.otype }
 func (c *cardFile) Version() int       { return c.version }
 
-func (c *cardFile) TextCard() TextCard {
-	c.assertType(system.Text)
-	return c
-}
-
-func (c *cardFile) FileCard() FileCard {
-	c.assertType(system.File)
-	return c
-}
-
-// panics
+// panics if cardFile object type does not match the otype arg.
 func (c *cardFile) assertType(otype system.Otype) {
 	if c.otype != system.Text {
 		panic(errors.Bug("cardFile.assertType: otype is %s not %s", c.otype, otype))
 	}
 }
 
+/// TextCard support ///////////////////////////////////////////////////////////
+
+// TextCard interface defines an index.Card
+type TextCard interface {
+	Card
+	Text() string
+}
+
+// REVU oid can be directly computed from the text.
+func NewTextCard(oid *system.Oid, key int64, text string) (TextCard, error) {
+	return newCard(oid, system.Text, key, []byte(text))
+}
+
+func (c *cardFile) TextCard() TextCard {
+	c.assertType(system.Text)
+	return c
+}
+
 func (c *cardFile) Text() string {
 	c.assertType(system.Text)
 	return string(c.data)
+}
+
+func (c *cardFile) textCardPrint(w io.Writer) {
+	fmt.Fprintf(w, "textCard: not what we want! :)\n")
+}
+
+/// FileCard support ///////////////////////////////////////////////////////////
+
+type FileCard interface {
+	Card
+	Paths() []string
+	AddPath(string) (bool, error)
+	RemovePath(string) (bool, error)
+}
+
+// REVU oid can be directly computed from the path.
+func NewFileCard(oid *system.Oid, key int64, path string) (FileCard, error) {
+	return newCard(oid, system.Text, key, []byte(path))
+}
+
+func (c *cardFile) fileCardPrint(w io.Writer) {
+	fmt.Fprintf(w, "fileCard: not what we want! :)\n")
+}
+
+func (c *cardFile) FileCard() FileCard {
+	c.assertType(system.File)
+	return c
 }
 
 func (c *cardFile) Paths() []string {
@@ -216,5 +250,3 @@ func (c *cardFile) RemovePath(path string) (bool, error) {
 	c.assertType(system.File)
 	return c.paths.Remove(path)
 }
-
-/// Paths //////////////////////////////////////////////////////////////////////
