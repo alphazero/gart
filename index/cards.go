@@ -121,7 +121,7 @@ type cardFile struct {
 	key     int64
 	otype   system.Otype
 	version int
-	datalen uint64 // REVU is this even necessary?
+	datalen int64  // REVU is this even necessary?
 	datacrc uint64 // REVU this is now problematic
 
 	source string
@@ -206,12 +206,12 @@ func loadCard(oid *system.Oid) (Card, error) {
 }
 
 func (c *cardFile) save() (bool, error) {
-	system.Debugf("cardFile.save: %s - BEGIN\n", c.debugStr())
+	system.Debugf("cardFile.save: %s - BEGIN", c.debugStr())
 
 	// check state validity
 
 	if !c.modified {
-		system.Debugf("cardFile.save: card is not modified\n")
+		system.Debugf("cardFile.save: card is not modified")
 		return false, nil
 	}
 	if c.key < 0 {
@@ -221,7 +221,7 @@ func (c *cardFile) save() (bool, error) {
 	// create card dir if required
 
 	if c.source == "" {
-		system.Debugf("cardFile.save: source not defined - assume newCard\n")
+		system.Debugf("cardFile.save: source not defined - assume newCard")
 		if cardExists(c.oid) {
 			return false, errors.Bug("cardFile.save: source is nil for existing card")
 		}
@@ -248,7 +248,7 @@ func (c *cardFile) save() (bool, error) {
 	header += fmt.Sprintf("%d\n", c.version)
 	header += fmt.Sprintf("%d\n", c.datalen)
 	var headerSize = len(header)
-	var bufsize = int64(headerSize)
+	var bufsize = int64(headerSize) + c.datalen
 
 	if e := sfile.Truncate(bufsize); e != nil {
 		return false, errors.Error("cardFile.save: file.Truncate(%d): %s", bufsize, e)
@@ -305,7 +305,7 @@ func NewTextCard(oid *system.Oid, text string) (*textCard, error) {
 		cardFile: cardFile,
 		text:     text,
 	}
-	cardFile.datalen = uint64(len(text))
+	cardFile.datalen = int64(len(text))
 	cardFile.encode = card.encode
 
 	return card, nil
@@ -355,7 +355,7 @@ func NewFileCard(oid *system.Oid, path string) (*fileCard, error) {
 		cardFile: cardFile,
 		paths:    paths,
 	}
-	cardFile.datalen = uint64(paths.Buflen())
+	cardFile.datalen = int64(paths.Buflen())
 	cardFile.encode = card.encode
 
 	return card, nil
