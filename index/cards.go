@@ -5,6 +5,8 @@ package index
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
@@ -101,7 +103,7 @@ import (
 type Card interface {
 	Oid() *system.Oid
 	Key() int64
-	Type() system.Otype
+	Type() system.Otype // REVU use for systemics tags ..
 	Version() int
 	Save() (bool, error)
 	Print(io.Writer)
@@ -110,19 +112,36 @@ type Card interface {
 // abcd1234/data/1
 // data: len/bytes/crc
 type cardFile struct {
+	oid *system.Oid
+
 	key     int64
 	otype   system.Otype
 	version int
-	datalen uint64 // REVU this is now problematic
+	datalen uint64 // REVU is this even necessary?
 	datacrc uint64 // REVU this is now problematic
-	//	data    []byte // read from file, also used for text
-	//	paths   *Paths // non-nil if otype == system.File
 
-	oid      *system.Oid
+	source string
+	buf    []byte // from mmap
+
 	modified bool
 }
 
 /// cardFile ///////////////////////////////////////////////////////////////////
+
+func cardFilename(oid *system.Oid) string {
+	oidstr := oid.String()
+	return filepath.Join(system.IndexCardsPath, oidstr[:2], oidstr[2:])
+}
+
+func cardExists(oid *system.Oid) bool {
+	var filename = cardFilename(oid)
+	if _, e := os.Stat(filename); e != nil && os.IsNotExist(e) {
+		return false
+	} else if e != nil {
+		panic(errors.Bug("index.cardExists: file: %s - %x", filename, e))
+	}
+	return true
+}
 
 func newCardFile(oid *system.Oid, otype system.Otype, key int64) (*cardFile, error) {
 	if e := otype.Verify(); e != nil {
@@ -132,50 +151,18 @@ func newCardFile(oid *system.Oid, otype system.Otype, key int64) (*cardFile, err
 		return nil, errors.InvalidArg("index.newCard", "key", "< 0")
 	}
 
-	/* XXX deprecated?
-	var textdata []byte
-	var paths *Paths
-	switch otype {
-	case system.Text:
-		textdata = data
-	case system.File:
-		paths = NewPaths()
-		if e := paths.Decode(data); e != nil {
-			return nil, errors.ErrorWithCause(e, "index.newCard: on newPaths(data)")
-		}
-	case system.URL, system.URI:
-		return nil, errors.NotImplemented("index.newCard: card type:%s", otype)
-	}
-	*/
 	card := &cardFile{
 		oid:     oid,
 		key:     key,
 		otype:   otype,
 		version: 1,
 		//		datalen: uint64(len(data)), // REVU important extensions must provide datalen()
-		//		data:     textdata,
-		//		paths:    paths,
 		modified: true,
 	}
-
-	// TODO create oid based dir/filename for card.
 
 	return card, nil
 }
 
-/*
-func (c *cardFile) Print(w io.Writer) {
-	panic(errors.Bug("cardFile.Print: type %s not supported", c.otype))
-	switch c.otype {
-	case system.Text:
-		c.textCardPrint(w)
-	case system.File:
-		c.fileCardPrint(w)
-	default:
-		panic(errors.Bug("cardFile.Print: type %s not supported", c.otype))
-	}
-}
-*/
 /// Card support ///////////////////////////////////////////////////////////////
 
 func (c *cardFile) Oid() *system.Oid   { return c.oid }
@@ -183,19 +170,15 @@ func (c *cardFile) Key() int64         { return c.key }
 func (c *cardFile) Type() system.Otype { return c.otype }
 func (c *cardFile) Version() int       { return c.version }
 
-// panics if cardFile object type does not match the otype arg.
-//func (c *cardFile) assertType(otype system.Otype) {
-//	if c.otype != system.Text {
-//		panic(errors.Bug("cardFile.assertType: otype is %s not %s", c.otype, otype))
-//	}
-//}
-
 // REVU this would have to partially create cardFile and then pass it to newTypeCard
 func loadCard(oid *system.Oid) (Card, error) { panic(errors.NotImplemented("wip")) }
 
 // REVU this would have to override encode(buf) of cardFile and write data
-func (c *textCard) Save() (bool, error) { panic(errors.NotImplemented("wip")) }
+func (c *textCard) Save() (bool, error) {
+	panic(errors.NotImplemented("wip"))
+}
 
+// TODO start here ..
 // REVU this would have to override encode(buf) of cardFile and invoke paths.encode
 func (c *fileCard) Save() (bool, error) { panic(errors.NotImplemented("wip")) }
 
@@ -213,7 +196,7 @@ type TextCard interface {
 }
 
 // REVU oid can be directly computed from the text.
-func NewTextCard(oid *system.Oid, key int64, text string) (TextCard, error) {
+func NewTextCard(oid *system.Oid, key int64, text string) (*textCard, error) {
 	cardFile, e := newCardFile(oid, system.Text, key)
 	if e != nil {
 		return nil, e
@@ -227,13 +210,7 @@ func NewTextCard(oid *system.Oid, key int64, text string) (TextCard, error) {
 	return card, nil
 }
 
-//func (c *cardFile) TextCard() TextCard {
-//	c.assertType(system.Text)
-//	return c
-//}
-
 func (c *textCard) Text() string {
-	//	c.assertType(system.Text)
 	return string(c.text)
 }
 
@@ -256,7 +233,7 @@ type FileCard interface {
 }
 
 // REVU oid can be directly computed from the path.
-func NewFileCard(oid *system.Oid, key int64, path string) (FileCard, error) {
+func NewFileCard(oid *system.Oid, key int64, path string) (*fileCard, error) {
 	cardFile, e := newCardFile(oid, system.Text, key)
 	if e != nil {
 		return nil, e
@@ -276,22 +253,14 @@ func (c *fileCard) Print(w io.Writer) {
 	fmt.Fprintf(w, "fileCard: not what we want! :)\n")
 }
 
-//func (c *cardFile) FileCard() FileCard {
-//	c.assertType(system.File)
-//	return c
-//}
-
 func (c *fileCard) Paths() []string {
-	//	c.assertType(system.File)
 	return c.paths.List()
 }
 
 func (c *fileCard) AddPath(path string) (bool, error) {
-	//	c.assertType(system.File)
 	return c.paths.Add(path)
 }
 
 func (c *fileCard) RemovePath(path string) (bool, error) {
-	//	c.assertType(system.File)
 	return c.paths.Remove(path)
 }
