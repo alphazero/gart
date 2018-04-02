@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
 	"github.com/alphazero/gart/system" // TODO  REVU decision for OID in system ..
@@ -171,20 +172,44 @@ func (idx *indexManager) UsingTags(tags ...string) error {
 	return nil
 }
 
-// Indexes the object identified by the Oid.
+// Indexes the object identified by the Oid & system.Otype
+func (idx *indexManager) IndexText(text string, tags ...string) (int64, bool, error) {
+	md := digest.Sum([]byte(text))
+	oid, e := system.NewOid(md[:])
+	if e != nil {
+		panic(errors.BugWithCause(e, "indexManager.IndexText: unexpected"))
+	}
+
+	var card Card
+	var isNew bool
+	if !cardExists(oid) {
+		key := idx.oidx.nextKey()
+		var e error
+		card, e = NewTextCard(oid, key, text)
+		if e != nil {
+			return -1, true, errors.Bug("indexManager.IndexText: - %s", e)
+		}
+	}
+
+	key, e := idx.indexObject(card, isNew, tags...)
+	return key, isNew, e
+}
+func (idx *indexManager) IndexFile() {}
+
+//
 // REVU see gart-add in /1.0/ for refresh on systemics..
 // REVU check assumptions - 1.0 assumed key 0 to be invalid? or was it 0xfff something?
 // REVU per thought re uint vs int API level fields, TODO revisit uint64 'key' for
 //      for index.Card (cardfile.go) and api here and use int64 instead.
 //		IFF done, then key < 0 would be invalid. 2^63 keys is OK.
-func (idx *indexManager) IndexObject(oid *system.Oid, tags ...string) (uint64, bool, error) {
+func (idx *indexManager) indexObject(card Card, isNew bool, tags ...string) (int64, error) {
 
-	var key uint64 = 0 // TODO replace with 'invalid key value' per TODO above
-	var newObject bool
+	var oid = card.Oid()
+	var key = card.Key()
 
 	// REVU for now delegate opMode validation to the oidx
 	if oid == nil {
-		return key, newObject, errors.InvalidArg("indexManager.IndexObject", "oid", "nil")
+		return key, errors.InvalidArg("indexManager.indexObject", "oid", "nil")
 	}
 
 	// REVU for now it is ok if no tags are defined
@@ -194,15 +219,15 @@ func (idx *indexManager) IndexObject(oid *system.Oid, tags ...string) (uint64, b
 	//      If new, we add it, returning key, true, nil
 	// 		If not, we update tags, returning key, false, nil
 
-	newObject = true // XXX temp
-	if newObject {
+	if isNew {
 		var e error // key ..
 		key, e = idx.oidx.addObject(oid)
 		if e != nil {
-			return key, newObject, errors.ErrorWithCause(e, "IndexManager.IndexObject")
+			return key, errors.ErrorWithCause(e, "IndexManager.indexObject")
 		}
+		//		card.SetKey(key) // TODO
 	}
-	return key, newObject, nil
+	return key, nil
 }
 
 // REVU need to revisit system/types.go

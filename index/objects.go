@@ -64,7 +64,7 @@ type objectsHeader struct {
 	created  int64
 	updated  int64
 	pcnt     uint64 // page count - 1..n
-	ocnt     uint64 // record count - 1..n
+	ocnt     int64  // object count - 1..n TODO change to int64
 	reserved [4048]byte
 }
 
@@ -87,7 +87,7 @@ func (h *objectsHeader) encode(buf []byte) error {
 	*(*int64)(unsafe.Pointer(&buf[16])) = h.created
 	*(*int64)(unsafe.Pointer(&buf[24])) = h.updated
 	*(*uint64)(unsafe.Pointer(&buf[32])) = h.pcnt
-	*(*uint64)(unsafe.Pointer(&buf[40])) = h.ocnt
+	*(*int64)(unsafe.Pointer(&buf[40])) = h.ocnt
 
 	h.crc64 = digest.Checksum64(buf[16:])
 	*(*uint64)(unsafe.Pointer(&buf[8])) = h.crc64
@@ -297,14 +297,17 @@ func (oidx *oidxFile) closeIndex() error {
 	return oidx.unmapAndClose()
 }
 
+// TODO change key to int64
+func (oidx *oidxFile) nextKey() int64 { return oidx.header.ocnt }
+
 // addObject appends the given oid to the object index. Index must have been
 // openned in OpMode#Write. The underlying file will be extended by a page
 // if required.
 //
 // Returns the 'key' of the new object, and nil on success.
 // On error, the uint64 value should be ignored.
-func (oidx *oidxFile) addObject(oid *system.Oid) (uint64, error) {
-	var key uint64 // TODO this needs to be < 0 as invalid after cardfile fix.
+func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
+	var key int64 // TODO this needs to be < 0 as invalid after cardfile fix.
 	if oidx.opMode != Write {
 		return key, errors.Bug("oidxFile.AddObject: invalid op-mode:%s", oidx.opMode)
 	}
@@ -323,7 +326,7 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (uint64, error) {
 	}
 
 	system.Debugf("oidxFile.addObject: ocnt:%d\n", oidx.header.ocnt)
-	key = oidx.header.ocnt // REVU this starts keys with 0 so mod to int64 is TODO
+	key = oidx.header.ocnt // REVU this starts keys with 0
 	oidx.header.ocnt++
 	if !oidx.modified {
 		oidx.modified = true
@@ -341,7 +344,7 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (uint64, error) {
 //
 // Returns index.ErrObjectIndexClosed or any other encountered error, in which
 // the resultant map will be nil.
-func (oidx *oidxFile) getObjectOids(keys ...uint64) (map[uint64]*system.Oid, error) {
+func (oidx *oidxFile) getObjectOids(keys ...int64) (map[int64]*system.Oid, error) {
 	if oidx.opMode != Read {
 		return nil, errors.Bug("oidxFile.getObjectIds: invalid op-mode:%s", oidx.opMode)
 	}
@@ -353,9 +356,9 @@ func (oidx *oidxFile) getObjectOids(keys ...uint64) (map[uint64]*system.Oid, err
 	if klen == 0 {
 		return nil, errors.Bug("oidx.getObjectOids: no keys specified")
 	}
-	var oids = make(map[uint64]*system.Oid, klen)
+	var oids = make(map[int64]*system.Oid, klen)
 
-	sort.Uint64s(keys)
+	sort.Int64s(keys)
 	for i, k := range keys {
 		if k == 0 || k >= oidx.header.ocnt {
 			return nil, errors.Bug("oidx.getObjectOids: invalid key[%d]: %d", i, k)
