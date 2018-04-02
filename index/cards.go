@@ -103,6 +103,7 @@ import (
 type Card interface {
 	Oid() *system.Oid
 	Key() int64
+	setKey(int64) error
 	Type() system.Otype // REVU use for systemics tags ..
 	Version() int
 	Save() (bool, error)
@@ -126,6 +127,17 @@ type cardFile struct {
 	modified bool
 }
 
+func (c *cardFile) Print(w io.Writer) {
+	fmt.Fprintf(w, "card-type: %s\n", c.otype)
+	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
+	fmt.Fprintf(w, "key:       %d\n", c.key)
+	fmt.Fprintf(w, "version:   %d\n", c.version)
+	fmt.Fprintf(w, "data-len:  %d\n", c.datalen)
+	fmt.Fprintf(w, "data-crc:  %d\n", c.datacrc)
+	fmt.Fprintf(w, "source:    %q\n", cardFilename(c.oid)) // XXX c.source)
+	fmt.Fprintf(w, "modified:  %t\n", c.modified)
+}
+
 /// cardFile ///////////////////////////////////////////////////////////////////
 
 func cardFilename(oid *system.Oid) string {
@@ -143,17 +155,15 @@ func cardExists(oid *system.Oid) bool {
 	return true
 }
 
-func newCardFile(oid *system.Oid, otype system.Otype, key int64) (*cardFile, error) {
+func newCardFile(oid *system.Oid, otype system.Otype) (*cardFile, error) {
 	if e := otype.Verify(); e != nil {
 		return nil, e
 	}
-	if key < 0 {
-		return nil, errors.InvalidArg("index.newCard", "key", "< 0")
-	}
+	// REVU we sh/could check if card exists here ..
 
 	card := &cardFile{
 		oid:     oid,
-		key:     key,
+		key:     -1,
 		otype:   otype,
 		version: 1,
 		//		datalen: uint64(len(data)), // REVU important extensions must provide datalen()
@@ -169,18 +179,31 @@ func (c *cardFile) Oid() *system.Oid   { return c.oid }
 func (c *cardFile) Key() int64         { return c.key }
 func (c *cardFile) Type() system.Otype { return c.otype }
 func (c *cardFile) Version() int       { return c.version }
+func (c *cardFile) setKey(key int64) error {
+	if c.key != -1 {
+		return errors.Bug("cardFile.setKey: key is already set to %d", c.key)
+	}
+	if key < 0 {
+		return errors.InvalidArg("cardFile.setKey", "key", "< 0")
+	}
+	c.key = key
+	return nil
+}
 
 // REVU this would have to partially create cardFile and then pass it to newTypeCard
-func loadCard(oid *system.Oid) (Card, error) { panic(errors.NotImplemented("wip")) }
+func loadCard(oid *system.Oid) (Card, error) {
+	panic(errors.NotImplemented("wip"))
+}
 
 // REVU this would have to override encode(buf) of cardFile and write data
 func (c *textCard) Save() (bool, error) {
 	panic(errors.NotImplemented("wip"))
 }
 
-// TODO start here ..
 // REVU this would have to override encode(buf) of cardFile and invoke paths.encode
-func (c *fileCard) Save() (bool, error) { panic(errors.NotImplemented("wip")) }
+func (c *fileCard) Save() (bool, error) {
+	panic(errors.NotImplemented("wip"))
+}
 
 /// TextCard support ///////////////////////////////////////////////////////////
 
@@ -196,8 +219,9 @@ type TextCard interface {
 }
 
 // REVU oid can be directly computed from the text.
-func NewTextCard(oid *system.Oid, key int64, text string) (*textCard, error) {
-	cardFile, e := newCardFile(oid, system.Text, key)
+func NewTextCard(oid *system.Oid, text string) (*textCard, error) {
+	system.Debugf("index.NewTextCard: oid:%s text:%q\n", oid.Fingerprint(), text)
+	cardFile, e := newCardFile(oid, system.Text)
 	if e != nil {
 		return nil, e
 	}
@@ -215,7 +239,9 @@ func (c *textCard) Text() string {
 }
 
 func (c *textCard) Print(w io.Writer) {
-	fmt.Fprintf(w, "textCard: not what we want! :)\n")
+	c.cardFile.Print(w)
+	fmt.Fprintf(w, "text-len:  %d\n", len(c.text))
+	fmt.Fprintf(w, "text:      %q\n", c.text)
 }
 
 /// FileCard support ///////////////////////////////////////////////////////////
@@ -233,8 +259,8 @@ type FileCard interface {
 }
 
 // REVU oid can be directly computed from the path.
-func NewFileCard(oid *system.Oid, key int64, path string) (*fileCard, error) {
-	cardFile, e := newCardFile(oid, system.Text, key)
+func NewFileCard(oid *system.Oid, path string) (*fileCard, error) {
+	cardFile, e := newCardFile(oid, system.File)
 	if e != nil {
 		return nil, e
 	}
@@ -250,7 +276,8 @@ func NewFileCard(oid *system.Oid, key int64, path string) (*fileCard, error) {
 }
 
 func (c *fileCard) Print(w io.Writer) {
-	fmt.Fprintf(w, "fileCard: not what we want! :)\n")
+	c.cardFile.Print(w)
+	c.paths.Print(w)
 }
 
 func (c *fileCard) Paths() []string {

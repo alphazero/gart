@@ -44,14 +44,13 @@ func (v Paths) List() []string {
 }
 
 func (p Paths) Print(w io.Writer) {
-	fmt.Fprintf(w, "paths - size:%d buflen:%d\n", p.size, p.buflen)
+	fmt.Fprintf(w, "path-cnt:  %d\n", p.size)
+	fmt.Fprintf(w, "buflen:    %d\n", p.buflen)
 	if p.size > 0 {
-		fmt.Fprintf(w, "----------------------\n")
 		pathlist := p.List()
 		for n, path := range pathlist {
-			fmt.Fprintf(w, "\t[%d] [len:%3d] %s\n", n, len(path), path)
+			fmt.Fprintf(w, "\tpath[%d] [len:%3d] %s\n", n, len(path), path)
 		}
-		fmt.Fprintf(w, "----------------------\n")
 	}
 }
 

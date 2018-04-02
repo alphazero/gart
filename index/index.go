@@ -183,50 +183,55 @@ func (idx *indexManager) IndexText(text string, tags ...string) (int64, bool, er
 	var card Card
 	var isNew bool
 	if !cardExists(oid) {
-		key := idx.oidx.nextKey()
 		var e error
-		card, e = NewTextCard(oid, key, text)
+		card, e = NewTextCard(oid, text)
 		if e != nil {
 			return -1, true, errors.Bug("indexManager.IndexText: - %s", e)
 		}
+	} else {
+		card, e = loadCard(oid)
 	}
 
 	key, e := idx.indexObject(card, isNew, tags...)
 	return key, isNew, e
 }
-func (idx *indexManager) IndexFile() {}
 
-//
+func (idx *indexManager) IndexFile(filename string, tags ...string) (int64, bool, error) {
+	return -1, false, errors.NotImplemented("indexManager.IndexFile")
+}
+
 // REVU see gart-add in /1.0/ for refresh on systemics..
-// REVU check assumptions - 1.0 assumed key 0 to be invalid? or was it 0xfff something?
-// REVU per thought re uint vs int API level fields, TODO revisit uint64 'key' for
-//      for index.Card (cardfile.go) and api here and use int64 instead.
-//		IFF done, then key < 0 would be invalid. 2^63 keys is OK.
 func (idx *indexManager) indexObject(card Card, isNew bool, tags ...string) (int64, error) {
 
 	var oid = card.Oid()
-	var key = card.Key()
-
-	// REVU for now delegate opMode validation to the oidx
 	if oid == nil {
-		return key, errors.InvalidArg("indexManager.indexObject", "oid", "nil")
+		return card.Key(), errors.InvalidArg("indexManager.indexObject", "oid", "nil")
 	}
 
 	// REVU for now it is ok if no tags are defined
 	// TODO systemics need to be added here as well
 
-	// TODO we need to check index.Cards here for this OID
-	//      If new, we add it, returning key, true, nil
-	// 		If not, we update tags, returning key, false, nil
-
 	if isNew {
-		var e error // key ..
-		key, e = idx.oidx.addObject(oid)
+		key, e := idx.oidx.addObject(oid)
 		if e != nil {
 			return key, errors.ErrorWithCause(e, "IndexManager.indexObject")
 		}
-		//		card.SetKey(key) // TODO
+		if e := card.setKey(key); e != nil {
+			return key, errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
+		}
+		if ok, e := card.Save(); e != nil {
+			return key, errors.Error("indexManager.indexObject: card.Save() - %s", e)
+		} else if !ok {
+			return key, errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
+		}
 	}
+
+	// update all tagmaps for card.Key
+	var key = card.Key()
+	for _, tag := range tags {
+		system.Debugf("TODO - set tagmap bit %d for tag %s ", key, tag)
+	}
+
 	return key, nil
 }
 
@@ -261,7 +266,7 @@ func (idx *indexManager) SelectObjects(tags ...string) ([]*system.Oid, error) {
 		}
 	}
 
-	fmt.Printf("debug - selected key ids:\n")
+	system.Debugf("indexManager.SelectObjects: selected key ids:\n")
 	for _, key := range resmap.Bits() {
 		fmt.Printf("key: %d\n", key)
 	}
