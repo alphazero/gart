@@ -103,11 +103,12 @@ import (
 type Card interface {
 	Oid() *system.Oid
 	Key() int64
-	setKey(int64) error
 	Type() system.Otype // REVU use for systemics tags ..
 	Version() int
-	Save() (bool, error)
 	Print(io.Writer)
+
+	setKey(int64) error  // index use only
+	save() (bool, error) // index use only
 }
 
 // abcd1234/data/1
@@ -196,12 +197,12 @@ func loadCard(oid *system.Oid) (Card, error) {
 }
 
 // REVU this would have to override encode(buf) of cardFile and write data
-func (c *textCard) Save() (bool, error) {
+func (c *textCard) save() (bool, error) {
 	panic(errors.NotImplemented("wip"))
 }
 
 // REVU this would have to override encode(buf) of cardFile and invoke paths.encode
-func (c *fileCard) Save() (bool, error) {
+func (c *fileCard) save() (bool, error) {
 	panic(errors.NotImplemented("wip"))
 }
 

@@ -219,7 +219,7 @@ func (idx *indexManager) indexObject(card Card, isNew bool, tags ...string) (int
 		if e := card.setKey(key); e != nil {
 			return key, errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
 		}
-		if ok, e := card.Save(); e != nil {
+		if ok, e := card.save(); e != nil {
 			return key, errors.Error("indexManager.indexObject: card.Save() - %s", e)
 		} else if !ok {
 			return key, errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
