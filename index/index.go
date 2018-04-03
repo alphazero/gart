@@ -125,7 +125,7 @@ func OpenIndexManager(opMode OpMode) (*indexManager, error) {
 		tagmaps: make(map[string]*Tagmap),
 	}
 
-	system.Debugf("index.OpenIndexManager: opMode: %s - openned.", opMode)
+	system.Debugf("index.OpenIndexManager: opMode: %s - openned", opMode)
 	return idxmgr, nil
 }
 
@@ -140,7 +140,7 @@ func (idx *indexManager) Close() error {
 	}
 	var e = idx.oidx.closeIndex()
 
-	system.Debugf("index.OpenIndexManager: opMode: %s - closed (e: %s).", idx.opMode, e)
+	system.Debugf("indexManager.Close: opMode: %s - closed with e:%v", idx.opMode, e)
 	// invalidate instance regardless of any errors
 	idx.opMode = 0
 	idx.oidx = nil
@@ -192,9 +192,7 @@ func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, err
 		card, e = loadCard(oid)
 	}
 
-	key, e := idx.indexObject(card, isNew, tags...)
-	system.Debugf("insertText: key:%d", key)
-	return card, isNew, e
+	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }
 
 func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool, error) {
@@ -209,7 +207,6 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 	var card Card
 	var isNew = !cardExists(oid)
 	if isNew {
-		system.Debugf("IndexFile: new card for %s", oid.Fingerprint())
 		var e error
 		card, e = NewFileCard(oid, filename)
 		if e != nil {
@@ -219,17 +216,15 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 		card, e = loadCard(oid)
 	}
 
-	key, e := idx.indexObject(card, isNew, tags...)
-	system.Debugf("insertFile: key:%d", key)
-	return card, isNew, e
+	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }
 
 // REVU see gart-add in /1.0/ for refresh on systemics..
-func (idx *indexManager) indexObject(card Card, isNew bool, tags ...string) (int64, error) {
+func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) error {
 
 	var oid = card.Oid()
 	if oid == nil {
-		return card.Key(), errors.InvalidArg("indexManager.indexObject", "oid", "nil")
+		return errors.InvalidArg("indexManager.indexObject", "oid", "nil")
 	}
 
 	// REVU for now it is ok if no tags are defined
@@ -238,15 +233,15 @@ func (idx *indexManager) indexObject(card Card, isNew bool, tags ...string) (int
 	if isNew {
 		key, e := idx.oidx.addObject(oid)
 		if e != nil {
-			return key, errors.ErrorWithCause(e, "IndexManager.indexObject")
+			return errors.ErrorWithCause(e, "IndexManager.indexObject")
 		}
 		if e := card.setKey(key); e != nil {
-			return key, errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
+			return errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
 		}
 		if ok, e := card.save(); e != nil {
-			return key, errors.Error("indexManager.indexObject: card.Save() - %s", e)
+			return errors.Error("indexManager.indexObject: card.Save() - %s", e)
 		} else if !ok {
-			return key, errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
+			return errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
 		}
 	}
 
@@ -256,7 +251,7 @@ func (idx *indexManager) indexObject(card Card, isNew bool, tags ...string) (int
 		system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
 	}
 
-	return key, nil
+	return nil
 }
 
 // REVU need to revisit system/types.go
