@@ -47,6 +47,8 @@ type cardFileHeader struct {
 // len: 4       1       2         1        8         8         8
 // xof: 0       4       5         7        8         16        24
 // fld: crc32 / otype / version / flags /  created / updated / key
+// NOTE encode is written with mmap in mind. It is assumed that the buffer
+// is the full card file and the data already mapped.
 func (h *cardFileHeader) encode(buf []byte) error {
 	if len(buf) < cardHeaderSize {
 		return errors.Bug("Invalid arg - buf len:%d < %d", len(buf), cardHeaderSize)
@@ -64,6 +66,23 @@ func (h *cardFileHeader) encode(buf []byte) error {
 	return nil
 }
 
+// NOTE decode is written with mmap in mind. It is assumed that the buffer
+// is the full card file and the data already mapped.
+func (h *cardFileHeader) decode(buf []byte) error {
+	h.crc32 = *(*uint32)(unsafe.Pointer(&buf[0]))
+	crc32 := digest.Checksum32(buf[4:])
+	if crc32 != h.crc32 {
+		return errors.Bug("cardFileHeader.decode: computed crc %d != recorded crc:%d", crc32, h.crc32)
+	}
+	h.otype = system.Otype(*(*byte)(unsafe.Pointer(&buf[4])))
+	h.version = *(*int16)(unsafe.Pointer(&buf[5]))
+	h.flags = *(*byte)(unsafe.Pointer(&buf[7]))
+	h.created = *(*int64)(unsafe.Pointer(&buf[8]))
+	h.updated = *(*int64)(unsafe.Pointer(&buf[16]))
+	h.key = *(*int64)(unsafe.Pointer(&buf[24]))
+	return nil
+}
+
 type cardFile struct {
 	// pseudo header
 	header   *cardFileHeader
@@ -73,7 +92,6 @@ type cardFile struct {
 	buf      []byte // from mmap
 	modified bool
 	encode   func([]byte) error
-	decode   func([]byte) error
 }
 
 func (h *cardFileHeader) Print(w io.Writer) {
@@ -174,7 +192,66 @@ func (c *cardFile) debugStr() string {
 
 // REVU this would have to partially create cardFile and then pass it to newTypeCard
 func LoadCard(oid *system.Oid) (Card, error) {
-	panic(errors.NotImplemented("index.loadCard"))
+	if oid == nil {
+		return nil, errors.InvalidArg("index.LoadCard", "oid", "nil")
+	}
+
+	/// open file and map it ////////////////////////////////////////
+
+	filename := cardFilename(oid)
+	finfo, e := os.Stat(filename)
+	if e != nil && os.IsNotExist(e) {
+		return nil, errors.Error("index.LoadCard: Card does not exist for oid %s",
+			oid.Fingerprint())
+	} else if e != nil {
+		return nil, errors.ErrorWithCause(e, "index.LoadCard: unexpected error")
+	}
+
+	// we're always reading and immediately closing
+	file, e := os.OpenFile(filename, os.O_RDONLY, system.FilePerm)
+	if e != nil {
+		return nil, errors.ErrorWithCause(e, "index.LoadCard: on open - unexpected error")
+	}
+	defer file.Close()
+
+	size := int(finfo.Size())
+	fd := int(file.Fd())
+	buf, e := syscall.Mmap(fd, 0, size, syscall.PROT_READ, syscall.MAP_PRIVATE)
+	if e != nil {
+		return nil, errors.ErrorWithCause(e, "index.LoadCard: on mmap - unexpected error")
+	}
+	defer syscall.Munmap(buf)
+
+	/// decode card /////////////////////////////////////////////////
+
+	var cardbase = &cardFile{
+		header:   &cardFileHeader{},
+		oid:      oid,
+		modified: false,
+	}
+	if e := cardbase.header.decode(buf); e != nil {
+		return nil, errors.ErrorWithCause(e, "index.LoadCard: header decode")
+	}
+	var card Card
+	switch cardbase.header.otype {
+	case system.Text:
+		tcard := &textCard{
+			cardFile: cardbase,
+		}
+		e = tcard.decode(buf[cardHeaderSize:])
+		card = tcard
+	case system.File:
+		tcard := &fileCard{
+			cardFile: cardbase,
+			paths:    NewPaths(),
+		}
+		e = tcard.decode(buf[cardHeaderSize:])
+		card = tcard
+	default:
+		panic(errors.Bug("index.LoadCard: unexpected otype: %s", cardbase.header.otype))
+	}
+
+	return card, e
 }
 
 func (c *cardFile) save() (bool, error) {
@@ -273,6 +350,15 @@ func NewTextCard(oid *system.Oid, text string) (*textCard, error) {
 	return card, nil
 }
 
+func (c *textCard) decode(buf []byte) error {
+	// we're just reading a string
+	c.datalen = int64(len(buf))
+	var sb = make([]byte, c.datalen)
+	copy(sb, buf)
+	c.text = string(sb)
+	return nil
+}
+
 func (c *textCard) encode(buf []byte) error {
 	if len(buf) < len(c.text) {
 		return errors.InvalidArg("textCard.encode", "len(buf)", "len(c.text)")
@@ -326,6 +412,11 @@ func NewFileCard(oid *system.Oid, path string) (*fileCard, error) {
 
 func (c *fileCard) encode(buf []byte) error {
 	return c.paths.Encode(buf)
+}
+
+func (c *fileCard) decode(buf []byte) error {
+	c.datalen = int64(len(buf))
+	return c.paths.Decode(buf)
 }
 
 func (c *fileCard) Print(w io.Writer) {
