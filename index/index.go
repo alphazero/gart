@@ -234,6 +234,7 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	// REVU for now it is ok if no tags are defined
 	// TODO systemics need to be added here as well
 
+	var updates []string // new tags
 	if isNew {
 		key, e := idx.oidx.addObject(oid)
 		if e != nil {
@@ -242,17 +243,33 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		if e := card.setKey(key); e != nil {
 			return errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
 		}
+		//		if ok, e := card.save(); e != nil {
+		//			return errors.Error("indexManager.indexObject: card.Save() - %s", e)
+		//		} else if !ok {
+		//			return errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
+		//		}
+	}
+	// (regardless if new or not) add the tags
+	// updates indicates what was added (if any)
+	updates = card.addTag(tags...)
+	if len(updates) > 0 {
+		// replaces tags with updates
+		tags = updates
+	}
+	if isNew || len(updates) > 0 {
 		if ok, e := card.save(); e != nil {
 			return errors.Error("indexManager.indexObject: card.Save() - %s", e)
-		} else if !ok {
+		} else if isNew && !ok {
 			return errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
 		}
 	}
 
 	// update all tagmaps for card.Key
-	var key = card.Key()
-	for _, tag := range tags {
-		system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
+	if len(updates) > 0 {
+		var key = card.Key()
+		for _, tag := range tags {
+			system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
+		}
 	}
 
 	return nil

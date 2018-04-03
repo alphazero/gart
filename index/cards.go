@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -27,12 +29,6 @@ import (
 //      there are issues: (1) BAH would need to be cleaned up to the standard of WAHL
 //      and (2) the simple (and sufficient) approach of simply writing the csv tag-line
 //      is far simpler and unlike 1.0/card/bah there is no limit on number of tags.
-//
-// TODO - add cardFile.setTags()
-//      - add cardFile.Tags()
-//      - add cardFile.updateTags()
-//      - update indexManager.updateIndex
-//      - fix indexManager.IndexText to exit earlier if Exists
 
 type Card interface {
 	Oid() *system.Oid
@@ -40,12 +36,15 @@ type Card interface {
 	Type() system.Otype // REVU use for systemics tags ..
 	Version() int
 	Print(io.Writer)
+	Tags() []string
 
-	setKey(int64) error  // index use only
-	save() (bool, error) // index use only
+	setKey(int64) error               // index use only
+	addTag(tag ...string) []string    // returns updated tags, if any
+	removeTag(tag ...string) []string // returns removed tags, if any
+	save() (bool, error)              // index use only
 }
 
-const cardHeaderSize = 32
+const cardHeaderSize = 40
 
 type cardFileHeader struct {
 	crc32   uint32
@@ -55,6 +54,8 @@ type cardFileHeader struct {
 	created int64
 	updated int64
 	key     int64
+	tagcnt  int32
+	tagslen int32
 }
 
 // len: 4       1       2         1        8         8         8
@@ -72,6 +73,8 @@ func (h *cardFileHeader) encode(buf []byte) error {
 	*(*int64)(unsafe.Pointer(&buf[8])) = h.created
 	*(*int64)(unsafe.Pointer(&buf[16])) = h.updated
 	*(*int64)(unsafe.Pointer(&buf[24])) = h.key
+	*(*int32)(unsafe.Pointer(&buf[32])) = h.tagcnt
+	*(*int32)(unsafe.Pointer(&buf[36])) = h.tagslen
 
 	h.crc32 = digest.Checksum32(buf[4:])
 	*(*uint32)(unsafe.Pointer(&buf[0])) = h.crc32
@@ -93,12 +96,15 @@ func (h *cardFileHeader) decode(buf []byte) error {
 	h.created = *(*int64)(unsafe.Pointer(&buf[8]))
 	h.updated = *(*int64)(unsafe.Pointer(&buf[16]))
 	h.key = *(*int64)(unsafe.Pointer(&buf[24]))
+	h.tagcnt = *(*int32)(unsafe.Pointer(&buf[32]))
+	h.tagslen = *(*int32)(unsafe.Pointer(&buf[36]))
 	return nil
 }
 
 type cardFile struct {
 	// pseudo header
 	header   *cardFileHeader
+	tags     map[string]struct{}
 	datalen  int64 // REVU is this even necessary?
 	oid      *system.Oid
 	source   string
@@ -115,6 +121,8 @@ func (h *cardFileHeader) Print(w io.Writer) {
 	fmt.Fprintf(w, "created:   %d - %s\n", h.created, time.Unix(0, h.created))
 	fmt.Fprintf(w, "updated:   %d - %s\n", h.updated, time.Unix(0, h.updated))
 	fmt.Fprintf(w, "key:       %d\n", h.key)
+	fmt.Fprintf(w, "tagcnt:    %d\n", h.tagcnt)
+	fmt.Fprintf(w, "tagslen:   %d\n", h.tagslen)
 }
 
 func (c *cardFile) Print(w io.Writer) {
@@ -124,6 +132,13 @@ func (c *cardFile) Print(w io.Writer) {
 	fmt.Fprintf(w, "source:    %q\n", cardFilename(c.oid)) // XXX c.source)
 	fmt.Fprintf(w, "data-len:  %d\n", c.datalen)
 	fmt.Fprintf(w, "modified:  %t\n", c.modified)
+	if len(c.tags) > 0 {
+		fmt.Fprintf(w, "tags:        \n")
+		tags := c.Tags() // this sorts them
+		for n, tag := range tags {
+			fmt.Fprintf(w, "\t [%d]:   %q\n", n, tag)
+		}
+	}
 }
 
 /// cardFile ///////////////////////////////////////////////////////////////////
@@ -162,6 +177,7 @@ func newCardFile(oid *system.Oid, otype system.Otype) (*cardFile, error) {
 
 	card := &cardFile{
 		header:   header,
+		tags:     make(map[string]struct{}, 0),
 		oid:      oid,
 		modified: false,
 	}
@@ -186,6 +202,62 @@ func (c *cardFile) setKey(key int64) error {
 	c.header.key = key
 	c.onUpdate()
 	return nil
+}
+
+var _ = sort.Strings
+
+func (c *cardFile) Tags() []string {
+	var tags = make([]string, len(c.tags))
+	var n int
+	for tag, _ := range c.tags {
+		tags[n] = tag
+		n++
+	}
+	system.Debugf("tags: %v", tags)
+	sort.Strings(tags)
+	return tags
+}
+
+func (c *cardFile) addTag(tags ...string) []string {
+	if len(tags) == 0 {
+		return []string{}
+	}
+	var updates []string
+	for _, tag := range tags {
+		if _, ok := c.tags[tag]; !ok {
+			c.tags[tag] = struct{}{}
+			c.header.tagcnt++
+			c.header.tagslen += int32(len(tag) + 1) // 1 for the ,
+			updates = append(updates, tag)
+		}
+	}
+	if len(updates) > 0 {
+		c.header.tagslen--
+		c.onUpdate()
+	}
+	return updates
+}
+
+func (c *cardFile) removeTag(tags ...string) []string {
+	if len(tags) == 0 || len(c.tags) == 0 {
+		return []string{}
+	}
+	var updates []string
+	for _, tag := range tags {
+		if _, ok := c.tags[tag]; ok {
+			delete(c.tags, tag)
+			c.header.tagcnt--
+			c.header.tagslen -= int32(len(tag) + 1) // 1 for the ,
+			updates = append(updates, tag)
+		}
+	}
+	if len(updates) > 0 {
+		if c.header.tagslen < 0 { // edge case of removing the only tag
+			c.header.tagslen = 0
+		}
+		c.onUpdate()
+	}
+	return updates
 }
 
 func (c *cardFile) onUpdate() {
@@ -235,30 +307,48 @@ func LoadCard(oid *system.Oid) (Card, error) {
 	}
 	defer syscall.Munmap(buf)
 
-	/// decode card /////////////////////////////////////////////////
+	/// decode base card file ///////////////////////////////////////
 
-	var cardbase = &cardFile{
-		header:   &cardFileHeader{},
-		oid:      oid,
-		modified: false,
-	}
-	if e := cardbase.header.decode(buf); e != nil {
+	var header = &cardFileHeader{}
+	var offset int
+
+	if e := header.decode(buf); e != nil {
 		return nil, errors.ErrorWithCause(e, "index.LoadCard: header decode")
 	}
+	offset += cardHeaderSize
+
+	var cardbase = &cardFile{
+		header:   header,
+		tags:     make(map[string]struct{}, header.tagcnt),
+		oid:      oid,
+		source:   filename,
+		modified: false,
+	}
+
+	tagspec := string(buf[offset : offset+int(header.tagslen)])
+	for _, tag := range strings.Split(tagspec, ",") {
+		cardbase.tags[tag] = struct{}{}
+	}
+	offset += int(header.tagslen)
+
+	/// decode typed card data //////////////////////////////////////
+
 	var card Card
 	switch cardbase.header.otype {
 	case system.Text:
 		tcard := &textCard{
 			cardFile: cardbase,
 		}
-		e = tcard.decode(buf[cardHeaderSize:])
+		cardbase.encode = tcard.encode
+		e = tcard.decode(buf[offset:])
 		card = tcard
 	case system.File:
 		tcard := &fileCard{
 			cardFile: cardbase,
 			paths:    NewPaths(),
 		}
-		e = tcard.decode(buf[cardHeaderSize:])
+		cardbase.encode = tcard.encode
+		e = tcard.decode(buf[offset:])
 		card = tcard
 	default:
 		panic(errors.Bug("index.LoadCard: unexpected otype: %s", cardbase.header.otype))
@@ -298,7 +388,7 @@ func (c *cardFile) save() (bool, error) {
 	defer sfile.Close()
 
 	// write header and get length
-	var bufsize = int64(cardHeaderSize) + c.datalen
+	var bufsize = int64(cardHeaderSize+c.header.tagslen) + c.datalen
 
 	if e := sfile.Truncate(bufsize); e != nil {
 		return false, errors.Error("cardFile.save: file.Truncate(%d): %s", bufsize, e)
@@ -313,7 +403,16 @@ func (c *cardFile) save() (bool, error) {
 
 	/// encode card ///////////////////////////////////////////////////////////////
 
-	if e := c.encode(buf[cardHeaderSize:]); e != nil {
+	// REVU why not just store the trailing , and get rid of all the edge case
+	//      handling in addTag/removeTag and here writing tags first ?..
+	var offset = cardHeaderSize
+	for tag, _ := range c.tags {
+		copy(buf[offset:], []byte(tag))
+		offset += len(tag)
+		buf[offset] = ','
+		offset++
+	}
+	if e := c.encode(buf[cardHeaderSize+c.header.tagslen:]); e != nil {
 		return false, errors.Error("cardFile.save: encode: %s", e)
 	}
 	// NOTE encode header after we have all the buf encoded. (cf. header.crc32)
@@ -331,8 +430,6 @@ func (c *cardFile) save() (bool, error) {
 	return true, nil
 }
 
-func encodeFileCard(buf []byte) error { panic("do it") }
-
 /// TextCard support ///////////////////////////////////////////////////////////
 
 type textCard struct {
@@ -348,7 +445,6 @@ type TextCard interface {
 
 // REVU oid can be directly computed from the text.
 func NewTextCard(oid *system.Oid, text string) (*textCard, error) {
-	system.Debugf("index.NewTextCard: oid:%s text:%q\n", oid.Fingerprint(), text)
 	cardFile, e := newCardFile(oid, system.Text)
 	if e != nil {
 		return nil, e
