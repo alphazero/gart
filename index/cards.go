@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
-	//	"unsafe"
+	"unsafe"
 
+	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
 	"github.com/alphazero/gart/system"
@@ -31,37 +32,63 @@ type Card interface {
 	save() (bool, error) // index use only
 }
 
-// 1       2         1       4       8         8         8
-// otype / version / flags / crc32 / created / updated / key
 const cardHeaderSize = 32
 
-type cardFile struct {
-	// pseudo header
+type cardFileHeader struct {
+	crc32   uint32
 	otype   system.Otype
 	version int16
 	flags   byte
-	crc32   uint32
 	created int64
 	updated int64
 	key     int64
+}
 
+// len: 4       1       2         1        8         8         8
+// xof: 0       4       5         7        8         16        24
+// fld: crc32 / otype / version / flags /  created / updated / key
+func (h *cardFileHeader) encode(buf []byte) error {
+	if len(buf) < cardHeaderSize {
+		return errors.Bug("Invalid arg - buf len:%d < %d", len(buf), cardHeaderSize)
+	}
+	*(*byte)(unsafe.Pointer(&buf[4])) = byte(h.otype)
+	*(*int16)(unsafe.Pointer(&buf[5])) = h.version
+	*(*byte)(unsafe.Pointer(&buf[7])) = h.flags
+	*(*int64)(unsafe.Pointer(&buf[8])) = h.created
+	*(*int64)(unsafe.Pointer(&buf[16])) = h.updated
+	*(*int64)(unsafe.Pointer(&buf[24])) = h.key
+
+	h.crc32 = digest.Checksum32(buf[4:])
+	*(*uint32)(unsafe.Pointer(&buf[0])) = h.crc32
+
+	return nil
+}
+
+type cardFile struct {
+	// pseudo header
+	header   *cardFileHeader
 	datalen  int64 // REVU is this even necessary?
 	oid      *system.Oid
 	source   string
 	buf      []byte // from mmap
 	modified bool
 	encode   func([]byte) error
+	decode   func([]byte) error
+}
+
+func (h *cardFileHeader) Print(w io.Writer) {
+	fmt.Fprintf(w, "crc32:     %08x\n", h.crc32)
+	fmt.Fprintf(w, "type:      %s\n", h.otype)
+	fmt.Fprintf(w, "version:   %d\n", h.version)
+	fmt.Fprintf(w, "flags:     %08b\n", h.flags)
+	fmt.Fprintf(w, "created:   %d - %s\n", h.created, time.Unix(0, h.created))
+	fmt.Fprintf(w, "updated:   %d - %s\n", h.updated, time.Unix(0, h.updated))
+	fmt.Fprintf(w, "key:       %d\n", h.key)
 }
 
 func (c *cardFile) Print(w io.Writer) {
 	fmt.Fprintf(w, "--- card ---------------\n")
-	fmt.Fprintf(w, "type:      %s\n", c.otype)
-	fmt.Fprintf(w, "version:   %d\n", c.version)
-	fmt.Fprintf(w, "flags:     %08b\n", c.flags)
-	fmt.Fprintf(w, "crc32:     %08x\n", c.crc32)
-	fmt.Fprintf(w, "created:   %d - %s\n", c.created, time.Unix(0, c.created))
-	fmt.Fprintf(w, "updated:   %d - %s\n", c.updated, time.Unix(0, c.updated))
-	fmt.Fprintf(w, "key:       %d\n", c.key)
+	c.header.Print(w)
 	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
 	fmt.Fprintf(w, "source:    %q\n", cardFilename(c.oid)) // XXX c.source)
 	fmt.Fprintf(w, "data-len:  %d\n", c.datalen)
@@ -92,7 +119,7 @@ func newCardFile(oid *system.Oid, otype system.Otype) (*cardFile, error) {
 	// REVU we sh/could check if card exists here ..
 
 	now := time.Now().UnixNano()
-	card := &cardFile{
+	header := &cardFileHeader{
 		otype:   otype,
 		version: -1,
 		flags:   0,
@@ -100,7 +127,10 @@ func newCardFile(oid *system.Oid, otype system.Otype) (*cardFile, error) {
 		created: now,
 		updated: 0,
 		key:     -1, // REVU change these -1s to index.invalidKey (objects.go)
+	}
 
+	card := &cardFile{
+		header:   header,
 		oid:      oid,
 		modified: false,
 	}
@@ -111,18 +141,18 @@ func newCardFile(oid *system.Oid, otype system.Otype) (*cardFile, error) {
 /// Card support ///////////////////////////////////////////////////////////////
 
 func (c *cardFile) Oid() *system.Oid   { return c.oid }
-func (c *cardFile) Key() int64         { return c.key }
-func (c *cardFile) Type() system.Otype { return c.otype }
-func (c *cardFile) Version() int       { return int(c.version) }
+func (c *cardFile) Key() int64         { return c.header.key }
+func (c *cardFile) Type() system.Otype { return c.header.otype }
+func (c *cardFile) Version() int       { return int(c.header.version) }
 func (c *cardFile) setKey(key int64) error {
-	if c.key != -1 {
-		return errors.Bug("cardFile.setKey: key is already set to %d", c.key)
+	if c.header.key != -1 {
+		return errors.Bug("cardFile.setKey: key is already set to %d", c.header.key)
 	}
 	if key < 0 {
 		return errors.InvalidArg("cardFile.setKey", "key", "< 0")
 	}
 
-	c.key = key
+	c.header.key = key
 	c.onUpdate()
 	return nil
 }
@@ -130,28 +160,29 @@ func (c *cardFile) setKey(key int64) error {
 func (c *cardFile) onUpdate() {
 	if !c.modified {
 		c.modified = true
-		c.version++
-		c.updated = time.Now().UnixNano()
+		c.header.version++
+		c.header.updated = time.Now().UnixNano()
 	}
 }
 
 func (c *cardFile) debugStr() string {
-	return fmt.Sprintf("%s-card:(oid:%s key:%d)", c.otype, c.oid.Fingerprint(), c.key)
+	return fmt.Sprintf("%s-card:(oid:%s key:%d)",
+		c.header.otype, c.oid.Fingerprint(), c.header.key)
 }
 
 /// io ops /////////////////////////////////////////////////////////////////////
 
 // REVU this would have to partially create cardFile and then pass it to newTypeCard
-func loadCard(oid *system.Oid) (Card, error) {
-	panic(errors.NotImplemented("wip"))
+func LoadCard(oid *system.Oid) (Card, error) {
+	panic(errors.NotImplemented("index.loadCard"))
 }
 
 func (c *cardFile) save() (bool, error) {
 	if !c.modified {
 		return false, nil
 	}
-	if c.key < 0 {
-		return false, errors.Bug("cardFile.save: invalid key: %d", c.key)
+	if c.header.key < 0 {
+		return false, errors.Bug("cardFile.save: invalid key: %d", c.header.key)
 	}
 
 	// create card dir if required
@@ -177,12 +208,7 @@ func (c *cardFile) save() (bool, error) {
 	defer sfile.Close()
 
 	// write header and get length
-	header := fmt.Sprintf("%s\n", c.otype)
-	header += fmt.Sprintf("%s\n", c.oid.String())
-	header += fmt.Sprintf("%d\n", c.version)
-	header += fmt.Sprintf("%d\n", c.datalen)
-	var headerSize = len(header)
-	var bufsize = int64(headerSize) + c.datalen
+	var bufsize = int64(cardHeaderSize) + c.datalen
 
 	if e := sfile.Truncate(bufsize); e != nil {
 		return false, errors.Error("cardFile.save: file.Truncate(%d): %s", bufsize, e)
@@ -197,10 +223,12 @@ func (c *cardFile) save() (bool, error) {
 
 	/// encode card ///////////////////////////////////////////////////////////////
 
-	copy(buf, []byte(header))
-
-	if e := c.encode(buf[headerSize:]); e != nil {
+	if e := c.encode(buf[cardHeaderSize:]); e != nil {
 		return false, errors.Error("cardFile.save: encode: %s", e)
+	}
+	// NOTE encode header after we have all the buf encoded. (cf. header.crc32)
+	if e := c.header.encode(buf); e != nil {
+		return false, errors.Error("cardFile.save: header.encode: %s", e)
 	}
 
 	/// swap //////////////////////////////////////////////////////////////////////

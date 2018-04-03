@@ -190,7 +190,7 @@ func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, err
 			return nil, true, errors.Bug("indexManager.IndexText: - %s", e)
 		}
 	} else {
-		card, e = loadCard(oid)
+		card, e = LoadCard(oid)
 	}
 
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
@@ -217,7 +217,7 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 			return card, true, errors.Bug("indexManager.IndexFile: - %s", e)
 		}
 	} else {
-		card, e = loadCard(oid)
+		card, e = LoadCard(oid)
 	}
 
 	return card, isNew, idx.updateIndex(card, isNew, tags...)

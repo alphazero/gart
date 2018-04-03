@@ -25,10 +25,10 @@ var option = struct {
 	tags  string
 	force bool
 }{}
-var ops = []string{"i", "a", "u", "q"}
+var ops = []string{"i", "r", "a", "u", "q"}
 
 func init() {
-	flag.StringVar(&option.op, "op", option.op, "i:init a:add u:update q:query")
+	flag.StringVar(&option.op, "op", option.op, "i:init a:add r:read u:update q:query")
 	flag.StringVar(&option.file, "file", option.file, "name of file to index")
 	flag.StringVar(&option.text, "text", option.text, "text to index")
 	flag.StringVar(&option.tags, "tags", option.tags, "csv list in \" \"s ")
@@ -68,6 +68,11 @@ op_verified:
 		goto tags_ok
 	}
 
+	if option.op == "r" && len(tagnames) > 0 {
+		system.Debugf("test-index: ignoring -tags for option 'r'")
+		goto tags_ok
+	}
+
 	for i, s := range tagnames {
 		tag := strings.Trim(s, " ")
 		if tag == "" {
@@ -87,6 +92,8 @@ tags_ok:
 		e = initializeIndex(option.force)
 	case "a":
 		e = addObject(tagnames...)
+	case "r":
+		e = readCard()
 	case "u":
 		var oid = fileOid(option.file)
 		e = updateObjectTags(oid, tagnames...)
@@ -109,6 +116,37 @@ func initializeIndex(force bool) error {
 	}
 	return index.Initialize(force)
 }
+
+func readCard() error {
+
+	var e error
+	var oid *system.Oid
+	switch {
+	case option.text != "":
+		md := digest.Sum([]byte(option.text))
+		oid, e = system.NewOid(md[:])
+		if e != nil {
+			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
+		}
+	case option.file != "":
+		md, e := digest.SumFile(option.file)
+		if e != nil {
+			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
+		}
+		oid, e = system.NewOid(md[:])
+		if e != nil {
+			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
+		}
+	}
+	card, e := index.LoadCard(oid)
+	if e != nil {
+		exitOnError(errors.Bug("test-index: index.GetCard - %s", e))
+	}
+
+	card.Print(os.Stdout)
+	return nil
+}
+
 func addObject(tags ...string) error {
 	idx, e := index.OpenIndexManager(index.Write)
 	if e != nil {
