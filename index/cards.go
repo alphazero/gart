@@ -21,6 +21,19 @@ import (
 // files in a .gart/index/cards/ child directory using oids for nameing the dir
 // hierarchy.
 
+// REVU - we can load a card but short of searching every tagmap for card.key
+//      there is no O(1) way to also show what tags have been applied to the object.
+//      - we can add back the 1.0/BAH for tags and the update tags() for Card, but
+//      there are issues: (1) BAH would need to be cleaned up to the standard of WAHL
+//      and (2) the simple (and sufficient) approach of simply writing the csv tag-line
+//      is far simpler and unlike 1.0/card/bah there is no limit on number of tags.
+//
+// TODO - add cardFile.setTags()
+//      - add cardFile.Tags()
+//      - add cardFile.updateTags()
+//      - update indexManager.updateIndex
+//      - fix indexManager.IndexText to exit earlier if Exists
+
 type Card interface {
 	Oid() *system.Oid
 	Key() int64
