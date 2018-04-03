@@ -5,6 +5,7 @@ package index
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
@@ -196,6 +197,9 @@ func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, err
 }
 
 func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool, error) {
+	if !filepath.IsAbs(filename) {
+		return nil, false, errors.InvalidArg("indexManager.IndexFile", "filename", "not absolute")
+	}
 	md, e := digest.SumFile(filename)
 	if e != nil {
 		panic(errors.BugWithCause(e, "indexManager.IndexFile: unexpected"))
