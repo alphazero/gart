@@ -213,7 +213,7 @@ func (c *cardFile) Tags() []string {
 		tags[n] = tag
 		n++
 	}
-	system.Debugf("tags: %v", tags)
+	//	system.Debugf("tags: %v", tags)
 	sort.Strings(tags)
 	return tags
 }
@@ -232,7 +232,7 @@ func (c *cardFile) addTag(tags ...string) []string {
 		}
 	}
 	if len(updates) > 0 {
-		c.header.tagslen--
+		//		c.header.tagslen--
 		c.onUpdate()
 	}
 	return updates
@@ -325,7 +325,7 @@ func LoadCard(oid *system.Oid) (Card, error) {
 		modified: false,
 	}
 
-	tagspec := string(buf[offset : offset+int(header.tagslen)])
+	tagspec := string(buf[offset : offset+int(header.tagslen)-1])
 	for _, tag := range strings.Split(tagspec, ",") {
 		cardbase.tags[tag] = struct{}{}
 	}
