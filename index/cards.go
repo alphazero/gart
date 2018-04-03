@@ -206,12 +206,8 @@ func loadCard(oid *system.Oid) (Card, error) {
 }
 
 func (c *cardFile) save() (bool, error) {
-	system.Debugf("cardFile.save: %s - BEGIN", c.debugStr())
-
 	// check state validity
-
 	if !c.modified {
-		system.Debugf("cardFile.save: card is not modified")
 		return false, nil
 	}
 	if c.key < 0 {
@@ -219,9 +215,7 @@ func (c *cardFile) save() (bool, error) {
 	}
 
 	// create card dir if required
-
 	if c.source == "" {
-		system.Debugf("cardFile.save: source not defined - assume newCard")
 		if cardExists(c.oid) {
 			return false, errors.Bug("cardFile.save: source is nil for existing card")
 		}
