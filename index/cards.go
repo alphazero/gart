@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
+	//	"unsafe"
 
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -15,92 +17,8 @@ import (
 )
 
 // An index.Card describes, in full, a gart object. Cards are stored as individual
-// files in .gart/index/cards/ directory in a manner similar to git blobs. Cards
-// are human readable, carriage return (\n) delimited files. (Given that typical
-// host OS file system will allocate (typically) up to 4k per inode (even for a 1
-// byte file) the design choice for plain-text (unicode) encoding of cards seems
-// reasonable. Card files can also be compressed.
-//
-// Each card (redundantly) stores the object identity (Oid), associated tags (in
-// plain text and not via a bitmap), systemic tags, system timestamps, and crc.
-//
-// Use cases for index.Card:
-//
-// Being the 'leaves' of the OS FS's (gratis) b-tree index structure, index.Cards
-// allow for O(log) lookup of an object's details via Oid. Both individual file
-// queries (i.e. gart-find -f <some-file>) and tag based queries (i.e. gart-find
-// -tags <csv tag list>) internally resolve to one or more system.Oids. Given an
-// Oid, access to the associated card is via os.Open.
-//
-// Cards are also the fundamental index recovery mechanism for gart. Given the
-// set of index.Cards, the Object-index (object.idx), and associated Tag bitmaps
-// can be rebuilt. Even the Tag Dictionary can be rebuilt given the set of Cards.
-//
-// For this reason, and given their small size, index.Cards are always read in full
-// in RDONLY mode and updates are via SYNC'ed swaps.
-//
-// Card file format:
-//
-//    line  datum -- all lines are \n delimited.
-//
-//    0:    %016x formatted representation of CRC64 of card file lines 1->n.
-//	  1:    %016x formatted object.idx key.
-//    2:    0%16x %016x %d formatted create, update, and revision number.
-//    3:    reserved for flags if any. this line may simply be a \n.
-//    4:    %d %d formatted tag-count and initial line number for tags
-//    5:    %d %d formatted path-count and initial line number for paths
-//    6:    %d %d formatted systemics-count and initial line number for systemics
-//    <path-count> lines are absolute path specs.
-//    <tag-count> lines are tag names.
-//    <systemic-count> lines are systemic attributes and flags.
-//
-// Example:
-//
-//  --- begin ----------------------
-//  1:	 73cb3858a687a849
-//  2:	 cd777f8ec7a2743f8190f54f5c189607357a29bd86fd49f006fef81647d99dbb
-//  3:	 15210c6ca746f5ad 15210c6d48ad124f 1
-//  4:	 7
-//  5:	 Friend, Doost, Beloved, Salaam, Samad, Sultan, LOVE
-//  6:	 2
-//  7:	 .go, mar-31-2018
-//  8:	 2
-//  9:	 /Users/alphazero/Code/go/src/gart/index/ftest/test-index.go
-//  10:	 /Volumes/OpenGate/Backups/ove/alphazero/Code/go/src/gart/index/ftest/test-index.go
-//  --- end ------------------------
-//
-// REVU	each card load has to decode crc and timestamps. it also needs to decode
-//		the counts. The rest are plain text in the binary encoded version as well.
-//      The only difference, really, from 1.0 version is that we no longer use a BAH
-//      and have no limits on number of tags. (before the BAH had to be 255 bytes
-// 		max and of course since it was a bitmap, we needs tag.dict file to recover.)
-//
-//		One argument for plain-text is that it is 'human readable', but counter arg
-//		is that there will be a gart-info -oid to decode it.
-//
-//		Parsing will not be faster or simpler. We still have to chase the \n terminal.
-//
-//		Parsing binary will be faster. It is true that it will be 'noise' for one
-// 		card read, but still saving piping find . to gart-add will add up those
-//		incremental +deltas.
-//
-//	    Reminder that the binary form will have <path-len><path-in-plaintext>, etc.
-//		so parsing is deterministic.
-//
-// TODO sleep on this.
-//
-// REVU the simplest thing that would work:
-//
-//		a card simply is:
-//		object type : string : in { blob, file }
-//		object key : int : in [0, n]
-//		version : int : in [1, n]
-//		-- type specific data formats
-//		list of paths for file objects
-//		or
-//		embedded blob
-//
-//		and that's it.
+// files in a .gart/index/cards/ child directory using oids for nameing the dir
+// hierarchy.
 
 type Card interface {
 	Oid() *system.Oid
@@ -113,32 +31,40 @@ type Card interface {
 	save() (bool, error) // index use only
 }
 
-// abcd1234/data/1
-// data: len/bytes/crc
+// 1       2         1       4       8         8         8
+// otype / version / flags / crc32 / created / updated / key
+const cardHeaderSize = 32
+
 type cardFile struct {
-	oid *system.Oid
-
-	key     int64
+	// pseudo header
 	otype   system.Otype
-	version int
-	datalen int64  // REVU is this even necessary?
-	datacrc uint64 // REVU this is now problematic
+	version int16
+	flags   byte
+	crc32   uint32
+	created int64
+	updated int64
+	key     int64
 
-	source string
-	buf    []byte // from mmap
-
+	datalen  int64 // REVU is this even necessary?
+	oid      *system.Oid
+	source   string
+	buf      []byte // from mmap
 	modified bool
 	encode   func([]byte) error
 }
 
 func (c *cardFile) Print(w io.Writer) {
-	fmt.Fprintf(w, "card-type: %s\n", c.otype)
-	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
-	fmt.Fprintf(w, "key:       %d\n", c.key)
+	fmt.Fprintf(w, "--- card ---------------\n")
+	fmt.Fprintf(w, "type:      %s\n", c.otype)
 	fmt.Fprintf(w, "version:   %d\n", c.version)
-	fmt.Fprintf(w, "data-len:  %d\n", c.datalen)
-	fmt.Fprintf(w, "data-crc:  %d\n", c.datacrc)
+	fmt.Fprintf(w, "flags:     %08b\n", c.flags)
+	fmt.Fprintf(w, "crc32:     %08x\n", c.crc32)
+	fmt.Fprintf(w, "created:   %d - %s\n", c.created, time.Unix(0, c.created))
+	fmt.Fprintf(w, "updated:   %d - %s\n", c.updated, time.Unix(0, c.updated))
+	fmt.Fprintf(w, "key:       %d\n", c.key)
+	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
 	fmt.Fprintf(w, "source:    %q\n", cardFilename(c.oid)) // XXX c.source)
+	fmt.Fprintf(w, "data-len:  %d\n", c.datalen)
 	fmt.Fprintf(w, "modified:  %t\n", c.modified)
 }
 
@@ -165,13 +91,18 @@ func newCardFile(oid *system.Oid, otype system.Otype) (*cardFile, error) {
 	}
 	// REVU we sh/could check if card exists here ..
 
+	now := time.Now().UnixNano()
 	card := &cardFile{
-		oid:     oid,
-		key:     -1,
 		otype:   otype,
-		version: 1,
-		//		datalen: uint64(len(data)), // REVU important extensions must provide datalen()
-		modified: true,
+		version: -1,
+		flags:   0,
+		crc32:   0,
+		created: now,
+		updated: 0,
+		key:     -1, // REVU change these -1s to index.invalidKey (objects.go)
+
+		oid:      oid,
+		modified: false,
 	}
 
 	return card, nil
@@ -182,7 +113,7 @@ func newCardFile(oid *system.Oid, otype system.Otype) (*cardFile, error) {
 func (c *cardFile) Oid() *system.Oid   { return c.oid }
 func (c *cardFile) Key() int64         { return c.key }
 func (c *cardFile) Type() system.Otype { return c.otype }
-func (c *cardFile) Version() int       { return c.version }
+func (c *cardFile) Version() int       { return int(c.version) }
 func (c *cardFile) setKey(key int64) error {
 	if c.key != -1 {
 		return errors.Bug("cardFile.setKey: key is already set to %d", c.key)
@@ -190,8 +121,18 @@ func (c *cardFile) setKey(key int64) error {
 	if key < 0 {
 		return errors.InvalidArg("cardFile.setKey", "key", "< 0")
 	}
+
 	c.key = key
+	c.onUpdate()
 	return nil
+}
+
+func (c *cardFile) onUpdate() {
+	if !c.modified {
+		c.modified = true
+		c.version++
+		c.updated = time.Now().UnixNano()
+	}
 }
 
 func (c *cardFile) debugStr() string {
@@ -206,7 +147,6 @@ func loadCard(oid *system.Oid) (Card, error) {
 }
 
 func (c *cardFile) save() (bool, error) {
-	// check state validity
 	if !c.modified {
 		return false, nil
 	}
@@ -321,6 +261,7 @@ func (c *textCard) Print(w io.Writer) {
 	c.cardFile.Print(w)
 	fmt.Fprintf(w, "text-len:  %d (debug)\n", len(c.text))
 	fmt.Fprintf(w, "text:      %q\n", c.text)
+	fmt.Fprintf(w, "------------------------\n\n")
 }
 
 /// FileCard support ///////////////////////////////////////////////////////////
@@ -362,6 +303,7 @@ func (c *fileCard) encode(buf []byte) error {
 func (c *fileCard) Print(w io.Writer) {
 	c.cardFile.Print(w)
 	c.paths.Print(w)
+	fmt.Fprintf(w, "------------------------\n\n")
 }
 
 func (c *fileCard) Paths() []string {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/alphazero/gart/index"
@@ -19,6 +20,7 @@ import (
 
 var option = struct {
 	op    string
+	text  string
 	file  string
 	tags  string
 	force bool
@@ -27,7 +29,8 @@ var ops = []string{"i", "a", "u", "q"}
 
 func init() {
 	flag.StringVar(&option.op, "op", option.op, "i:init a:add u:update q:query")
-	flag.StringVar(&option.file, "f", option.file, "file name")
+	flag.StringVar(&option.file, "file", option.file, "name of file to index")
+	flag.StringVar(&option.text, "text", option.text, "text to index")
 	flag.StringVar(&option.tags, "tags", option.tags, "csv list in \" \"s ")
 	flag.BoolVar(&option.force, "force", option.force, "force re-init (with op i only)")
 }
@@ -38,7 +41,7 @@ func exitOnError(e error) {
 }
 
 func main() {
-	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
+	fmt.Printf("Salaam Samad OMNI Sultan of LOVE!\n")
 
 	// parse flags and verify option
 	flag.Parse()
@@ -46,8 +49,8 @@ func main() {
 	if option.op == "" {
 		exitOnError(errors.Usage("flag -op must be specified"))
 	}
-	if option.op != "i" && option.op != "q" && option.file == "" {
-		exitOnError(errors.Usage("file must be specified for add & update ops."))
+	if option.op != "i" && option.op != "q" && (option.file == "" && option.text == "") {
+		exitOnError(errors.Usage("either text or file must be specified for add & update ops."))
 	}
 
 	option.op = strings.ToLower(option.op)
@@ -83,7 +86,7 @@ tags_ok:
 	case "i":
 		e = initializeIndex(option.force)
 	case "a":
-		e = addObject(option.file, tagnames...)
+		e = addObject(tagnames...)
 	case "u":
 		var oid = fileOid(option.file)
 		e = updateObjectTags(oid, tagnames...)
@@ -106,7 +109,7 @@ func initializeIndex(force bool) error {
 	}
 	return index.Initialize(force)
 }
-func addObject(filename string, tags ...string) error {
+func addObject(tags ...string) error {
 	idx, e := index.OpenIndexManager(index.Write)
 	if e != nil {
 		return e
@@ -122,7 +125,15 @@ func addObject(filename string, tags ...string) error {
 		return e
 	}
 
-	card, added, e := idx.IndexFile(filename, tags...)
+	var card index.Card
+	var added bool
+	switch {
+	case option.text != "":
+		card, added, e = idx.IndexText(option.text, tags...)
+	case option.file != "":
+		filename, _ := filepath.Abs(option.file)
+		card, added, e = idx.IndexFile(filename, tags...)
+	}
 	if e != nil {
 		return e
 	}
@@ -130,7 +141,9 @@ func addObject(filename string, tags ...string) error {
 		log("object (oid:%s, key:%d) already indexed", card.Oid(), card.Key())
 		return nil
 	}
-	log("indexed object (key:%d added:%t)", card.Oid(), card.Key())
+	log("indexed object (type:%s oid:%s key:%d added:%t)", card.Type(), card.Oid().Fingerprint(), card.Key(), added)
+
+	card.Print(os.Stdout)
 
 	return nil
 }
