@@ -115,7 +115,7 @@ func addObject(filename string, tags ...string) error {
 		if e := idx.Close(); e != nil {
 			panic(errors.BugWithCause(e, "on deferred close of indexManager"))
 		}
-		log("debug - closed indexManager")
+		log("closed indexManager")
 	}()
 
 	if e := idx.UsingTags(tags...); e != nil {
@@ -127,10 +127,10 @@ func addObject(filename string, tags ...string) error {
 		return e
 	}
 	if !added {
-		log("debug - object (oid:%s, key:%d) already indexed", card.Oid(), card.Key())
+		log("object (oid:%s, key:%d) already indexed", card.Oid(), card.Key())
 		return nil
 	}
-	log("debug - indexed object (key:%d added:%t)", card.Oid(), card.Key())
+	log("indexed object (key:%d added:%t)", card.Oid(), card.Key())
 
 	return nil
 }
@@ -145,7 +145,7 @@ func queryByTag(tags ...string) error {
 
 // little logger writes to os.Stderr
 func log(fmtstr string, a ...interface{}) (int, error) {
-	return fmt.Fprintf(os.Stderr, "log - "+fmtstr+"\n", a...)
+	return fmt.Fprintf(os.Stderr, "test-index - "+fmtstr+"\n", a...)
 }
 
 // exits on error
