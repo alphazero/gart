@@ -6,6 +6,7 @@ package system
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -18,12 +19,26 @@ import (
 // REVU this can be set with go run/build, btw
 var Debug bool = true
 
+// Set by init(), either /dev/null or stderr (if Debug is true)
+var Writer io.Writer
+
 // panics if any errors are encountered.
 func init() {
+
+	if Debug {
+		Writer = os.Stderr
+	} else {
+		var e error
+		Writer, e = os.Open(os.DevNull)
+		if e != nil {
+			panic(errors.FaultWithCause(e, "runtime.init: unexpected error"))
+		}
+	}
+
 	// gart repo is in user's home dir.
 	user, e := user.Current()
 	if e != nil {
-		panic(errors.FaultWithCause(e, "runtime.init(): unexpected error"))
+		panic(errors.FaultWithCause(e, "runtime.init: unexpected error"))
 	}
 
 	/// initialize non-const system vars ////////////////////////////
@@ -63,6 +78,7 @@ func init() {
 		}
 	}
 	Debugf("system/runtime.go: system.init() ---------------------")
+	Debugf("system.Writer is %s", Writer.(*os.File).Name())
 	Debugf("RepoPath:          %q", RepoPath)
 	Debugf("TagsPath:          %q", TagsPath)
 	Debugf("TagDictionaryPath: %q", TagDictionaryPath)
@@ -84,5 +100,5 @@ func Debugf(fmtstr string, a ...interface{}) {
 	if !Debug {
 		return
 	}
-	fmt.Fprintf(os.Stdout, "debug - "+fmtstr+"\n", a...)
+	fmt.Fprintf(DebugWriter, "debug - "+fmtstr+"\n", a...)
 }

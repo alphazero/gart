@@ -7,8 +7,6 @@ import (
 	"github.com/alphazero/gart/system"
 )
 
-var _ = system.RepoPath
-
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
 
