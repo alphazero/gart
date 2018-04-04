@@ -177,7 +177,6 @@ func addObject(tags ...string) error {
 	}
 	if !added {
 		log("object (oid:%s, key:%d) already indexed", card.Oid(), card.Key())
-		return nil
 	}
 	log("indexed object (type:%s oid:%s key:%d added:%t)", card.Type(), card.Oid().Fingerprint(), card.Key(), added)
 

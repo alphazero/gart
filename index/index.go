@@ -117,7 +117,9 @@ func OpenIndexManager(opMode OpMode) (*indexManager, error) {
 		return nil, e
 	}
 	if system.Debug {
+		system.Debugf("index.OpenIndexManager: oidx on Open ===============")
 		oidx.Print(os.Stderr)
+		system.Debugf("============================================ end ===\n")
 	}
 
 	var idxmgr = &indexManager{
@@ -137,7 +139,9 @@ func (idx *indexManager) Close() error {
 	}
 
 	if system.Debug {
+		system.Debugf("indexManager.Close: -- oidx on Close ===============")
 		idx.oidx.Print(os.Stderr)
+		system.Debugf("============================================ end ===\n")
 	}
 	var e = idx.oidx.closeIndex()
 
@@ -173,7 +177,8 @@ func (idx *indexManager) UsingTags(tags ...string) error {
 	return nil
 }
 
-// Indexes the object identified by the Oid & system.Otype
+// Indexes the text object. If object is new it is added with tags specified. If not
+// updated tags (if any) are added. See indexObject.
 func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, error) {
 	md := digest.Sum([]byte(text))
 	oid, e := system.NewOid(md[:])
@@ -191,11 +196,16 @@ func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, err
 		}
 	} else {
 		card, e = LoadCard(oid)
+		if e != nil {
+			return card, false, e
+		}
 	}
 
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }
 
+// Indexes the file object. If object is new it is added with tags specified. If not
+// updated tags (if any), or the filename (if new) are added. See indexObject.
 func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool, error) {
 	if !filepath.IsAbs(filename) {
 		return nil, false, errors.InvalidArg("indexManager.IndexFile", "filename", "not absolute")
@@ -218,6 +228,18 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 		}
 	} else {
 		card, e = LoadCard(oid)
+		if e != nil {
+			return card, false, e
+		}
+		/*
+			ok, e := card.FileCard().addPath(filename)
+			if e != nil {
+				return card, false, e
+			}
+			if ok {
+				system.Debugf("indexManager.IndexFile: added path: %q", filename)
+			}
+		*/
 	}
 
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
@@ -234,7 +256,7 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	// REVU for now it is ok if no tags are defined
 	// TODO systemics need to be added here as well
 
-	var updates []string // new tags
+	//	var updates []string // new tags
 	if isNew {
 		key, e := idx.oidx.addObject(oid)
 		if e != nil {
@@ -243,20 +265,15 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		if e := card.setKey(key); e != nil {
 			return errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
 		}
-		//		if ok, e := card.save(); e != nil {
-		//			return errors.Error("indexManager.indexObject: card.Save() - %s", e)
-		//		} else if !ok {
-		//			return errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
-		//		}
 	}
 	// (regardless if new or not) add the tags
 	// updates indicates what was added (if any)
-	updates = card.addTag(tags...)
-	if len(updates) > 0 {
-		// replaces tags with updates
-		tags = updates
-	}
-	if isNew || len(updates) > 0 {
+	tags = card.addTag(tags...)
+	//	if len(updates) > 0 {
+	//		tags = updates
+	//	}
+	//	if isNew || len(updates) > 0 {
+	if isNew || len(tags) > 0 {
 		if ok, e := card.save(); e != nil {
 			return errors.Error("indexManager.indexObject: card.Save() - %s", e)
 		} else if isNew && !ok {
@@ -265,12 +282,12 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	}
 
 	// update all tagmaps for card.Key
-	if len(updates) > 0 {
-		var key = card.Key()
-		for _, tag := range tags {
-			system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
-		}
+	//	if len(updates) > 0 {
+	var key = card.Key()
+	for _, tag := range tags {
+		system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
 	}
+	//	}
 
 	return nil
 }
