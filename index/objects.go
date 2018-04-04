@@ -362,7 +362,7 @@ func (oidx *oidxFile) getObjectOids(keys ...int) (map[int]*system.Oid, error) {
 
 	sort.Ints(keys)
 	for i, k := range keys {
-		if k == 0 || k >= int(oidx.header.ocnt) {
+		if k < 0 || k >= int(oidx.header.ocnt) {
 			return nil, errors.Bug("oidx.getObjectOids: invalid key[%d]: %d", i, k)
 		}
 
@@ -395,7 +395,7 @@ func (oidx *oidxFile) getObjectOidsOnly(keys ...int) ([]*system.Oid, error) {
 
 	sort.Ints(keys)
 	for i, k := range keys {
-		if k == 0 || k >= int(oidx.header.ocnt) {
+		if k < 0 || k >= int(oidx.header.ocnt) {
 			return nil, errors.Bug("oidx.getObjectOidsOnly: invalid key[%d]: %d", i, k)
 		}
 
