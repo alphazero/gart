@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"syscall"
 	"time"
 	"unsafe"
@@ -13,7 +14,6 @@ import (
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
-	"github.com/alphazero/gart/syslib/sort"
 	"github.com/alphazero/gart/system"
 )
 
@@ -344,7 +344,9 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 //
 // Returns index.ErrObjectIndexClosed or any other encountered error, in which
 // the resultant map will be nil.
-func (oidx *oidxFile) getObjectOids(keys ...int64) (map[int64]*system.Oid, error) {
+// REVU it is possible this function is not necessary and getObjectOidsOnly is
+// sufficient for gart.
+func (oidx *oidxFile) getObjectOids(keys ...int) (map[int]*system.Oid, error) {
 	if oidx.opMode != Read {
 		return nil, errors.Bug("oidxFile.getObjectIds: invalid op-mode:%s", oidx.opMode)
 	}
@@ -356,11 +358,11 @@ func (oidx *oidxFile) getObjectOids(keys ...int64) (map[int64]*system.Oid, error
 	if klen == 0 {
 		return nil, errors.Bug("oidx.getObjectOids: no keys specified")
 	}
-	var oids = make(map[int64]*system.Oid, klen)
+	var oids = make(map[int]*system.Oid, klen)
 
-	sort.Int64s(keys)
+	sort.Ints(keys)
 	for i, k := range keys {
-		if k == 0 || k >= oidx.header.ocnt {
+		if k == 0 || k >= int(oidx.header.ocnt) {
 			return nil, errors.Bug("oidx.getObjectOids: invalid key[%d]: %d", i, k)
 		}
 
@@ -370,6 +372,39 @@ func (oidx *oidxFile) getObjectOids(keys ...int64) (map[int64]*system.Oid, error
 			return nil, errors.ErrorWithCause(e, "oidx.getObjectOids")
 		}
 		oids[k] = oid
+	}
+
+	return oids, nil
+}
+
+// See getObjectOids. This function simply returns an array of system.Oids
+// corresponding to the input keys.
+func (oidx *oidxFile) getObjectOidsOnly(keys ...int) ([]*system.Oid, error) {
+	if oidx.opMode != Read {
+		return nil, errors.Bug("oidxFile.getObjectIdsOnly: invalid op-mode:%s", oidx.opMode)
+	}
+	if oidx.file == nil {
+		return nil, ErrObjectIndexClosed
+	}
+
+	var klen = len(keys)
+	if klen == 0 {
+		return nil, errors.Bug("oidx.getObjectOidsOnly: no keys specified")
+	}
+	var oids = make([]*system.Oid, klen)
+
+	sort.Ints(keys)
+	for i, k := range keys {
+		if k == 0 || k >= int(oidx.header.ocnt) {
+			return nil, errors.Bug("oidx.getObjectOidsOnly: invalid key[%d]: %d", i, k)
+		}
+
+		offset := (k << 5) + objectsHeaderSize
+		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
+		if e != nil {
+			return nil, errors.ErrorWithCause(e, "oidx.getObjectOidsOnly")
+		}
+		oids[i] = oid
 	}
 
 	return oids, nil

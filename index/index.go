@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -297,7 +298,7 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 			var e error
 			tagmap, e = loadTagmap(tag, true)
 			if e != nil {
-				return errors.Bug("indexManager.updateIndex: on loadTagmap(%s) - %v",
+				return errors.Bug("indexManager.updateIndex: loadTagmap(%s) - %v",
 					tag, e)
 			}
 			idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
@@ -313,6 +314,23 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	return nil
 }
 
+type selectSpec byte
+
+const (
+	_ selectSpec = iota
+	All
+	Any
+	None
+)
+
+func (v selectSpec) verify() error {
+	switch v {
+	case All, Any, None:
+		return nil
+	}
+	return errors.Error("selectSpec.verify: invalid select spec: %d", v)
+}
+
 // REVU need to revisit system/types.go
 // REVU this also requires a functional objects.go (object-index) to
 // match the 'bit' of the ANDed tagmaps with an OID. But the general structure is
@@ -320,37 +338,79 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 //
 // Returns all oids that match for given tags. array may be empty but never nil.
 // Return error if any of the tags are undefined.
-func (idx *indexManager) SelectObjects(tags ...string) ([]*system.Oid, error) {
+func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid, error) {
 
-	tagmap0, e := loadTagmap(tags[0], false)
+	if e := spec.verify(); e != nil {
+		return nil, errors.ErrorWithCause(e, "indexManager.Select")
+	}
+
+	var bitmaps []*bitmap.Wahl
+	for _, tag := range tags {
+		tagmap, ok := idx.tagmaps[tag]
+		if !ok {
+			var e error
+			tagmap, e = loadTagmap(tag, false) // do not create if tag is missing
+			if e != nil && e == ErrTagNotExist {
+				if spec == All { // we're done here for All
+					return nil, nil
+				}
+				continue
+			} else if e != nil {
+				return nil, errors.Bug("indexManager.select: loadTagmap(%s) - %v", tag, e)
+			}
+		}
+		//		system.Debugf("adding tag: %s", tag)
+		//		tagmap.Print(os.Stdout)
+		bitmaps = append(bitmaps, tagmap.bitmap)
+	}
+	println(">>>")
+	var resmap *bitmap.Wahl
+	var e error
+	switch spec {
+	case All:
+		resmap, e = idx.selectAll(bitmaps)
+	case Any:
+		resmap, e = idx.selectAny(bitmaps)
+	case None:
+		resmap, e = idx.selectNone(bitmaps)
+	}
 	if e != nil {
 		return nil, e
 	}
 
-	var oids = []*system.Oid{} // initial empty result set
-
-	var resmap = tagmap0.bitmap
-	for _, tag := range tags[1:] {
-		tagmap, e := loadTagmap(tag, false)
-		if e != nil {
-			return nil, e
-		}
-		if resmap, e = tagmap.bitmap.And(resmap); e != nil {
-			return nil, e
-		}
-		// if results are already an empty set just return
-		if len(resmap.Bits()) == 0 {
-			return oids, nil
-		}
-	}
-
-	system.Debugf("indexManager.SelectObjects: selected key ids:\n")
 	for _, key := range resmap.Bits() {
 		fmt.Printf("key: %d\n", key)
 	}
 
-	// TODO pass keys to objects-index to get the OID list
-	// oids = GetObjectIds(resmap.Bits())
-
+	// REVU maybe deprecate oidx.getObjectOids ..
+	oids, e := idx.oidx.getObjectOidsOnly([]int(resmap.Bits())...)
+	if e != nil {
+		return nil, e
+	}
 	return oids, nil
+}
+
+// Returns the logical AND of the following bitmaps.
+func (idx *indexManager) selectAll(bitmaps []*bitmap.Wahl) (*bitmap.Wahl, error) {
+	var resmap = bitmap.NewWahl()
+	if len(bitmaps) == 0 {
+		return resmap, nil
+	}
+	resmap = bitmaps[0]
+	//	resmap.Print(os.Stdout)
+	var e error
+	for _, bmap := range bitmaps[1:] {
+		resmap, e = resmap.And(bmap)
+		if e != nil {
+			return nil, e
+		}
+	}
+	//	resmap.Print(os.Stdout)
+	return resmap, nil
+}
+func (idx *indexManager) selectAny(bitmaps []*bitmap.Wahl) (*bitmap.Wahl, error) {
+	panic(errors.NotImplemented("indexManager.selectAny"))
+}
+func (idx *indexManager) selectNone(bitmaps []*bitmap.Wahl) (*bitmap.Wahl, error) {
+	panic(errors.NotImplemented("indexManager.selectNone"))
 }

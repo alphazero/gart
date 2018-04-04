@@ -140,7 +140,7 @@ func readCard() error {
 	}
 	card, e := index.LoadCard(oid)
 	if e != nil {
-		exitOnError(errors.Bug("test-index: index.GetCard - %s", e))
+		exitOnError(errors.Bug("test-index: index.LoadCard - %s", e))
 	}
 
 	card.Print(os.Stdout)
@@ -158,10 +158,6 @@ func addObject(tags ...string) error {
 		}
 		log("closed indexManager")
 	}()
-
-	//	if e := idx.UsingTags(tags...); e != nil {
-	//		return e
-	//	}
 
 	var card index.Card
 	var added bool
@@ -184,11 +180,38 @@ func addObject(tags ...string) error {
 
 	return nil
 }
-func updateObjectTags(oid *system.Oid, tags ...string) error {
-	return errors.NotImplemented("adhoc-test.updateObjectTags")
-}
+
 func queryByTag(tags ...string) error {
-	return errors.NotImplemented("adhoc-test.queryByTag")
+	idx, e := index.OpenIndexManager(index.Read)
+	if e != nil {
+		return e
+	}
+	defer func() {
+		if e := idx.Close(); e != nil {
+			panic(errors.BugWithCause(e, "on deferred close of indexManager"))
+		}
+		log("closed indexManager")
+	}()
+
+	system.Debugf("==== RUN QUERY =====================================")
+	oids, e := idx.Select(index.All, tags...)
+	if e != nil {
+		exitOnError(errors.ErrorWithCause(e, "test-index: index.Select"))
+	}
+	for _, oid := range oids {
+		fmt.Printf("Object (oid:%s) selected by tags:%v\n", oid.Fingerprint(), tags)
+		card, e := index.LoadCard(oid)
+		if e != nil {
+			exitOnError(errors.Bug("test-index: index.LoadCard - %s", e))
+		}
+		card.Print(os.Stdout)
+	}
+	system.Debugf("==== RUN QUERY ============================= end ===")
+	return nil
+}
+
+func updateObjectTags(oid *system.Oid, tags ...string) error {
+	return errors.NotImplemented("adhoc-test.updateObjectTags - ? is this necessary ?")
 }
 
 /// little helpers /////////////////////////////////////////////////////////////

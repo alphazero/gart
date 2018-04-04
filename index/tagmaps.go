@@ -178,6 +178,8 @@ func createTagmap(tag string) (*Tagmap, error) {
 	return tagmap, nil
 }
 
+var ErrTagNotExist = errors.Error("Tag does not exit")
+
 // Loads the tagmap (in form of bitmap.Wahl) from file and closes the file.
 // File is openned in private, read-only mode.
 func loadTagmap(tag string, create bool) (*Tagmap, error) {
@@ -192,7 +194,7 @@ func loadTagmap(tag string, create bool) (*Tagmap, error) {
 	if e != nil {
 		if os.IsNotExist(e) {
 			if !create {
-				return nil, e
+				return nil, ErrTagNotExist
 			}
 			tagmap, e := createTagmap(tag)
 			if e != nil {
