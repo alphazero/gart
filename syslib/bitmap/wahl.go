@@ -123,7 +123,7 @@ func (w *Wahl) Set(bits ...uint) bool {
 	// add additional blocks to w.arr if necessary
 	var wmax = w.Max() // (initial) maximum bit position in bitmap
 	var bitsmax = int(bits[bitslen-1])
-	if bitsmax > wmax {
+	if bitsmax > wmax || len(w.arr) == 0 {
 		nblks := make([]uint32, ((bitsmax-wmax)/31)+1)
 		w.arr = append(w.arr, nblks...)
 	}
