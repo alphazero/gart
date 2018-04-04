@@ -484,8 +484,8 @@ outer:
 // Returns the position of all set bits in the bitmap. The returned
 // bits are in ascending order. Returns array may be empty but never nil.
 func (w *Wahl) Bits() Bitnums {
-	var bits []uint
-	var p0 uint // bit position of the initial bit in the block
+	var bits []int
+	var p0 int // bit position of the initial bit in the block
 	if e := w.apply(getBitsVisitor(&bits, &p0)); e != nil {
 		panic(errors.Bug("Wahl.Bits: %v", e))
 	}
@@ -554,22 +554,22 @@ func (w *Wahl) Decode(buf []byte) error {
 // Visit function type for Wahl blocks.
 type visitFn func(bn int, val uint32) (done bool, err error)
 
-func getBitsVisitor(bits *[]uint, p0 *uint) visitFn {
+func getBitsVisitor(bits *[]int, p0 *int) visitFn {
 	return func(bnum int, bval uint32) (bool, error) {
 		block := WahlBlock(bval)
 		if block.fill && block.fval == 1 {
 			bitcnt := uint(block.rlen * 31)
 			println(bitcnt)
-			var blockBits = make([]uint, bitcnt)
-			for i := uint(0); i < uint(len(blockBits)); i++ {
+			var blockBits = make([]int, bitcnt)
+			for i := 0; i < len(blockBits); i++ {
 				blockBits[i] = *p0 + i
 			}
 			*bits = append(*bits, blockBits...)
 		} else if !block.fill {
 			// need to check individual bits in tile
-			var blockBits [31]uint
+			var blockBits [31]int
 			var j int // indexes blockbits
-			for i := uint(0); i < 32; i++ {
+			for i := 0; i < 32; i++ {
 				if block.val&0x1 == 1 {
 					blockBits[j] = *p0 + i
 					j++
@@ -578,7 +578,7 @@ func getBitsVisitor(bits *[]uint, p0 *uint) visitFn {
 			}
 			*bits = append(*bits, blockBits[:j]...)
 		}
-		*p0 += uint(block.rlen * 31)
+		*p0 += int(block.rlen * 31)
 		return false, nil
 	}
 }
@@ -620,7 +620,7 @@ func (w *Wahl) apply(visit visitFn) error {
 /// Wahl helper types //////////////////////////////////////////////////////////
 
 // Bitnums is a helper type for pretty printing bitnums
-type Bitnums []uint
+type Bitnums []int
 
 func (a Bitnums) Print(w io.Writer) {
 	fmt.Fprintf(w, "{ ")
