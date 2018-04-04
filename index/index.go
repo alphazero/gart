@@ -231,15 +231,14 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 		if e != nil {
 			return card, false, e
 		}
-		/*
-			ok, e := card.FileCard().addPath(filename)
-			if e != nil {
-				return card, false, e
-			}
-			if ok {
-				system.Debugf("indexManager.IndexFile: added path: %q", filename)
-			}
-		*/
+		fileCard := card.(*fileCard)
+		ok, e := fileCard.addPath(filename)
+		if e != nil {
+			return card, false, e
+		}
+		if ok {
+			system.Debugf("indexManager.IndexFile: added path: %q", filename)
+		}
 	}
 
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
@@ -266,28 +265,21 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 			return errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
 		}
 	}
-	// (regardless if new or not) add the tags
-	// updates indicates what was added (if any)
 	tags = card.addTag(tags...)
-	//	if len(updates) > 0 {
-	//		tags = updates
-	//	}
-	//	if isNew || len(updates) > 0 {
-	if isNew || len(tags) > 0 {
-		if ok, e := card.save(); e != nil {
-			return errors.Error("indexManager.indexObject: card.Save() - %s", e)
-		} else if isNew && !ok {
-			return errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
-		}
+	system.Debugf("indexManager.indexObject: card. modified:%t", card.isModified())
+	_shouldSave := isNew || len(tags) > 0
+	system.Debugf("indexManager.indexObject: saving card")
+	if ok, e := card.save(); e != nil {
+		return errors.Error("indexManager.indexObject: card.Save() - %s", e)
+	} else if _shouldSave && !ok {
+		return errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
 	}
 
-	// update all tagmaps for card.Key
-	//	if len(updates) > 0 {
+	// TODO update relevant index tagmaps
 	var key = card.Key()
 	for _, tag := range tags {
 		system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
 	}
-	//	}
 
 	return nil
 }

@@ -41,7 +41,8 @@ type Card interface {
 	setKey(int64) error               // index use only
 	addTag(tag ...string) []string    // returns updated tags, if any
 	removeTag(tag ...string) []string // returns removed tags, if any
-	save() (bool, error)              // index use only
+	isModified() bool
+	save() (bool, error) // index use only
 }
 
 const cardHeaderSize = 40
@@ -203,8 +204,7 @@ func (c *cardFile) setKey(key int64) error {
 	c.onUpdate()
 	return nil
 }
-
-var _ = sort.Strings
+func (c *cardFile) isModified() bool { return c.modified }
 
 func (c *cardFile) Tags() []string {
 	var tags = make([]string, len(c.tags))
@@ -213,7 +213,6 @@ func (c *cardFile) Tags() []string {
 		tags[n] = tag
 		n++
 	}
-	//	system.Debugf("tags: %v", tags)
 	sort.Strings(tags)
 	return tags
 }
@@ -497,8 +496,8 @@ type fileCard struct {
 type FileCard interface {
 	Card
 	Paths() []string
-	AddPath(string) (bool, error)
-	RemovePath(string) (bool, error)
+	addPath(string) (bool, error)
+	removePath(string) (bool, error)
 }
 
 // REVU oid can be directly computed from the path.
@@ -538,10 +537,20 @@ func (c *fileCard) Paths() []string {
 	return c.paths.List()
 }
 
-func (c *fileCard) AddPath(path string) (bool, error) {
-	return c.paths.Add(path)
+func (c *fileCard) addPath(path string) (bool, error) {
+	ok, e := c.paths.Add(path)
+	if ok {
+		c.cardFile.datalen = int64(c.paths.Buflen())
+		c.onUpdate()
+	}
+	return ok, e
 }
 
-func (c *fileCard) RemovePath(path string) (bool, error) {
-	return c.paths.Remove(path)
+func (c *fileCard) removePath(path string) (bool, error) {
+	ok, e := c.paths.Remove(path)
+	if ok {
+		c.cardFile.datalen = int64(c.paths.Buflen())
+		c.onUpdate()
+	}
+	return ok, e
 }
