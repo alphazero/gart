@@ -16,15 +16,19 @@ import (
 )
 
 // REVU basic logging at some point is TODO
-// REVU this can be set with go run/build, btw
+
+// change with go run|build -ldflags="-X github.com/alphazero/gart/system/DebugFlag=true" <main.go>
 var Debug bool = true
+var DebugFlag string
 
 // Set by init(), either /dev/null or stderr (if Debug is true)
 var Writer io.Writer
 
 // panics if any errors are encountered.
 func init() {
-
+	if DebugFlag == "true" {
+		Debug = true
+	}
 	if Debug {
 		Writer = os.Stderr
 	} else {
@@ -100,5 +104,5 @@ func Debugf(fmtstr string, a ...interface{}) {
 	if !Debug {
 		return
 	}
-	fmt.Fprintf(DebugWriter, "debug - "+fmtstr+"\n", a...)
+	fmt.Fprintf(Writer, "debug - "+fmtstr+"\n", a...)
 }
