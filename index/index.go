@@ -146,6 +146,16 @@ func (idx *indexManager) Close() error {
 	var e = idx.oidx.closeIndex()
 
 	system.Debugf("indexManager.Close: opMode: %s - closed with e:%v", idx.opMode, e)
+
+	// save loaded tagmaps. (may be nop). Any error is a bug.
+	for tag, tagmap := range idx.tagmaps {
+		if ok, e := tagmap.save(); e != nil {
+			panic(errors.BugWithCause(e, "indexManager.Close: on tagmap(%s).Save", tag))
+		} else if ok {
+			system.Debugf("updated tagmap %s", tag)
+		}
+	}
+
 	// invalidate instance regardless of any errors
 	idx.opMode = 0
 	idx.oidx = nil
@@ -276,9 +286,28 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	}
 
 	// TODO update relevant index tagmaps
+	// REVU this basically takes the card's tag def view since tags has been reduced
+	//		to the set that is -not- in the card. Certainly is more performant, but
+	//		if tagmaps are being 'rebuilt' from cards, this will not work. For this
+	// 		function -- updateIndex -- it is OK. For recovery tool, it is not.
 	var key = card.Key()
 	for _, tag := range tags {
-		system.Debugf("TODO - set tagmap bit %d for tag %s", key, tag)
+		tagmap, ok := idx.tagmaps[tag]
+		if !ok {
+			var e error
+			tagmap, e = loadTagmap(tag, true)
+			if e != nil {
+				return errors.Bug("indexManager.updateIndex: on loadTagmap(%s) - %v",
+					tag, e)
+			}
+			idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
+		}
+		updated := tagmap.update(uint(key)) // REVU should we change tagmap?
+		if updated {
+			system.Debugf("updated tagmap (%s) for object (key:%d)", tag, key)
+			//		} else { // REVU this is unreachable -- see note above.
+			//			system.Debugf("tagmap (%s) already set for object (key:%d)", tag, key)
+		}
 	}
 
 	return nil

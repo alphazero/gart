@@ -159,9 +159,9 @@ func addObject(tags ...string) error {
 		log("closed indexManager")
 	}()
 
-	if e := idx.UsingTags(tags...); e != nil {
-		return e
-	}
+	//	if e := idx.UsingTags(tags...); e != nil {
+	//		return e
+	//	}
 
 	var card index.Card
 	var added bool
