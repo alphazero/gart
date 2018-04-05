@@ -394,19 +394,11 @@ func (w Wahl) And(other *Wahl) (*Wahl, error) {
 		return nil, errors.ErrInvalidArg
 	}
 
-	// yes, its santa's little helper
-	var _max = func(a, b int) int {
-		if a > b {
-			return a
-		}
-		return b
-	}
-
 	// alias bitmap names for notational convenience
 	var w1, w2 = w, other
 	var i, j int // i indexes w1, j indexes w2
 	var wlen1, wlen2 int = w1.Len(), w2.Len()
-	var res = make([]uint32, (_max(w1.Max(), w2.Len())/31)+1)
+	var res = make([]uint32, (maxInt(w1.Max(), w2.Len())/31)+1)
 	var k int // k indexes res
 outer:
 	for i < wlen1 && j < wlen2 {
