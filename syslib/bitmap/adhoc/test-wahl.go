@@ -36,13 +36,14 @@ func tryCompressed() {
 
 	var wahl_1 = NewWahl()
 	wahl_1.Set(0, 30, 63, 93)
-	wahl_1.Set(lotsofones[:33]...)
+	wahl_1.Set(lotsofones[:333]...)
 	wahl_1.Bits().Print(os.Stdout)
 	wahl_1.Compress()
 	wahl_1.Print(os.Stdout)
 
 	var wahl_2 = NewWahl()
 	wahl_2.Set(0, 1, 29, 31, 93, 124, 155, 185, 186, 1000, 1001, 1003, 1007, 2309, 2311)
+	wahl_2.Set(lotsofones[:111]...)
 	wahl_2.Bits().Print(os.Stdout)
 	wahl_2.Compress()
 	wahl_2.Print(os.Stdout)

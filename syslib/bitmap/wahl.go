@@ -414,7 +414,7 @@ outer:
 				j++
 				continue outer
 			case wb1.fill && wb2.fill: // two fills
-				fill := uint32(0x80000000) | uint32((wb1.fval|wb2.fval)<<30)
+				fill := uint32(0x80000000) | uint32((wb1.fval&wb2.fval)<<30) // BUG why | ?
 				switch {
 				case wb1.rlen > wb2.rlen:
 					rlen := uint32(wb2.rlen)
@@ -451,7 +451,7 @@ outer:
 				}
 			case wb1.fill: // w2 is a tile
 				var tile uint32
-				if wb1.fval == 1 {
+				if wb1.fval == 1 { // HERE correct AND
 					tile = wb2.val
 				}
 				res[k] = tile
@@ -472,7 +472,7 @@ outer:
 				continue outer
 			case wb2.fill:
 				var tile uint32
-				if wb2.fval == 1 {
+				if wb2.fval == 1 { // HERE correct AND
 					tile = wb1.val
 				}
 				res[k] = tile
