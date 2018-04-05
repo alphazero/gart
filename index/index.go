@@ -382,27 +382,30 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 }
 
 // Returns the logical AND of the following bitmaps.
-// REVU this should be a function of bitmap package
 func (idx *indexManager) bitmapsAND(bitmaps []*bitmap.Wahl) ([]int, error) {
-	if len(bitmaps) == 0 {
-		return []int{}, nil
-	}
-
-	var resmap = bitmaps[0]
-	var e error
-	for _, bmap := range bitmaps[1:] {
-		resmap, e = resmap.And(bmap)
-		if e != nil {
-			return nil, e
+	resmap, e := bitmap.AND(bitmaps...)
+	return []int(resmap.Bits()), e
+	/*
+		if len(bitmaps) == 0 {
+			return []int{}, nil
 		}
-	}
-	return []int(resmap.Bits()), nil
+
+		var resmap = bitmaps[0]
+		var e error
+		for _, bmap := range bitmaps[1:] {
+			resmap, e = resmap.And(bmap)
+			if e != nil {
+				return nil, e
+			}
+		}
+		return []int(resmap.Bits()), nil
+	*/
 }
 
 // Returns the logical OR of the following bitmaps.
-// REVU this should be a function of bitmap package
 func (idx *indexManager) bitmapsOR(bitmaps []*bitmap.Wahl) ([]int, error) {
-	panic(errors.NotImplemented("indexManager.selectAny"))
+	resmap, e := bitmap.AND(bitmaps...)
+	return []int(resmap.Bits()), e
 }
 
 /// selectSpec /////////////////////////////////////////////////////////////////
