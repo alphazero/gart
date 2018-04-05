@@ -414,7 +414,7 @@ outer:
 				j++
 				continue outer
 			case wb1.fill && wb2.fill: // two fills
-				fill := uint32(0x80000000) | uint32((wb1.fval&wb2.fval)<<30) // BUG why | ?
+				fill := uint32(0x80000000) | uint32((wb1.fval&wb2.fval)<<30) // HERE
 				switch {
 				case wb1.rlen > wb2.rlen:
 					rlen := uint32(wb2.rlen)
@@ -579,7 +579,6 @@ func getBitsVisitor(bits *[]int, p0 *int) visitFn {
 		block := WahlBlock(bval)
 		if block.fill && block.fval == 1 {
 			bitcnt := uint(block.rlen * 31)
-			println(bitcnt)
 			var blockBits = make([]int, bitcnt)
 			for i := 0; i < len(blockBits); i++ {
 				blockBits[i] = *p0 + i
