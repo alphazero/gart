@@ -334,71 +334,52 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 	return key, nil
 }
 
-// lookupOidByKey returns a mapping of uint64 keys to []byte slice data of
-// object ids (Oid.data). The returning mapping may have less elements than
-// the number of input keys if the index does not contain a mapping for the
-// key.
+// validateQueryArgs asserts requirements for a Read op of object index,
+// including the validity of the input keys.
+//
+// Returns the sorted keys and nil error if query is valid.
 //
 // Returns nil, Bug if no keys are specified.
-// Returns nil, Bug for key values ==0 or > oidx.object count.
-//
-// Returns index.ErrObjectIndexClosed or any other encountered error, in which
-// the resultant map will be nil.
-// REVU it is possible this function is not necessary and getObjectOidsOnly is
-// sufficient for gart.
-func (oidx *oidxFile) getObjectOids(keys ...int) (map[int]*system.Oid, error) {
+// Returns nil, Bug for key values < 0 or > oidx.object count.
+// Returns nil, index.ErrObjectIndexClosed or any other encountered error.
+func (oidx *oidxFile) validateQueryArgs(keys ...int) ([]int, error) {
 	if oidx.opMode != Read {
-		return nil, errors.Bug("oidxFile.getObjectIds: invalid op-mode:%s", oidx.opMode)
+		return nil, errors.Bug("oidxFile.validateQueryArgs: invalid op-mode:%s", oidx.opMode)
 	}
 	if oidx.file == nil {
 		return nil, ErrObjectIndexClosed
 	}
 
-	var klen = len(keys)
-	if klen == 0 {
-		return nil, errors.Bug("oidx.getObjectOids: no keys specified")
-	}
-	var oids = make(map[int]*system.Oid, klen)
-
 	sort.Ints(keys)
-	for i, k := range keys {
-		if k < 0 || k >= int(oidx.header.ocnt) {
-			return nil, errors.Bug("oidx.getObjectOids: invalid key[%d]: %d", i, k)
-		}
-
-		offset := (k << 5) + objectsHeaderSize
-		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
-		if e != nil {
-			return nil, errors.ErrorWithCause(e, "oidx.getObjectOids")
-		}
-		oids[k] = oid
+	if k := keys[0]; k < 0 {
+		return nil, errors.Bug("oidx.validateQueryArgs: invalid key: %d", k)
 	}
-
-	return oids, nil
+	if k := keys[len(keys)-1]; k >= int(oidx.header.ocnt) {
+		return nil, errors.Bug("oidx.validateQueryArgs: invalid key: %d", k)
+	}
+	return keys, nil
 }
 
-// See getObjectOids. This function simply returns an array of system.Oids
-// corresponding to the input keys.
-func (oidx *oidxFile) getObjectOidsOnly(keys ...int) ([]*system.Oid, error) {
-	if oidx.opMode != Read {
-		return nil, errors.Bug("oidxFile.getObjectIdsOnly: invalid op-mode:%s", oidx.opMode)
-	}
-	if oidx.file == nil {
-		return nil, ErrObjectIndexClosed
+// getOids returns the oids for the provided keys.
+//
+// Returns the oids corresponding to the sorted key set.
+//
+// Returns nil, Bug if no keys are specified.
+// Returns nil, Bug for key values < 0 or > oidx.object count.
+// Returns nil, index.ErrObjectIndexClosed or any other encountered error.
+func (oidx *oidxFile) getOids(keys ...int) ([]*system.Oid, error) {
+	keys, e := oidx.validateQueryArgs(keys...)
+	if e != nil {
+		return nil, e
 	}
 
 	var klen = len(keys)
 	if klen == 0 {
-		return nil, errors.Bug("oidx.getObjectOidsOnly: no keys specified")
+		return nil, errors.Bug("oidx.getOids: no keys specified")
 	}
+
 	var oids = make([]*system.Oid, klen)
-
-	sort.Ints(keys)
 	for i, k := range keys {
-		if k < 0 || k >= int(oidx.header.ocnt) {
-			return nil, errors.Bug("oidx.getObjectOidsOnly: invalid key[%d]: %d", i, k)
-		}
-
 		offset := (k << 5) + objectsHeaderSize
 		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
 		if e != nil {
@@ -407,6 +388,44 @@ func (oidx *oidxFile) getObjectOidsOnly(keys ...int) ([]*system.Oid, error) {
 		oids[i] = oid
 	}
 
+	return oids, nil
+}
+
+// getOids returns all oids excluding those mapped by the provided keys.
+//
+// Returns nil, Bug if no keys are specified.
+// Returns nil, Bug for key values < 0 or > oidx.object count.
+//
+// Returns index.ErrObjectIndexClosed or any other encountered error, in which
+// the resultant map will be nil.
+func (oidx *oidxFile) getOidsExcluding(keys ...int) ([]*system.Oid, error) {
+	keys, e := oidx.validateQueryArgs(keys...)
+	if e != nil {
+		return nil, e
+	}
+
+	// keys is (now) a sorted array with first element >=0 and last element
+	// < max oidx key.
+	var ocnt = int(oidx.header.ocnt)
+	var oids = make([]*system.Oid, ocnt-len(keys))
+	var n int // indexes oids
+	var j int // indexes keys
+next_key:
+	for k := 0; k < ocnt; k++ {
+		for j < len(keys) && keys[j] < k {
+			if keys[j] == k {
+				continue next_key
+			}
+			j++
+		}
+		offset := (k << 5) + objectsHeaderSize
+		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
+		if e != nil {
+			return nil, errors.ErrorWithCause(e, "oidx.getOidsExcluding")
+		}
+		oids[n] = oid
+		n++
+	}
 	return oids, nil
 }
 

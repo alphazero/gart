@@ -3,7 +3,6 @@
 package index
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -314,23 +313,6 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	return nil
 }
 
-type selectSpec byte
-
-const (
-	_ selectSpec = iota
-	All
-	Any
-	None
-)
-
-func (v selectSpec) verify() error {
-	switch v {
-	case All, Any, None:
-		return nil
-	}
-	return errors.Error("selectSpec.verify: invalid select spec: %d", v)
-}
-
 // REVU need to revisit system/types.go
 // REVU this also requires a functional objects.go (object-index) to
 // match the 'bit' of the ANDed tagmaps with an OID. But the general structure is
@@ -359,45 +341,54 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 				return nil, errors.Bug("indexManager.select: loadTagmap(%s) - %v", tag, e)
 			}
 		}
-		//		system.Debugf("adding tag: %s", tag)
-		//		tagmap.Print(os.Stdout)
 		bitmaps = append(bitmaps, tagmap.bitmap)
 	}
-	println(">>>")
-	var resmap *bitmap.Wahl
-	var e error
+
+	var selectFn func([]*bitmap.Wahl) ([]int, error)
+	var queryFn func(...int) ([]*system.Oid, error)
 	switch spec {
 	case All:
-		resmap, e = idx.selectAll(bitmaps)
+		selectFn = idx.bitmapsAND
+		queryFn = idx.oidx.getOids
 	case Any:
-		resmap, e = idx.selectAny(bitmaps)
+		selectFn = idx.bitmapsOR
+		queryFn = idx.oidx.getOids
 	case None:
-		resmap, e = idx.selectNone(bitmaps)
+		selectFn = idx.bitmapsOR
+		queryFn = idx.oidx.getOidsExcluding
 	}
+	keys, e := selectFn(bitmaps)
+	if e != nil {
+		return nil, e
+	}
+	oids, e := queryFn(keys...)
 	if e != nil {
 		return nil, e
 	}
 
-	for _, key := range resmap.Bits() {
-		fmt.Printf("key: %d\n", key)
+	// XXX debug only
+	system.Debugf("query {select %d for tags %v}", spec, tags)
+	system.Debugf("\tkeys (cnt:%d):", len(keys))
+	for _, key := range keys {
+		system.Debugf("\tkey: %d", key)
 	}
+	system.Debugf("\toids (cnt:%d):", len(oids))
+	for _, oid := range oids {
+		system.Debugf("\toid: %s", oid.Fingerprint())
+	}
+	// XXX debug only - END
 
-	// REVU maybe deprecate oidx.getObjectOids ..
-	oids, e := idx.oidx.getObjectOidsOnly([]int(resmap.Bits())...)
-	if e != nil {
-		return nil, e
-	}
 	return oids, nil
 }
 
 // Returns the logical AND of the following bitmaps.
-func (idx *indexManager) selectAll(bitmaps []*bitmap.Wahl) (*bitmap.Wahl, error) {
-	var resmap = bitmap.NewWahl()
+// REVU this should be a function of bitmap package
+func (idx *indexManager) bitmapsAND(bitmaps []*bitmap.Wahl) ([]int, error) {
 	if len(bitmaps) == 0 {
-		return resmap, nil
+		return []int{}, nil
 	}
-	resmap = bitmaps[0]
-	//	resmap.Print(os.Stdout)
+
+	var resmap = bitmaps[0]
 	var e error
 	for _, bmap := range bitmaps[1:] {
 		resmap, e = resmap.And(bmap)
@@ -405,12 +396,38 @@ func (idx *indexManager) selectAll(bitmaps []*bitmap.Wahl) (*bitmap.Wahl, error)
 			return nil, e
 		}
 	}
-	//	resmap.Print(os.Stdout)
-	return resmap, nil
+	return []int(resmap.Bits()), nil
 }
-func (idx *indexManager) selectAny(bitmaps []*bitmap.Wahl) (*bitmap.Wahl, error) {
+
+// Returns the logical OR of the following bitmaps.
+// REVU this should be a function of bitmap package
+func (idx *indexManager) bitmapsOR(bitmaps []*bitmap.Wahl) ([]int, error) {
 	panic(errors.NotImplemented("indexManager.selectAny"))
 }
-func (idx *indexManager) selectNone(bitmaps []*bitmap.Wahl) (*bitmap.Wahl, error) {
-	panic(errors.NotImplemented("indexManager.selectNone"))
+
+/// selectSpec /////////////////////////////////////////////////////////////////
+
+type selectSpec byte
+
+const (
+	_ selectSpec = iota
+	All
+	Any
+	None
+)
+
+func (v selectSpec) String() string {
+	switch v {
+	case All:
+	case Any:
+	case None:
+	}
+	panic(errors.Bug("selectSpec.String: invalid select spec: %d", v))
+}
+func (v selectSpec) verify() error {
+	switch v {
+	case All, Any, None:
+		return nil
+	}
+	return errors.Bug("selectSpec.verify: invalid select spec: %d", v)
 }
