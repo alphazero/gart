@@ -18,7 +18,7 @@ import (
 // REVU basic logging at some point is TODO
 
 // change with go run|build -ldflags="-X github.com/alphazero/gart/system/DebugFlag=true" <main.go>
-var Debug bool = true
+var Debug bool // = true
 var DebugFlag string
 
 // Set by init(), either /dev/null or stderr (if Debug is true)

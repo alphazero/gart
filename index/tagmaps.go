@@ -325,7 +325,6 @@ func (t *Tagmap) save() (bool, error) {
 	if e != nil {
 		return false, errorWithCause(e, "Tagmap.save: swapfile mmap")
 	}
-	fmt.Printf("debug -- buffer size: %d\n", len(buf))
 
 	// encode buffer and unmap and close swapfile
 
