@@ -176,7 +176,7 @@ func addObject(tags ...string) error {
 	}
 	log("indexed object (type:%s oid:%s key:%d added:%t)", card.Type(), card.Oid().Fingerprint(), card.Key(), added)
 
-	card.Print(os.Stdout)
+	card.Print(system.Writer)
 
 	return nil
 }

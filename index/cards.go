@@ -36,6 +36,7 @@ type Card interface {
 	Type() system.Otype // REVU use for systemics tags ..
 	Version() int
 	Print(io.Writer)
+	Debug()
 	Tags() []string
 
 	setKey(int64) error               // index use only
@@ -115,6 +116,10 @@ type cardFile struct {
 }
 
 func (h *cardFileHeader) Print(w io.Writer) {
+	fmt.Fprintf(w, "type:      %s\n", h.otype)
+}
+func (h *cardFileHeader) Debug() {
+	w := system.Writer
 	fmt.Fprintf(w, "crc32:     %08x\n", h.crc32)
 	fmt.Fprintf(w, "type:      %s\n", h.otype)
 	fmt.Fprintf(w, "version:   %d\n", h.version)
@@ -127,6 +132,20 @@ func (h *cardFileHeader) Print(w io.Writer) {
 }
 
 func (c *cardFile) Print(w io.Writer) {
+	fmt.Fprintf(w, "--- card ---------------\n")
+	c.header.Print(w)
+	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
+	if len(c.tags) > 0 {
+		fmt.Fprintf(w, "tags:        \n")
+		tags := c.Tags() // this sorts them
+		for n, tag := range tags {
+			fmt.Fprintf(w, "\t [%d]:   %q\n", n, tag)
+		}
+	}
+}
+
+func (c *cardFile) Debug() {
+	w := system.Writer
 	fmt.Fprintf(w, "--- card ---------------\n")
 	c.header.Print(w)
 	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
@@ -481,6 +500,12 @@ func (c *textCard) Text() string {
 
 func (c *textCard) Print(w io.Writer) {
 	c.cardFile.Print(w)
+	fmt.Fprintf(w, "text:      %q\n", c.text)
+	fmt.Fprintf(w, "------------------------\n\n")
+}
+func (c *textCard) Debug() {
+	c.cardFile.Debug()
+	w := system.Writer
 	fmt.Fprintf(w, "text-len:  %d (debug)\n", len(c.text))
 	fmt.Fprintf(w, "text:      %q\n", c.text)
 	fmt.Fprintf(w, "------------------------\n\n")
@@ -531,6 +556,9 @@ func (c *fileCard) Print(w io.Writer) {
 	c.cardFile.Print(w)
 	c.paths.Print(w)
 	fmt.Fprintf(w, "------------------------\n\n")
+}
+func (c *fileCard) Debug() {
+	c.Print(system.Writer)
 }
 
 func (c *fileCard) Paths() []string {
