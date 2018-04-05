@@ -346,8 +346,8 @@ func (oidx *oidxFile) validateQueryArgs(keys ...int) ([]int, error) {
 	if oidx.opMode != Read {
 		return nil, errors.Bug("oidxFile.validateQueryArgs: invalid op-mode:%s", oidx.opMode)
 	}
-	if oidx.file == nil {
-		return nil, ErrObjectIndexClosed
+	if len(keys) == 0 { // a bug given that indexManager is the (only) caller.
+		return nil, errors.Bug("oidxFile.validateQueryArgs: no keys specified")
 	}
 
 	sort.Ints(keys)
@@ -368,17 +368,14 @@ func (oidx *oidxFile) validateQueryArgs(keys ...int) ([]int, error) {
 // Returns nil, Bug for key values < 0 or > oidx.object count.
 // Returns nil, index.ErrObjectIndexClosed or any other encountered error.
 func (oidx *oidxFile) getOids(keys ...int) ([]*system.Oid, error) {
+	if oidx.file == nil {
+		return nil, ErrObjectIndexClosed
+	}
 	keys, e := oidx.validateQueryArgs(keys...)
 	if e != nil {
 		return nil, e
 	}
-
-	var klen = len(keys)
-	if klen == 0 {
-		return nil, errors.Bug("oidx.getOids: no keys specified")
-	}
-
-	var oids = make([]*system.Oid, klen)
+	var oids = make([]*system.Oid, len(keys))
 	for i, k := range keys {
 		offset := (k << 5) + objectsHeaderSize
 		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
