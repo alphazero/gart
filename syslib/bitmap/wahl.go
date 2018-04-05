@@ -130,7 +130,19 @@ func AND(bitmaps ...*Wahl) (*Wahl, error) {
 //
 // Returns nil, error if pair-wise Wahl.Or returns any error.
 func OR(bitmaps ...*Wahl) (*Wahl, error) {
-	panic(errors.NotImplemented("bitmap.OR"))
+	if len(bitmaps) == 0 {
+		return NewWahl(), nil
+	}
+
+	var resmap = bitmaps[0]
+	var e error
+	for _, bmap := range bitmaps[1:] {
+		resmap, e = resmap.Or(bmap)
+		if e != nil {
+			return nil, e
+		}
+	}
+	return resmap, nil
 }
 
 // Set sets the given 'bits' of the bitmap. It is irrelevant whether the bitmap
