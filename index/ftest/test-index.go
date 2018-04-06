@@ -25,10 +25,10 @@ var option = struct {
 	tags  string
 	force bool
 }{}
-var ops = []string{"i", "r", "a", "u", "q"}
+var ops = []string{"i", "r", "a", "d", "u", "q"}
 
 func init() {
-	flag.StringVar(&option.op, "op", option.op, "i:init a:add r:read u:update q:query")
+	flag.StringVar(&option.op, "op", option.op, "i:init a:add d:delete r:read u:update q:query")
 	flag.StringVar(&option.file, "file", option.file, "name of file to index")
 	flag.StringVar(&option.text, "text", option.text, "text to index")
 	flag.StringVar(&option.tags, "tags", option.tags, "csv list in \" \"s ")
@@ -49,8 +49,11 @@ func main() {
 	if option.op == "" {
 		exitOnError(errors.Usage("flag -op must be specified"))
 	}
-	if option.op != "i" && option.op != "q" && (option.file == "" && option.text == "") {
-		exitOnError(errors.Usage("either text or file must be specified for add & update ops."))
+	if (option.op != "i" && option.op != "q") && (option.file == "" && option.text == "") {
+		exitOnError(errors.Usage("either text or file must be specified for op %q", option.op))
+	}
+	if (option.op == "q") && (option.tags == "") {
+		exitOnError(errors.Usage("-tags must be specified for op %q", option.op))
 	}
 
 	option.op = strings.ToLower(option.op)
@@ -63,13 +66,21 @@ func main() {
 
 op_verified:
 	option.tags = strings.TrimSuffix(option.tags, ",")
-	var tagnames = strings.Split(option.tags, ",")
-	if option.op == "i" {
-		goto tags_ok
+	var tagnames = []string{}
+	if option.tags != "" {
+		tagnames = strings.Split(option.tags, ",")
+		if option.op == "i" {
+			goto tags_ok
+		}
 	}
 
 	if option.op == "r" && len(tagnames) > 0 {
 		system.Debugf("test-index: ignoring -tags for option 'r'")
+		goto tags_ok
+	}
+
+	fmt.Printf("tagnames %d %q\n", len(tagnames), option.tags)
+	if option.op == "d" && len(tagnames) == 0 {
 		goto tags_ok
 	}
 
@@ -83,6 +94,9 @@ op_verified:
 	if (option.op == "a" || option.op == "u") && len(tagnames) == 0 {
 		exitOnError(errors.Usage("option -tags must be non-empty"))
 	}
+	if option.op == "d" && len(tagnames) == 0 && option.file == "" && option.text == "" {
+		exitOnError(errors.Usage("test-index: -op d requires either text, file, or tags flag"))
+	}
 
 tags_ok:
 
@@ -92,6 +106,8 @@ tags_ok:
 		e = initializeIndex(option.force)
 	case "a":
 		e = addObject(tagnames...)
+	case "d":
+		e = deleteOp(tagnames...)
 	case "r":
 		e = readCard()
 	case "u":
@@ -142,9 +158,58 @@ func readCard() error {
 	if e != nil {
 		exitOnError(errors.Bug("test-index: index.LoadCard - %s", e))
 	}
-
 	card.Print(os.Stdout)
 	return nil
+}
+
+func deleteOp(tags ...string) error {
+	idx, e := index.OpenIndexManager(index.Write)
+	if e != nil {
+		return e
+	}
+	defer func() {
+		if e := idx.Close(); e != nil {
+			panic(errors.BugWithCause(e, "on deferred close of indexManager"))
+		}
+		log("closed indexManager")
+	}()
+
+	var oid *system.Oid
+	switch {
+	case option.text != "":
+		md := digest.Sum([]byte(option.text))
+		oid, e = system.NewOid(md[:])
+		if e != nil {
+			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
+		}
+	case option.file != "":
+		md, e := digest.SumFile(option.file)
+		if e != nil {
+			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
+		}
+		oid, e = system.NewOid(md[:])
+		if e != nil {
+			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
+		}
+	case len(tags) != 0:
+		return deleteObjectsByTag(idx, tags...)
+	}
+
+	ok, e := idx.DeleteObject(oid)
+	if e != nil {
+		log("error on idx.DeleteObject(%s)", oid.Fingerprint())
+	}
+	if !ok {
+		log("DeleteObject (oid:%s) return false, nil", oid.Fingerprint())
+		return nil
+	}
+	log("object (oid:%s) deleted", oid.Fingerprint())
+
+	return nil
+}
+
+func deleteObjectsByTag(idx index.IndexManager, tags ...string) error {
+	return errors.NotImplemented("test-index.deleteOp")
 }
 
 func addObject(tags ...string) error {

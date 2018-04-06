@@ -44,9 +44,20 @@ type Card interface {
 	removeTag(tag ...string) []string // returns removed tags, if any
 	isModified() bool
 	save() (bool, error) // index use only
+
+	markDeleted() bool // returns false if locked
+	IsDeleted() bool
+	markLocked()
+	IsLocked() bool
 }
 
 const cardHeaderSize = 40
+
+// flags
+const (
+	cardDeleted byte = 1 << iota
+	cardLocked
+)
 
 type cardFileHeader struct {
 	crc32   uint32
@@ -117,6 +128,7 @@ type cardFile struct {
 
 func (h *cardFileHeader) Print(w io.Writer) {
 	fmt.Fprintf(w, "type:      %s\n", h.otype)
+	fmt.Fprintf(w, "flags:     %08b\n", h.flags)
 }
 func (h *cardFileHeader) Debug() {
 	w := system.Writer
@@ -134,7 +146,15 @@ func (h *cardFileHeader) Debug() {
 func (c *cardFile) Print(w io.Writer) {
 	fmt.Fprintf(w, "--- card ---------------\n")
 	c.header.Print(w)
-	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
+	fmt.Fprintf(w, "oid:       %s", c.oid.Fingerprint())
+	if c.IsDeleted() {
+		fmt.Fprintf(w, " deleted")
+	}
+	if c.IsLocked() {
+		fmt.Fprintf(w, " locked")
+	}
+	fmt.Fprintf(w, "\n")
+
 	if len(c.tags) > 0 {
 		fmt.Fprintf(w, "tags:        \n")
 		tags := c.Tags() // this sorts them
@@ -147,7 +167,7 @@ func (c *cardFile) Print(w io.Writer) {
 func (c *cardFile) Debug() {
 	w := system.Writer
 	fmt.Fprintf(w, "--- card ---------------\n")
-	c.header.Print(w)
+	c.header.Debug()
 	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
 	fmt.Fprintf(w, "source:    %q\n", cardFilename(c.oid)) // XXX c.source)
 	fmt.Fprintf(w, "data-len:  %d\n", c.datalen)
@@ -223,7 +243,23 @@ func (c *cardFile) setKey(key int64) error {
 	c.onUpdate()
 	return nil
 }
+
 func (c *cardFile) isModified() bool { return c.modified }
+
+// marks card as deleted if not marked as locked.
+// Returns true if card was not locked.
+// REVU this is fine but it needs to be applied to setKey, etc. as well TODO
+func (c *cardFile) markDeleted() bool {
+	if c.header.flags&cardLocked == 0 {
+		c.header.flags |= cardDeleted
+		c.onUpdate()
+		return true
+	}
+	return false
+}
+func (c *cardFile) IsDeleted() bool { return c.header.flags&cardDeleted != 0 }
+func (c *cardFile) markLocked()     { c.header.flags |= cardLocked }
+func (c *cardFile) IsLocked() bool  { return c.header.flags&cardLocked != 0 }
 
 func (c *cardFile) Tags() []string {
 	var tags = make([]string, len(c.tags))

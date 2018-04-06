@@ -23,20 +23,6 @@ var (
 	ErrObjectIndexClosed   = errors.Error("object index is closeed")
 )
 
-/// index manager //////////////////////////////////////////////////////////////
-
-// TODO
-// significant todo here is nailing down the 'query' for selecting all object ids
-// where tags are 'set'. Simple option is to for now just do a specific function for
-// querying OIDs for a given set of tags to be ANDed.
-
-// REVU be consistent with type name (exported or pkg prv.)
-type indexManager struct {
-	opMode  OpMode
-	oidx    *oidxFile
-	tagmaps map[string]*Tagmap
-}
-
 // index.Initialize creates the canonical index files for the repo. The index
 // directory itself is assumed to exist per toplevel gart initialization.
 //
@@ -109,6 +95,30 @@ func Initialize(reinit bool) error {
 	}
 
 	return nil
+}
+
+/// index manager //////////////////////////////////////////////////////////////
+
+// TODO
+// significant todo here is nailing down the 'query' for selecting all object ids
+// where tags are 'set'. Simple option is to for now just do a specific function for
+// querying OIDs for a given set of tags to be ANDed.
+
+// REVU be consistent with type name (exported or pkg prv.)
+type indexManager struct {
+	opMode  OpMode
+	oidx    *oidxFile
+	tagmaps map[string]*Tagmap
+}
+
+type IndexManager interface {
+	UsingTags(tags ...string) error
+	IndexText(text string, tags ...string) (Card, bool, error)
+	IndexFile(filename string, tags ...string) (Card, bool, error)
+	Select(spec selectSpec, tags ...string) ([]*system.Oid, error)
+	DeleteObject(oid *system.Oid) (bool, error)
+	DeleteObjectsByTag(tags ...string) (int, error)
+	Close() error
 }
 
 func OpenIndexManager(opMode OpMode) (*indexManager, error) {
@@ -305,27 +315,27 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		updated := tagmap.update(uint(key)) // REVU should we change tagmap?
 		if updated {
 			system.Debugf("updated tagmap (%s) for object (key:%d)", tag, key)
-			//		} else { // REVU this is unreachable -- see note above.
-			//			system.Debugf("tagmap (%s) already set for object (key:%d)", tag, key)
 		}
 	}
 
 	return nil
 }
 
-// REVU need to revisit system/types.go
-// REVU this also requires a functional objects.go (object-index) to
-// match the 'bit' of the ANDed tagmaps with an OID. But the general structure is
-// possible to sketch out here and test (for the bits.)
+// Select returns the Oids of all objects that have been tagged with all of the
+// provided tags. The returned array may be empty but never nil. If one or more of
+// the tags are undefined, the empty set with no error is returned.
 //
-// Returns all oids that match for given tags. array may be empty but never nil.
-// Return error if any of the tags are undefined.
+// The indexManager must have been openned in Write op mode and len(tags) must be > 0.
+//
+// Return nil, error in case of any errors.
 func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid, error) {
 
 	if e := spec.verify(); e != nil {
 		return nil, errors.ErrorWithCause(e, "indexManager.Select")
 	}
-
+	if len(tags) == 0 {
+		return nil, errors.InvalidArg("indexManager.Select", "len(tags)", "0")
+	}
 	var bitmaps []*bitmap.Wahl
 	for _, tag := range tags {
 		tagmap, ok := idx.tagmaps[tag]
@@ -373,6 +383,7 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 		system.Debugf("\tkey: %d", key)
 	}
 	system.Debugf("\toids (cnt:%d):", len(oids))
+
 	for _, oid := range oids {
 		system.Debugf("\toid: %s", oid.Fingerprint())
 	}
@@ -385,27 +396,62 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 func (idx *indexManager) bitmapsAND(bitmaps []*bitmap.Wahl) ([]int, error) {
 	resmap, e := bitmap.AND(bitmaps...)
 	return []int(resmap.Bits()), e
-	/*
-		if len(bitmaps) == 0 {
-			return []int{}, nil
-		}
-
-		var resmap = bitmaps[0]
-		var e error
-		for _, bmap := range bitmaps[1:] {
-			resmap, e = resmap.And(bmap)
-			if e != nil {
-				return nil, e
-			}
-		}
-		return []int(resmap.Bits()), nil
-	*/
 }
 
 // Returns the logical OR of the following bitmaps.
 func (idx *indexManager) bitmapsOR(bitmaps []*bitmap.Wahl) ([]int, error) {
 	resmap, e := bitmap.AND(bitmaps...)
 	return []int(resmap.Bits()), e
+}
+
+func (idx *indexManager) DeleteObject(oid *system.Oid) (bool, error) {
+	if !cardExists(oid) {
+		return false, errors.Error(
+			"indexManager.DeleteObject: does not exist - oid:%s", oid.Fingerprint())
+	}
+	card, e := LoadCard(oid)
+	if e != nil {
+		return false, e
+	}
+	if card.IsDeleted() {
+		return false, nil
+	}
+
+	if ok := card.markDeleted(); !ok {
+		if card.IsLocked() {
+			return false, errors.Error("indexManager.DeleteObject: card is locked")
+		}
+		return false, errors.Bug("indexManager.DeleteObject - oid:%s", oid.Fingerprint())
+	}
+	if ok, e := card.save(); e != nil {
+		return false, errors.ErrorWithCause(e, "indexManager.DeleteObject: card.save: oid:%s",
+			oid.Fingerprint())
+	} else if !ok {
+		return false, errors.BugWithCause(e, "indexManager.DeleteObject: card.save: oid:%s",
+			oid.Fingerprint())
+	}
+	return true, nil
+}
+
+func (idx *indexManager) DeleteObjectsByTag(tags ...string) (int, error) {
+	oids, e := idx.Select(All, tags...)
+	if e != nil {
+		return 0, errors.ErrorWithCause(e, "indexManager.DeleteObjectsByTag")
+	}
+	// none selected
+	if len(oids) == 0 {
+		return 0, nil
+	}
+	// delete selected
+	var n int
+	for _, oid := range oids {
+		if ok, e := idx.DeleteObject(oid); e != nil {
+			return n, errors.ErrorWithCause(e, "indexManager.DeleteObjectsByTag")
+		} else if ok {
+			n++
+		}
+	}
+	return n, nil
 }
 
 /// selectSpec /////////////////////////////////////////////////////////////////
