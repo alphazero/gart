@@ -28,6 +28,41 @@ var (
 	FaultNotImplemented = Fault("function not implemented")
 )
 
+/// function specific errors ///////////////////////////////////////////////////
+
+type fnErrors string
+
+func For(fname string) Errors {
+	return fnErrors(fname)
+}
+func (fn fnErrors) InvalidArg(fs string, a ...interface{}) error {
+	return Error(string(fn)+": invalid arg - "+fs, a...)
+}
+func (fn fnErrors) NotImplemented() error                   { return Error(string(fn) + ": not implemented") }
+func (fn fnErrors) Error(fs string, a ...interface{}) error { return Error(string(fn)+": "+fs, a...) }
+func (fn fnErrors) Bug(fs string, a ...interface{}) error   { return Bug(string(fn)+": "+fs, a...) }
+func (fn fnErrors) Fault(fs string, a ...interface{}) error { return Fault(string(fn)+": "+fs, a...) }
+func (fn fnErrors) ErrorWithCause(e error, fs string, a ...interface{}) error {
+	return ErrorWithCause(e, string(fn)+": "+fs, a...)
+}
+func (fn fnErrors) BugWithCause(e error, fs string, a ...interface{}) error {
+	return BugWithCause(e, string(fn)+": "+fs, a...)
+}
+func (fn fnErrors) FaultWithCause(e error, fs string, a ...interface{}) error {
+	return FaultWithCause(e, string(fn)+": "+fs, a...)
+}
+
+type Errors interface {
+	NotImplemented() error
+	InvalidArg(fmtstr string, a ...interface{}) error
+	Error(fmtstr string, a ...interface{}) error
+	Bug(fmtstr string, a ...interface{}) error
+	Fault(fmtstr string, a ...interface{}) error
+	ErrorWithCause(e error, fmtstr string, a ...interface{}) error
+	BugWithCause(e error, fmtstr string, a ...interface{}) error
+	FaultWithCause(e error, fmtstr string, a ...interface{}) error
+}
+
 /// err/bug uniform formatters /////////////////////////////////////////////////
 
 func InvalidArg(where, what, why string) error {

@@ -22,4 +22,18 @@ func main() {
 	msg := "Salaam Samad Sultan of LOVE"
 	fmt.Printf("%s\n", errors.ErrorWithCause(e, "adhoc.main: errors check - msg %s", msg))
 	fmt.Printf("%s\n", errors.InvalidArg("adhoc.main", "foo", "<= 0"))
+
+	fmt.Println()
+	convenience()
+}
+
+func convenience() {
+	var errs = errors.For("adhoc/main.convenience")
+
+	fmt.Printf("%s\n", errs.NotImplemented())
+	fmt.Printf("%s\n", errs.InvalidArg("foo is %t", false))
+	e := errs.Error("this is a test - v:%d d:%d c:%d", 1, 2, 3)
+	e2 := errs.ErrorWithCause(e, "test with cause - v:%d", 123)
+	fmt.Printf("%s\n", e)
+	fmt.Printf("%s\n", e2)
 }
