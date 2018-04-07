@@ -256,15 +256,32 @@ func loadTagmap(tag string, create bool) (*Tagmap, error) {
 	return tagmap, nil
 }
 
-// Updates the Tagmap's bitmap. Update does not compress the bitmap.
+type bitmapOp byte
+
+const (
+	clearBits bitmapOp = 1 << iota
+	setBits
+)
+
+// update sets or clears the bits for the keys per the specified bitmapOp.
+// Update does not compress the bitmap.
+//
 // Returns true if bitmap changed.
 // panics with a Bug if Tagmap bitmap is nil
-func (t *Tagmap) update(keys ...uint) bool {
+func (t *Tagmap) update(op bitmapOp, keys ...uint) bool {
 	if t.bitmap == nil {
 		panic(errors.Bug("Tagmap.update: bitmap is nil"))
 	}
 
-	if t.bitmap.Set(keys...) {
+	var ok bool
+	switch op {
+	case clearBits:
+		ok = t.bitmap.Clear(keys...)
+	case setBits:
+		ok = t.bitmap.Set(keys...)
+	}
+
+	if ok {
 		t.header.mapMax = uint64(t.bitmap.Max())
 		t.header.mapSize = uint64(t.bitmap.Size())
 		t.modified = true

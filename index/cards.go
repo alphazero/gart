@@ -307,7 +307,10 @@ func (c *cardFile) removeTag(tags ...string) []string {
 		}
 	}
 	if len(updates) > 0 {
+		// REVU this shoudn't be necessary anymore since we keep the
+		// trailing ,
 		if c.header.tagslen < 0 { // edge case of removing the only tag
+			panic("why?") // TODO test this case and remove
 			c.header.tagslen = 0
 		}
 		c.onUpdate()
@@ -382,11 +385,15 @@ func LoadCard(oid *system.Oid) (Card, error) {
 		modified: false,
 	}
 
-	tagspec := string(buf[offset : offset+int(header.tagslen)-1])
-	for _, tag := range strings.Split(tagspec, ",") {
-		cardbase.tags[tag] = struct{}{}
+	if header.tagcnt > 0 {
+		tagspec := string(buf[offset : offset+int(header.tagslen)-1])
+		for _, tag := range strings.Split(tagspec, ",") {
+			cardbase.tags[tag] = struct{}{}
+		}
+		offset += int(header.tagslen)
+	} else if header.tagslen > 0 {
+		panic(err.Bug("header.tagcnt:%d - header.tagslen:%d", header.tagcnt, header.tagslen))
 	}
-	offset += int(header.tagslen)
 
 	/// decode typed card data //////////////////////////////////////
 

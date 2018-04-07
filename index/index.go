@@ -118,7 +118,7 @@ type IndexManager interface {
 	Select(spec selectSpec, tags ...string) ([]*system.Oid, error)
 	DeleteObject(oid *system.Oid) (bool, error)
 	DeleteObjectsByTag(tags ...string) (int, error)
-	RemoveTag(oid *system.Oid, tag string) (bool, error)
+	RemoveTags(oid *system.Oid, tag ...string) ([]string, error)
 	Close() error
 }
 
@@ -256,7 +256,7 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 
 // REVU see gart-add in /1.0/ for refresh on systemics..
 func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) error {
-	var err = errors.For("indexManager.Select")
+	var err = errors.For("indexManager.updateIndex")
 
 	var oid = card.Oid()
 	if oid == nil {
@@ -291,17 +291,23 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	// 		function -- updateIndex -- it is OK. For recovery tool, it is not.
 	var key = card.Key()
 	for _, tag := range tags {
-		tagmap, ok := idx.tagmaps[tag]
-		if !ok {
-			var e error
-			tagmap, e = loadTagmap(tag, true)
-			if e != nil {
-				return err.Bug("loadTagmap(%s) - %v",
-					tag, e)
-			}
-			idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
+		tagmap, e := idx.loadTagmap(tag, true, true)
+		if e != nil {
+			return e
 		}
-		updated := tagmap.update(uint(key)) // REVU should we change tagmap?
+		/*
+			tagmap, ok := idx.tagmaps[tag]
+			if !ok {
+				var e error
+				tagmap, e = loadTagmap(tag, true)
+				if e != nil {
+					return err.Bug("loadTagmap(%s) - %v",
+						tag, e)
+				}
+				idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
+			}
+		*/
+		updated := tagmap.update(setBits, uint(key)) // REVU should we change tagmap?
 		if updated {
 			system.Debugf("updated tagmap (%s) for object (key:%d)", tag, key)
 		}
@@ -310,9 +316,26 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	return nil
 }
 
+func (idx *indexManager) loadTagmap(tag string, create, add bool) (*Tagmap, error) {
+	var err = errors.For("indexManager.loadTagmap")
+	tagmap, ok := idx.tagmaps[tag]
+	if !ok {
+		var e error
+		tagmap, e = loadTagmap(tag, true)
+		if e != nil {
+			return nil, err.Bug("on loadTagmap(%s) - %v", tag, e)
+		}
+		if add {
+			idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
+		}
+	}
+
+	return tagmap, nil
+}
+
 // Select returns the Oids of all objects that have been tagged with all of the
-// provided tags. The returned array may be empty but never nil. If one or more of
-// the tags are undefined, the empty set with no error is returned.
+// provided tags. The returned array may be empty but never nil.
+// TODO update comments
 //
 // The indexManager must have been openned in Write op mode and len(tags) must be > 0.
 //
@@ -334,7 +357,7 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 			tagmap, e = loadTagmap(tag, false) // do not create if tag is missing
 			if e != nil && e == ErrTagNotExist {
 				if spec == All { // we're done here for All
-					return nil, nil
+					return []*system.Oid{}, nil
 				}
 				continue
 			} else if e != nil {
@@ -360,6 +383,9 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 	keys, e := selectFn(bitmaps)
 	if e != nil {
 		return nil, e
+	}
+	if len(keys) == 0 {
+		return []*system.Oid{}, nil
 	}
 	oids, e := queryFn(keys...)
 	if e != nil {
@@ -418,12 +444,13 @@ func (idx *indexManager) DeleteObject(oid *system.Oid) (bool, error) {
 		return false, nil
 	}
 	if ok, e := card.save(); e != nil {
-		return false, err.ErrorWithCause(e, "card.save: oid:%s",
-			oid.Fingerprint())
+		return false, err.ErrorWithCause(e, "card.save: oid:%s", oid.Fingerprint())
 	} else if !ok {
-		return false, err.BugWithCause(e, "card.save: oid:%s",
-			oid.Fingerprint())
+		return false, err.BugWithCause(e, "card.save: oid:%s", oid.Fingerprint())
 	}
+
+	// TODO clear the tagmaps of card ..
+
 	return true, nil
 }
 
@@ -453,19 +480,61 @@ func (idx *indexManager) DeleteObjectsByTag(tags ...string) (int, error) {
 	return n, nil
 }
 
-// RemoveTag removes the specified tag from the object identified by the oid.
+// RemoveTag removes the specified tags from the object identified by the oid.
 //
-// Returns true, nil if successful.
-// Returns false, nil if object was not tagged with the specified tag.
-// Returns false, error if object does not exist or other errors occured.
-func (idx *indexManager) RemoveTag(oid *system.Oid, tag string) (bool, error) {
-	var err = errors.For("indexManager.RemoveTag")
+// Returns []string, nil if successful. The array is set of removed tags.
+// Returns []string{}, nil if object was not tagged with any of the specified tag.
+// Returns nil, error if object does not exist; is locked; or is marked deleted.
+func (idx *indexManager) RemoveTags(oid *system.Oid, tags ...string) ([]string, error) {
+	var err = errors.For("indexManager.RemoveTags")
 
 	if idx.opMode != Write {
-		return false, err.Bug("invalid op mode: %s", idx.opMode)
+		return nil, err.Bug("invalid op mode: %s", idx.opMode)
+	}
+	if !cardExists(oid) {
+		return nil, err.Error("does not exist - oid:%s", oid.Fingerprint())
 	}
 
-	return false, err.NotImplemented()
+	card, e := LoadCard(oid)
+	if e != nil {
+		return nil, e
+	}
+	if card.IsDeleted() {
+		return nil, err.Error("card is deleted")
+	}
+	if card.IsLocked() {
+		return nil, err.Error("card is locked")
+	}
+
+	/// remove the tag //////////////////////////////////////////////
+
+	updates := card.removeTag(tags...)
+	if len(updates) == 0 {
+		return updates, nil // exit early - no tagmaps to update
+	}
+
+	if ok, e := card.save(); e != nil {
+		return nil, err.ErrorWithCause(e, "card.save: oid:%s", oid.Fingerprint())
+	} else if !ok {
+		return nil, err.BugWithCause(e, "card.save: oid:%s", oid.Fingerprint())
+	}
+
+	/// update the tagmap ///////////////////////////////////////////
+
+	for _, tag := range tags {
+		tagmap, e := idx.loadTagmap(tag, false, true)
+		if e != nil {
+			panic(err.BugWithCause(e, "idx.loadTamp (%q)", tag))
+		}
+		ok := tagmap.update(clearBits, uint(card.Key())) // REVU should we change tagmap?
+		if !ok {
+			panic(err.Bug("tagmap(%s) update returned false (key:%d)", tag, card.Key()))
+		}
+		// REVU should compress here ..
+		// TODO also in index object ..
+	}
+
+	return updates, nil
 }
 
 /// selectSpec /////////////////////////////////////////////////////////////////

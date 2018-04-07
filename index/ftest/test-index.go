@@ -25,10 +25,10 @@ var option = struct {
 	tags  string
 	force bool
 }{}
-var ops = []string{"i", "r", "a", "d", "u", "q"}
+var ops = []string{"i", "r", "a", "d", "dt", "u", "q"}
 
 func init() {
-	flag.StringVar(&option.op, "op", option.op, "i:init a:add d:delete r:read u:update q:query")
+	flag.StringVar(&option.op, "op", option.op, "i:init a:add d:delete-object(s) dt:delete-tag r:read u:update q:query")
 	flag.StringVar(&option.file, "file", option.file, "name of file to index")
 	flag.StringVar(&option.text, "text", option.text, "text to index")
 	flag.StringVar(&option.tags, "tags", option.tags, "csv list in \" \"s ")
@@ -107,7 +107,9 @@ tags_ok:
 	case "a":
 		e = addObject(tagnames...)
 	case "d":
-		e = deleteOp(tagnames...)
+		e = deleteObjects(tagnames...)
+	case "dt":
+		e = deleteObjectTags(tagnames...)
 	case "r":
 		e = readCard()
 	case "u":
@@ -162,38 +164,81 @@ func readCard() error {
 	return nil
 }
 
-func deleteOp(tags ...string) error {
+func deleteObjectTags(tags ...string) error {
+	var err = errors.For("test-index.deleteObjectTags")
+
+	if len(tags) == 0 {
+		return err.Error("no tags specified")
+	}
+	oid, e := getOid(option.file, option.text)
+	if e != nil {
+		return err.ErrorWithCause(e, "getOid")
+	}
+
 	idx, e := index.OpenIndexManager(index.Write)
 	if e != nil {
 		return e
 	}
 	defer func() {
 		if e := idx.Close(); e != nil {
-			panic(errors.BugWithCause(e, "on deferred close of indexManager"))
+			panic(err.BugWithCause(e, "on deferred close of indexManager"))
 		}
 		log("closed indexManager")
 	}()
 
+	remset, e := idx.RemoveTags(oid, tags...)
+	if e != nil {
+		return e
+	}
+	for _, tag := range remset {
+		log("removed tag %s", tag)
+	}
+	card, e := index.LoadCard(oid)
+	if e != nil {
+		return err.Bug("index.LoadCard - %s", e)
+	}
+	card.Print(os.Stdout)
+
+	return nil
+}
+
+func getOid(file, text string) (*system.Oid, error) {
+	var err = errors.For("test-index.getOid")
+
 	var oid *system.Oid
+	var e error
 	switch {
-	case option.text != "":
+	case text != "":
 		md := digest.Sum([]byte(option.text))
 		oid, e = system.NewOid(md[:])
-		if e != nil {
-			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
-		}
-	case option.file != "":
+	case file != "":
 		md, e := digest.SumFile(option.file)
 		if e != nil {
-			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
+			return nil, err.ErrorWithCause(e, "on SumFile")
 		}
 		oid, e = system.NewOid(md[:])
-		if e != nil {
-			exitOnError(errors.Bug("test-index: readCard: oid:  - %s", e))
-		}
-	case len(tags) != 0:
-		return deleteObjectsByTag(idx, tags...)
 	}
+	return oid, e
+}
+
+func deleteObjects(tags ...string) error {
+	var err = errors.For("test-index.deleteObjects")
+
+	oid, e := getOid(option.file, option.text)
+	if e != nil {
+		exitOnError(err.ErrorWithCause(e, "on getOid"))
+	}
+
+	idx, e := index.OpenIndexManager(index.Write)
+	if e != nil {
+		return e
+	}
+	defer func() {
+		if e := idx.Close(); e != nil {
+			panic(err.BugWithCause(e, "on deferred close of indexManager"))
+		}
+		log("closed indexManager")
+	}()
 
 	ok, e := idx.DeleteObject(oid)
 	if e != nil {
@@ -209,7 +254,7 @@ func deleteOp(tags ...string) error {
 }
 
 func deleteObjectsByTag(idx index.IndexManager, tags ...string) error {
-	return errors.NotImplemented("test-index.deleteOp")
+	return errors.NotImplemented("test-index.deleteObjectsByTag")
 }
 
 func addObject(tags ...string) error {
