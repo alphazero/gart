@@ -118,18 +118,14 @@ type IndexManager interface {
 	Select(spec selectSpec, tags ...string) ([]*system.Oid, error)
 	DeleteObject(oid *system.Oid) (bool, error)
 	DeleteObjectsByTag(tags ...string) (int, error)
+	RemoveTag(oid *system.Oid, tag string) (bool, error)
 	Close() error
 }
 
-func OpenIndexManager(opMode OpMode) (*indexManager, error) {
+func OpenIndexManager(opMode OpMode) (IndexManager, error) {
 	oidx, e := openObjectIndex(opMode)
 	if e != nil {
 		return nil, e
-	}
-	if system.Debug {
-		system.Debugf("index.OpenIndexManager: oidx on Open ===============")
-		oidx.Print(os.Stderr)
-		system.Debugf("============================================ end ===\n")
 	}
 
 	var idxmgr = &indexManager{
@@ -138,40 +134,35 @@ func OpenIndexManager(opMode OpMode) (*indexManager, error) {
 		tagmaps: make(map[string]*Tagmap),
 	}
 
-	system.Debugf("index.OpenIndexManager: opMode: %s - openned", opMode)
 	return idxmgr, nil
 }
 
 func (idx *indexManager) Close() error {
+	var err = errors.For("indexManager.Close")
 
 	if idx.oidx == nil || idx.tagmaps == nil {
-		return errors.Bug("indexManager.Close: invalid state - already closed")
+		return err.Bug("invalid state - already closed")
 	}
 
-	if system.Debug {
-		system.Debugf("indexManager.Close: -- oidx on Close ===============")
-		idx.oidx.Print(os.Stderr)
-		system.Debugf("============================================ end ===\n")
-	}
-	var e = idx.oidx.closeIndex()
+	// invalidate instance regardless of any errors after this point
+	defer func() {
+		idx.opMode = 0
+		idx.oidx = nil
+		idx.tagmaps = nil
+	}()
 
-	system.Debugf("indexManager.Close: opMode: %s - closed with e:%v", idx.opMode, e)
+	if e := idx.oidx.closeIndex(); e != nil {
+		return err.Bug("on oidx.closeIndex - opMode: %s - closed with e:%v", idx.opMode, e)
+	}
 
 	// save loaded tagmaps. (may be nop). Any error is a bug.
 	for tag, tagmap := range idx.tagmaps {
-		if ok, e := tagmap.save(); e != nil {
-			panic(errors.BugWithCause(e, "indexManager.Close: on tagmap(%s).Save", tag))
-		} else if ok {
-			system.Debugf("updated tagmap %s", tag)
+		if _, e := tagmap.save(); e != nil {
+			return err.BugWithCause(e, "on tagmap(%s).Save", tag)
 		}
 	}
 
-	// invalidate instance regardless of any errors
-	idx.opMode = 0
-	idx.oidx = nil
-	idx.tagmaps = nil
-
-	return e
+	return nil
 }
 
 // Preloads the associated Tagmaps for the tags. This doesn't necessary mean
@@ -180,18 +171,16 @@ func (idx *indexManager) Close() error {
 // If this is the first time (in system life-time) that the tag is specified,
 // the associated tagmap will be created.
 func (idx *indexManager) UsingTags(tags ...string) error {
-	debug := func(s string) { system.Debugf("index.OpenIndexManager: " + s) }
+	var err = errors.For("indexManager.UsingTags")
 
 	for i, tag := range tags {
 		if _, ok := idx.tagmaps[tag]; ok {
-			debug(tag + " is already loaded")
 			continue // already loaded
 		}
 		tagmap, e := loadTagmap(tag, true) // REVU
 		if e != nil {
-			return errors.ErrorWithCause(e, "index.UsingTags: tag[%d]:%q", i, tag)
+			return err.ErrorWithCause(e, "tag[%d]:%q", i, tag)
 		}
-		debug(tag + " loaded")
 		idx.tagmaps[tag] = tagmap
 	}
 	return nil
@@ -200,10 +189,12 @@ func (idx *indexManager) UsingTags(tags ...string) error {
 // Indexes the text object. If object is new it is added with tags specified. If not
 // updated tags (if any) are added. See indexObject.
 func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, error) {
+	var err = errors.For("indexManager.IndexText")
+
 	md := digest.Sum([]byte(text))
 	oid, e := system.NewOid(md[:])
 	if e != nil {
-		panic(errors.BugWithCause(e, "indexManager.IndexText: unexpected"))
+		panic(err.BugWithCause(e, "unexpected"))
 	}
 
 	var card Card
@@ -212,7 +203,7 @@ func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, err
 		var e error
 		card, e = NewTextCard(oid, text)
 		if e != nil {
-			return nil, true, errors.Bug("indexManager.IndexText: - %s", e)
+			return nil, true, err.BugWithCause(e, "unexpected")
 		}
 	} else {
 		card, e = LoadCard(oid)
@@ -227,16 +218,18 @@ func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, err
 // Indexes the file object. If object is new it is added with tags specified. If not
 // updated tags (if any), or the filename (if new) are added. See indexObject.
 func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool, error) {
+	var err = errors.For("indexManager.IndexFile")
+
 	if !filepath.IsAbs(filename) {
-		return nil, false, errors.InvalidArg("indexManager.IndexFile", "filename", "not absolute")
+		return nil, false, err.InvalidArg("filename must be absolute path")
 	}
 	md, e := digest.SumFile(filename)
 	if e != nil {
-		panic(errors.BugWithCause(e, "indexManager.IndexFile: unexpected"))
+		panic(err.BugWithCause(e, "unexpected"))
 	}
 	oid, e := system.NewOid(md[:])
 	if e != nil {
-		panic(errors.BugWithCause(e, "indexManager.IndexFile: unexpected"))
+		panic(err.BugWithCause(e, "unexpected"))
 	}
 	var card Card
 	var isNew = !cardExists(oid)
@@ -244,7 +237,7 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 		var e error
 		card, e = NewFileCard(oid, filename)
 		if e != nil {
-			return card, true, errors.Bug("indexManager.IndexFile: - %s", e)
+			return card, true, err.BugWithCause(e, "on new card")
 		}
 	} else {
 		card, e = LoadCard(oid)
@@ -252,12 +245,9 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 			return card, false, e
 		}
 		fileCard := card.(*fileCard)
-		ok, e := fileCard.addPath(filename)
+		_, e := fileCard.addPath(filename)
 		if e != nil {
 			return card, false, e
-		}
-		if ok {
-			system.Debugf("indexManager.IndexFile: added path: %q", filename)
 		}
 	}
 
@@ -266,10 +256,11 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 
 // REVU see gart-add in /1.0/ for refresh on systemics..
 func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) error {
+	var err = errors.For("indexManager.Select")
 
 	var oid = card.Oid()
 	if oid == nil {
-		return errors.InvalidArg("indexManager.indexObject", "oid", "nil")
+		return err.InvalidArg("oid is nil")
 	}
 
 	// REVU for now it is ok if no tags are defined
@@ -279,20 +270,18 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	if isNew {
 		key, e := idx.oidx.addObject(oid)
 		if e != nil {
-			return errors.ErrorWithCause(e, "IndexManager.indexObject")
+			return err.ErrorWithCause(e, "for new object")
 		}
 		if e := card.setKey(key); e != nil {
-			return errors.Bug("indexManager.indexObject: setKey(%d) - %s", key, e)
+			return err.Bug("setKey(%d) for new object - %s", key, e)
 		}
 	}
 	tags = card.addTag(tags...)
-	system.Debugf("indexManager.indexObject: card. modified:%t", card.isModified())
 	_shouldSave := isNew || len(tags) > 0
-	system.Debugf("indexManager.indexObject: saving card")
 	if ok, e := card.save(); e != nil {
-		return errors.Error("indexManager.indexObject: card.Save() - %s", e)
+		return err.Error("card.Save() - %s", e)
 	} else if _shouldSave && !ok {
-		return errors.Bug("indexManager.indexObject: card.Save -> false on newCard")
+		return err.Bug("card.Save -> false on newCard")
 	}
 
 	// TODO update relevant index tagmaps
@@ -307,7 +296,7 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 			var e error
 			tagmap, e = loadTagmap(tag, true)
 			if e != nil {
-				return errors.Bug("indexManager.updateIndex: loadTagmap(%s) - %v",
+				return err.Bug("loadTagmap(%s) - %v",
 					tag, e)
 			}
 			idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
@@ -329,12 +318,13 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 //
 // Return nil, error in case of any errors.
 func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid, error) {
+	var err = errors.For("indexManager.Select")
 
 	if e := spec.verify(); e != nil {
-		return nil, errors.ErrorWithCause(e, "indexManager.Select")
+		return nil, e
 	}
 	if len(tags) == 0 {
-		return nil, errors.InvalidArg("indexManager.Select", "len(tags)", "0")
+		return nil, err.InvalidArg("tags is zero-len")
 	}
 	var bitmaps []*bitmap.Wahl
 	for _, tag := range tags {
@@ -348,7 +338,7 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 				}
 				continue
 			} else if e != nil {
-				return nil, errors.Bug("indexManager.select: loadTagmap(%s) - %v", tag, e)
+				return nil, err.Bug("loadTagmap(%s) - %v", tag, e)
 			}
 		}
 		bitmaps = append(bitmaps, tagmap.bitmap)
@@ -405,9 +395,13 @@ func (idx *indexManager) bitmapsOR(bitmaps []*bitmap.Wahl) ([]int, error) {
 }
 
 func (idx *indexManager) DeleteObject(oid *system.Oid) (bool, error) {
+	var err = errors.For("indexManager.DeleteObject")
+
+	if idx.opMode != Write {
+		return false, err.Error("invalid op mode: %s", idx.opMode)
+	}
 	if !cardExists(oid) {
-		return false, errors.Error(
-			"indexManager.DeleteObject: does not exist - oid:%s", oid.Fingerprint())
+		return false, err.Error("does not exist - oid:%s", oid.Fingerprint())
 	}
 	card, e := LoadCard(oid)
 	if e != nil {
@@ -419,24 +413,29 @@ func (idx *indexManager) DeleteObject(oid *system.Oid) (bool, error) {
 
 	if ok := card.markDeleted(); !ok {
 		if card.IsLocked() {
-			return false, errors.Error("indexManager.DeleteObject: card is locked")
+			return false, err.Error("card is locked")
 		}
-		return false, errors.Bug("indexManager.DeleteObject - oid:%s", oid.Fingerprint())
+		return false, nil
 	}
 	if ok, e := card.save(); e != nil {
-		return false, errors.ErrorWithCause(e, "indexManager.DeleteObject: card.save: oid:%s",
+		return false, err.ErrorWithCause(e, "card.save: oid:%s",
 			oid.Fingerprint())
 	} else if !ok {
-		return false, errors.BugWithCause(e, "indexManager.DeleteObject: card.save: oid:%s",
+		return false, err.BugWithCause(e, "card.save: oid:%s",
 			oid.Fingerprint())
 	}
 	return true, nil
 }
 
 func (idx *indexManager) DeleteObjectsByTag(tags ...string) (int, error) {
+	var err = errors.For("indexManager.DeleteObjectByTag")
+
+	if idx.opMode != Write {
+		return 0, err.Bug("invalid op mode: %s", idx.opMode)
+	}
 	oids, e := idx.Select(All, tags...)
 	if e != nil {
-		return 0, errors.ErrorWithCause(e, "indexManager.DeleteObjectsByTag")
+		return 0, err.ErrorWithCause(e, "on select(All, ...)")
 	}
 	// none selected
 	if len(oids) == 0 {
@@ -446,12 +445,27 @@ func (idx *indexManager) DeleteObjectsByTag(tags ...string) (int, error) {
 	var n int
 	for _, oid := range oids {
 		if ok, e := idx.DeleteObject(oid); e != nil {
-			return n, errors.ErrorWithCause(e, "indexManager.DeleteObjectsByTag")
+			return n, errors.ErrorWithCause(e, "on DeleteObject")
 		} else if ok {
 			n++
 		}
 	}
 	return n, nil
+}
+
+// RemoveTag removes the specified tag from the object identified by the oid.
+//
+// Returns true, nil if successful.
+// Returns false, nil if object was not tagged with the specified tag.
+// Returns false, error if object does not exist or other errors occured.
+func (idx *indexManager) RemoveTag(oid *system.Oid, tag string) (bool, error) {
+	var err = errors.For("indexManager.RemoveTag")
+
+	if idx.opMode != Write {
+		return false, err.Bug("invalid op mode: %s", idx.opMode)
+	}
+
+	return false, err.NotImplemented()
 }
 
 /// selectSpec /////////////////////////////////////////////////////////////////
