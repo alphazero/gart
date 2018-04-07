@@ -68,6 +68,24 @@ func tryCompressed() {
 	wahl_1_or_2.Print(os.Stdout)
 	verifyOr(wahl_1, wahl_2, wahl_1_or_2)
 
+	// test Clear
+	fmt.Printf("=== TEST Clear ==================\n")
+	fmt.Printf("=== clear anded bitmap ==========\n")
+	wahl_1_and_2.Clear(0)                // clear tile
+	wahl_1_and_2.Clear(95)               // nop tile
+	wahl_1_and_2.Clear(222)              // clear fill-0 (nop)
+	wahl_1_and_2.Clear(1023, 1025, 1027) // clear fill-1
+	wahl_1_and_2.Compress()
+	wahl_1_and_2.Bits().Print(os.Stdout)
+	wahl_1_and_2.Print(os.Stdout)
+
+	fmt.Printf("=== clear or'd bitmap -==========\n")
+	wahl_1_or_2.Clear(1, 30)                        // clear tile
+	wahl_1_or_2.Clear(1023, 1052, 1111, 1300, 1302) // clear fill-1
+	wahl_1_or_2.Compress()
+	wahl_1_or_2.Bits().Print(os.Stdout)
+	wahl_1_or_2.Print(os.Stdout)
+
 	return
 }
 

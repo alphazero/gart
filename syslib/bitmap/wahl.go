@@ -172,22 +172,12 @@ func (w *Wahl) Set(bits ...uint) bool {
 	// updated wmax will -not- be affected.
 	wmax = w.Max() // update it. it will be >= bitsmax
 
-	// helper func returns range of the block 'b' & the prior max
-	var brange = func(b uint32, max0 int) (uint, uint, int) {
-		min := uint(max0) + 1
-		n := 1
-		if b>>31 > 0 {
-			n = int(b & 0x3fffffff)
-		}
-		return min, min + (uint(n) * 31) - 1, n
-	}
-
 	var i int // current block
-	var bmin, bmax, rn = brange(w.arr[i], -1)
+	var bmin, bmax, rn = blockRange(w.arr[i], -1)
 	for _, bitnum := range bits {
 		for bitnum > bmax {
 			i++
-			bmin, bmax, rn = brange(w.arr[i], int(bmax))
+			bmin, bmax, rn = blockRange(w.arr[i], int(bmax))
 		}
 		switch block := w.arr[i]; {
 		case block>>30 == 0x2:
@@ -669,6 +659,11 @@ type wahlBlock struct {
 	rlen int // 1 for tiles (to be consistent)
 }
 
+func (b wahlBlock) bitRange(prevMax int) (uint, uint) {
+	min, max, _ := blockRange(b.val, prevMax)
+	return min, max
+}
+
 func (b wahlBlock) String() string {
 	var revbit = bits.Reverse32(b.val)
 	var typ = "tile"
@@ -697,4 +692,17 @@ func WahlBlock(v uint32) wahlBlock {
 	block.fill = true
 	block.rlen = int(v & 0x3fffffff)
 	return block
+}
+
+// REVU should be a function of WahlBlock
+// blockRange returns the min, max bit range of the given block 'b',
+// per a prior block's maximum max0. The final return value is the
+// run-length of the block b (which is independent of max0).
+func blockRange(b uint32, max0 int) (uint, uint, int) {
+	min := uint(max0) + 1
+	n := 1
+	if b>>31 > 0 {
+		n = int(b & 0x3fffffff)
+	}
+	return min, min + (uint(n) * 31) - 1, n
 }
