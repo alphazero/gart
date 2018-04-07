@@ -232,11 +232,12 @@ func (c *cardFile) Key() int64         { return c.header.key }
 func (c *cardFile) Type() system.Otype { return c.header.otype }
 func (c *cardFile) Version() int       { return int(c.header.version) }
 func (c *cardFile) setKey(key int64) error {
+	var err = errors.For("cardFile.setKey")
 	if c.header.key != -1 {
-		return errors.Bug("cardFile.setKey: key is already set to %d", c.header.key)
+		return err.Bug("key is already set to %d", c.header.key)
 	}
 	if key < 0 {
-		return errors.InvalidArg("cardFile.setKey", "key", "< 0")
+		return err.InvalidArg("key is < 0")
 	}
 
 	c.header.key = key
@@ -331,8 +332,10 @@ func (c *cardFile) debugStr() string {
 
 // REVU this would have to partially create cardFile and then pass it to newTypeCard
 func LoadCard(oid *system.Oid) (Card, error) {
+	var err = errors.For("index.LoadCard")
+
 	if oid == nil {
-		return nil, errors.InvalidArg("index.LoadCard", "oid", "nil")
+		return nil, err.InvalidArg("oid is nil")
 	}
 
 	/// open file and map it ////////////////////////////////////////
@@ -340,16 +343,16 @@ func LoadCard(oid *system.Oid) (Card, error) {
 	filename := cardFilename(oid)
 	finfo, e := os.Stat(filename)
 	if e != nil && os.IsNotExist(e) {
-		return nil, errors.Error("index.LoadCard: Card does not exist for oid %s",
+		return nil, err.Error("Card does not exist for oid %s",
 			oid.Fingerprint())
 	} else if e != nil {
-		return nil, errors.ErrorWithCause(e, "index.LoadCard: unexpected error")
+		return nil, err.ErrorWithCause(e, "unexpected")
 	}
 
 	// we're always reading and immediately closing
 	file, e := os.OpenFile(filename, os.O_RDONLY, system.FilePerm)
 	if e != nil {
-		return nil, errors.ErrorWithCause(e, "index.LoadCard: on open - unexpected error")
+		return nil, err.ErrorWithCause(e, "on open - unexpected")
 	}
 	defer file.Close()
 
@@ -357,7 +360,7 @@ func LoadCard(oid *system.Oid) (Card, error) {
 	fd := int(file.Fd())
 	buf, e := syscall.Mmap(fd, 0, size, syscall.PROT_READ, syscall.MAP_PRIVATE)
 	if e != nil {
-		return nil, errors.ErrorWithCause(e, "index.LoadCard: on mmap - unexpected error")
+		return nil, err.ErrorWithCause(e, "on mmap - unexpected")
 	}
 	defer syscall.Munmap(buf)
 
@@ -367,7 +370,7 @@ func LoadCard(oid *system.Oid) (Card, error) {
 	var offset int
 
 	if e := header.decode(buf); e != nil {
-		return nil, errors.ErrorWithCause(e, "index.LoadCard: header decode")
+		return nil, err.ErrorWithCause(e, "header decode")
 	}
 	offset += cardHeaderSize
 
@@ -405,29 +408,31 @@ func LoadCard(oid *system.Oid) (Card, error) {
 		e = tcard.decode(buf[offset:])
 		card = tcard
 	default:
-		panic(errors.Bug("index.LoadCard: unexpected otype: %s", cardbase.header.otype))
+		panic(err.Bug("unexpected otype: %s", cardbase.header.otype))
 	}
 
 	return card, e
 }
 
 func (c *cardFile) save() (bool, error) {
+	var err = errors.For("cardFile.save")
+
 	if !c.modified {
 		return false, nil
 	}
 	if c.header.key < 0 {
-		return false, errors.Bug("cardFile.save: invalid key: %d", c.header.key)
+		return false, err.Bug("invalid key: %d", c.header.key)
 	}
 
 	// create card dir if required
 	if c.source == "" {
 		if cardExists(c.oid) {
-			return false, errors.Bug("cardFile.save: source is nil for existing card")
+			return false, err.Bug("source is nil for existing card")
 		}
 		c.source = cardFilename(c.oid)
 		dir := filepath.Dir(c.source)
 		if e := os.MkdirAll(dir, system.DirPerm); e != nil {
-			return false, errors.Bug("cardFile.save: os.Mkdirall: %s", e)
+			return false, err.Bug("os.Mkdirall: %s", e)
 		}
 	}
 
@@ -436,7 +441,7 @@ func (c *cardFile) save() (bool, error) {
 	swapfile := fs.SwapfileName(c.source)
 	sfile, _, e := fs.OpenNewSwapfile(swapfile, true)
 	if e != nil {
-		return false, errors.Error("cardFile.save: fs.OpenNewSwapFile: %s", e)
+		return false, err.Error("fs.OpenNewSwapFile: %s", e)
 	}
 	defer os.Remove(swapfile)
 	defer sfile.Close()
@@ -445,13 +450,13 @@ func (c *cardFile) save() (bool, error) {
 	var bufsize = int64(cardHeaderSize+c.header.tagslen) + c.datalen
 
 	if e := sfile.Truncate(bufsize); e != nil {
-		return false, errors.Error("cardFile.save: file.Truncate(%d): %s", bufsize, e)
+		return false, err.Error("file.Truncate(%d): %s", bufsize, e)
 	}
 
 	var fd = int(sfile.Fd())
 	buf, e := syscall.Mmap(fd, 0, int(bufsize), syscall.PROT_WRITE, syscall.MAP_SHARED)
 	if e != nil {
-		return false, errors.Error("cardFile.save: syscall.Mmap: %s", e)
+		return false, err.Error("syscall.Mmap: %s", e)
 	}
 	defer syscall.Munmap(buf)
 
@@ -467,17 +472,17 @@ func (c *cardFile) save() (bool, error) {
 		offset++
 	}
 	if e := c.encode(buf[cardHeaderSize+c.header.tagslen:]); e != nil {
-		return false, errors.Error("cardFile.save: encode: %s", e)
+		return false, err.Error("encode: %s", e)
 	}
 	// NOTE encode header after we have all the buf encoded. (cf. header.crc32)
 	if e := c.header.encode(buf); e != nil {
-		return false, errors.Error("cardFile.save: header.encode: %s", e)
+		return false, err.Error("header.encode: %s", e)
 	}
 
 	/// swap //////////////////////////////////////////////////////////////////////
 
 	if e := os.Rename(swapfile, c.source); e != nil {
-		return false, errors.Error("cardFile.save: os.Rename: %s", e)
+		return false, err.Error("os.Rename: %s", e)
 	}
 
 	c.modified = false
@@ -523,8 +528,9 @@ func (c *textCard) decode(buf []byte) error {
 }
 
 func (c *textCard) encode(buf []byte) error {
+	var err = errors.For("textCard.encode")
 	if len(buf) < len(c.text) {
-		return errors.InvalidArg("textCard.encode", "len(buf)", "len(c.text)")
+		return err.InvalidArg("len(buf):%d < required %d", len(buf), len(c.text))
 	}
 	copy(buf, []byte(c.text))
 	return nil

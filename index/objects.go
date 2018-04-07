@@ -96,8 +96,10 @@ func (h *objectsHeader) encode(buf []byte) error {
 }
 
 func (h *objectsHeader) decode(buf []byte) error {
+	var err = errors.For("objectsHeader.decode")
+
 	if len(buf) < objectsHeaderSize {
-		return errors.Error("objectsHeader.decode: insufficient buffer length: %d",
+		return err.Error("insufficient buffer length: %d",
 			len(buf))
 	}
 	*h = *(*objectsHeader)(unsafe.Pointer(&buf[0]))
@@ -105,19 +107,19 @@ func (h *objectsHeader) decode(buf []byte) error {
 	/// verify //////////////////////////////////////////////////////
 
 	if h.ftype != mmap_idx_file_code {
-		return errors.Bug("objectsHeader.decode: invalid ftype: %x - expect: %x",
+		return err.Bug("invalid ftype: %x - expect: %x",
 			h.ftype, mmap_idx_file_code)
 	}
 	crc64 := digest.Checksum64(buf[16:])
 	if crc64 != h.crc64 {
-		return errors.Bug("objectsHeader.decode: invalid checksum: %d - expect: %d",
+		return err.Bug("invalid checksum: %d - expect: %d",
 			h.crc64, crc64)
 	}
 	if h.created == 0 {
-		return errors.Bug("objectsHeader.decode: invalid created: %d", h.created)
+		return err.Bug("invalid created: %d", h.created)
 	}
 	if h.updated < h.created {
-		return errors.Bug("objectsHeader.decode: invalid updated: %d < created:%d",
+		return err.Bug("invalid updated: %d < created:%d",
 			h.updated, h.created)
 	}
 
@@ -190,14 +192,12 @@ func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
 //
 // Returns index.ErrObjectIndexExists if index file already exists.
 func createObjectIndex() error {
-
-	// for convenience
-	errorWithCause := errors.ErrorWithCause
+	var err = errors.For("index.createObjectIndex")
 
 	// create object index file
 	file, e := fs.OpenNewFile(oidxFilename, os.O_WRONLY|os.O_APPEND)
 	if e != nil {
-		return errorWithCause(e, "oidx.CreateIndex")
+		return e
 	}
 	defer file.Close()
 
@@ -213,15 +213,14 @@ func createObjectIndex() error {
 	var buf [objectsHeaderSize]byte
 	if e := header.encode(buf[:]); e != nil {
 		if ec := os.Remove(oidxFilename); ec != nil {
-			panic(errors.Fault(
-				"oidx.CreateIndex: os.Remove - %s - while recovering from: %s", ec, e))
+			panic(err.Fault("os.Remove - %s - recovering from: %s", ec, e))
 		}
-		return errorWithCause(e, "oidx.CreateIndex")
+		return e
 	}
 
 	_, e = file.Write(buf[:])
 	if e != nil {
-		return errorWithCause(e, "oidx.CreateIndex")
+		return e
 	}
 
 	return nil
@@ -307,9 +306,11 @@ func (oidx *oidxFile) nextKey() int64 { return oidx.header.ocnt }
 // Returns the 'key' of the new object, and nil on success.
 // On error, the uint64 value should be ignored.
 func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
+	var err = errors.For("oidxFile.addObject")
+
 	var key int64 = -1
 	if oidx.opMode != Write {
-		return key, errors.Bug("oidxFile.AddObject: invalid op-mode:%s", oidx.opMode)
+		return key, err.Bug("invalid op-mode:%s", oidx.opMode)
 	}
 
 	var offset = ((oidx.header.ocnt) << 5) + objectsHeaderSize
@@ -321,11 +322,10 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 		oidx.header.pcnt++
 	}
 	if e := oid.Encode(oidx.buf[offset:]); e != nil {
-		panic(errors.FaultWithCause(e,
-			"oidx.AddObject: oid: %s - offset: %d - buflen: %d", oid, offset, len(oidx.buf)))
+		panic(err.FaultWithCause(e,
+			"oid:%s - offset:%d - buflen:%d", oid, offset, len(oidx.buf)))
 	}
 
-	system.Debugf("oidxFile.addObject: ocnt:%d", oidx.header.ocnt)
 	key = oidx.header.ocnt // REVU this starts keys with 0
 	oidx.header.ocnt++
 	if !oidx.modified {
@@ -343,19 +343,20 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 // Returns nil, Bug for key values < 0 or > oidx.object count.
 // Returns nil, index.ErrObjectIndexClosed or any other encountered error.
 func (oidx *oidxFile) validateQueryArgs(keys ...int) ([]int, error) {
+	var err = errors.For("oidxFile.validateQueryArgs")
 	if oidx.opMode != Read {
-		return nil, errors.Bug("oidxFile.validateQueryArgs: invalid op-mode:%s", oidx.opMode)
+		return nil, err.Bug("invalid op-mode:%s", oidx.opMode)
 	}
 	if len(keys) == 0 { // a bug given that indexManager is the (only) caller.
-		return nil, errors.Bug("oidxFile.validateQueryArgs: no keys specified")
+		return nil, err.Bug("no keys specified")
 	}
 
 	sort.Ints(keys)
 	if k := keys[0]; k < 0 {
-		return nil, errors.Bug("oidx.validateQueryArgs: invalid key: %d", k)
+		return nil, err.Bug("invalid key: %d", k)
 	}
 	if k := keys[len(keys)-1]; k >= int(oidx.header.ocnt) {
-		return nil, errors.Bug("oidx.validateQueryArgs: invalid key: %d", k)
+		return nil, err.Bug("invalid key: %d", k)
 	}
 	return keys, nil
 }
@@ -380,7 +381,7 @@ func (oidx *oidxFile) getOids(keys ...int) ([]*system.Oid, error) {
 		offset := (k << 5) + objectsHeaderSize
 		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
 		if e != nil {
-			return nil, errors.ErrorWithCause(e, "oidx.getObjectOidsOnly")
+			return nil, e
 		}
 		oids[i] = oid
 	}
@@ -418,7 +419,7 @@ next_key:
 		offset := (k << 5) + objectsHeaderSize
 		oid, e := system.NewOid(oidx.buf[offset : offset+objectsRecordSize])
 		if e != nil {
-			return nil, errors.ErrorWithCause(e, "oidx.getOidsExcluding")
+			return nil, e
 		}
 		oids[n] = oid
 		n++
@@ -506,21 +507,18 @@ func (oidx *oidxFile) extendBy(delta int64) error {
 
 	size := oidx.finfo.Size() + delta
 	if e := oidx.file.Truncate(size); e != nil {
-		fmt.Fprintf(os.Stderr, "debug - error on truncate to %d - will unmap and close file", size)
 		oidx.unmapAndClose()
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 	// update state
 	finfo, e := oidx.file.Stat()
 	if e != nil {
-		fmt.Fprintf(os.Stderr, "debug - error on file.Stat - will unmap and close file")
 		oidx.unmapAndClose()
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 	oidx.finfo = finfo
 	// remap
 	if e := oidx.mmap(0, int(oidx.finfo.Size()), true); e != nil {
-		fmt.Fprintf(os.Stderr, "debug - error on remap - will unmap and close file")
 		oidx.unmapAndClose()
 		return errorWithCause(e, "oidxFile.extendBy")
 	}

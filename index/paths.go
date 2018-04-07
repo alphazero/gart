@@ -127,11 +127,12 @@ func (p *Paths) Decode(buf []byte) error {
 }
 
 func (v Paths) Encode(buf []byte) error {
+	var err = errors.For("Paths.Encode")
 	if buf == nil {
-		return errors.InvalidArg("Paths.encode", "buf", "nil")
+		return err.InvalidArg("buf is nil")
 	}
 	if len(buf) < v.Buflen() {
-		return errors.Error("Paths.Encode: invalid arg - len(buf):%d paths.Buflen:%d", len(buf), v.Buflen())
+		return err.InvalidArg("len(buf):%d is < %d", len(buf), v.Buflen())
 	}
 	var xof int
 	for _, s := range v.List() {

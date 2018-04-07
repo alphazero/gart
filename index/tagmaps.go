@@ -19,6 +19,8 @@ import (
 	"github.com/alphazero/gart/system"
 )
 
+var ErrTagNotExist = errors.Error("Tag does not exit")
+
 /// tagmap file header /////////////////////////////////////////////////////////
 
 const tagmapHeaderSize = 48
@@ -64,28 +66,26 @@ func (h *tagmapHeader) encode(buf []byte) error {
 // encode writes the header structure to the buffer provided. Checksum is for header
 // data only.
 func (h *tagmapHeader) decode(buf []byte) error {
+	var err = errors.For("tagmapHeader.decode")
 	if len(buf) < tagmapHeaderSize {
-		return errors.Error("tagmapHeader.decode: insufficient buffer length: %d", len(buf))
+		return err.InvalidArg("len(buf):%d < %d", len(buf), tagmapHeaderSize)
 	}
 	*h = *(*tagmapHeader)(unsafe.Pointer(&buf[0]))
 
 	/// verify //////////////////////////////////////////////////////
 
 	if h.ftype != mmap_tagmap_ftype {
-		return errors.Bug("tagmapHeader.decode: invalid ftype: %x - expect: %x",
-			h.ftype, mmap_tagmap_ftype)
+		return err.Bug("ftype:%x - expect: %x", h.ftype, mmap_tagmap_ftype)
 	}
 	crc64 := digest.Checksum64(buf[16:tagmapHeaderSize])
 	if crc64 != h.crc64 {
-		return errors.Bug("tagmapHeader.decode: invalid checksum: %d - expect: %d",
-			h.crc64, crc64)
+		return err.Bug("checksum:%d - expect: %d", h.crc64, crc64)
 	}
 	if h.created == 0 {
-		return errors.Bug("tagmapHeader.decode: invalid created: %d", h.created)
+		return err.Bug("created:%d", h.created)
 	}
 	if h.updated < h.created {
-		return errors.Bug("tagmapHeader.decode: invalid updated: %d < created:%d",
-			h.updated, h.created)
+		return err.Bug("updated: %d < created:%d", h.updated, h.created)
 	}
 
 	return nil
@@ -132,7 +132,7 @@ func TagmapFilename(tag string) string {
 // repo location. Tag names in gart are case-insensitive and the tag
 // (name) will always be converted to lower-case form.
 func createTagmap(tag string) (*Tagmap, error) {
-
+	var err = errors.For(fmt.Sprintf("index.createTagmap(%q)", tag))
 	var tagmap = &Tagmap{}
 
 	filename := TagmapFilename(tag)
@@ -140,12 +140,12 @@ func createTagmap(tag string) (*Tagmap, error) {
 	// if dir structure does not exist, create it.
 	dir := filepath.Dir(filename)
 	if e := os.MkdirAll(dir, system.DirPerm); e != nil {
-		return nil, errors.ErrorWithCause(e, "createTagmap: dir: %q", dir)
+		return nil, err.ErrorWithCause(e, "dir:%q", dir)
 	}
 
 	file, e := fs.OpenNewFile(filename, os.O_WRONLY|os.O_APPEND)
 	if e != nil {
-		return nil, errors.ErrorWithCause(e, "createTagmap: tag: %q", tag)
+		return nil, e
 	}
 	defer file.Close()
 
@@ -165,7 +165,7 @@ func createTagmap(tag string) (*Tagmap, error) {
 
 	_, e = file.Write(buf[:])
 	if e != nil {
-		return nil, errors.ErrorWithCause(e, "createTagmap: tag: %s", tag)
+		return nil, err.ErrorWithCause(e, "on file.Write")
 	}
 
 	tagmap = &Tagmap{
@@ -178,15 +178,11 @@ func createTagmap(tag string) (*Tagmap, error) {
 	return tagmap, nil
 }
 
-var ErrTagNotExist = errors.Error("Tag does not exit")
-
 // Loads the tagmap (in form of bitmap.Wahl) from file and closes the file.
 // File is openned in private, read-only mode.
 func loadTagmap(tag string, create bool) (*Tagmap, error) {
 
-	// for notational convenient alias the errors func.
-	var errorWithCause = errors.ErrorWithCause
-
+	var err = errors.For(fmt.Sprintf("index.loadTagmap(%q)", tag))
 	/// open file ///////////////////////////////////////////////////
 
 	filename := TagmapFilename(tag)
@@ -198,7 +194,7 @@ func loadTagmap(tag string, create bool) (*Tagmap, error) {
 			}
 			tagmap, e := createTagmap(tag)
 			if e != nil {
-				return nil, errorWithCause(e, "index.loadTagmap: on createTagmap - tag:%q", tag)
+				return nil, err.ErrorWithCause(e, "on createTagmap")
 			}
 			return tagmap, nil
 		}
@@ -228,17 +224,17 @@ func loadTagmap(tag string, create bool) (*Tagmap, error) {
 	// decode verifies header
 	var header tagmapHeader
 	if e := header.decode(buf); e != nil {
-		return nil, errorWithCause(e, "index.loadTagmap: hdr.decode")
+		return nil, err.ErrorWithCause(e, "hdr.decode")
 	}
 
 	var wahl bitmap.Wahl
 	if e := wahl.Decode(buf[tagmapHeaderSize:]); e != nil {
-		return nil, errorWithCause(e, "index.loadTagmap: Wahl.Decode")
+		return nil, err.ErrorWithCause(e, "Wahl.Decode")
 	}
 
 	// verify: compare header & actual bitmap
 	bug := func(what string, have, expect uint64) error {
-		return errors.Bug("index.loadTagmap: %s verify - wahl:%d header:%d", what, have, expect)
+		return err.Bug("%s verify - wahl:%d header:%d", what, have, expect)
 	}
 	wahlSize := uint64(wahl.Size())
 	if header.mapSize != wahlSize {
@@ -286,6 +282,7 @@ func (t *Tagmap) update(keys ...uint) bool {
 // any. If error is not nil, the bool result should be ignored as a swap file
 // is used.
 func (t *Tagmap) save() (bool, error) {
+	var err = errors.For("Tagmap.save")
 
 	if !t.modified {
 		return false, nil
@@ -299,9 +296,6 @@ func (t *Tagmap) save() (bool, error) {
 	t.header.mapSize = uint64(t.bitmap.Size())
 	t.header.mapMax = uint64(t.bitmap.Max())
 
-	// for notational convenient alias the errors func.
-	var errorWithCause = errors.ErrorWithCause
-
 	/// swapfile ////////////////////////////////////////////////////
 
 	var size = int64(tagmapHeaderSize + t.header.mapSize)
@@ -309,13 +303,13 @@ func (t *Tagmap) save() (bool, error) {
 	var ops = os.O_RDWR //| os.O_APPEND
 	sfile, e := fs.OpenNewFile(swapfile, ops)
 	if e != nil {
-		return false, errorWithCause(e, "Tagmap.save: swapfile %q open-new", swapfile)
+		return false, err.ErrorWithCause(e, "swapfile %q open-new", swapfile)
 	}
 	if e := sfile.Truncate(size); e != nil {
-		return false, errorWithCause(e, "Tagmap.save: swapfile trunacte")
+		return false, err.ErrorWithCause(e, "swapfile trunacte")
 	}
 	if xoff, e := sfile.Seek(0, os.SEEK_SET); e != nil || xoff != 0 {
-		return false, errorWithCause(e, "Tagmap.save: swapfile seek head - xoff:%d", xoff)
+		return false, err.ErrorWithCause(e, "swapfile seek head - xoff:%d", xoff)
 	}
 
 	// mmap it
@@ -323,28 +317,28 @@ func (t *Tagmap) save() (bool, error) {
 	var fd = int(sfile.Fd())
 	buf, e := syscall.Mmap(fd, 0, int(size), syscall.PROT_WRITE, syscall.MAP_SHARED)
 	if e != nil {
-		return false, errorWithCause(e, "Tagmap.save: swapfile mmap")
+		return false, err.ErrorWithCause(e, "swapfile mmap")
 	}
 
 	// encode buffer and unmap and close swapfile
 
 	if e := t.header.encode(buf[:tagmapHeaderSize]); e != nil {
-		return false, errorWithCause(e, "Tagmap.save: header.encode")
+		return false, err.ErrorWithCause(e, "header.encode")
 	}
 	if e := t.bitmap.Encode(buf[tagmapHeaderSize:]); e != nil {
-		return false, errorWithCause(e, "Tagmap.save: bitmap.encode")
+		return false, err.ErrorWithCause(e, "bitmap.encode")
 	}
 
 	if e := syscall.Munmap(buf); e != nil {
-		return false, errorWithCause(e, "Tagmap.save: unmap")
+		return false, err.ErrorWithCause(e, "unmap")
 	}
 	if e := sfile.Close(); e != nil {
-		return false, errorWithCause(e, "Tagmap.save: swapfile %q close", swapfile)
+		return false, err.ErrorWithCause(e, "swapfile %q close", swapfile)
 	}
 
 	// swap it
 	if e := os.Rename(swapfile, t.source); e != nil {
-		return false, errorWithCause(e, "Tagmap.save - os.Replace %q %q", swapfile, t.source)
+		return false, err.ErrorWithCause(e, "os.Replace %q %q", swapfile, t.source)
 	}
 
 	return true, nil // : π U
