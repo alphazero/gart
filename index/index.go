@@ -211,7 +211,6 @@ func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, err
 			return card, false, e
 		}
 	}
-
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }
 
@@ -250,7 +249,6 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 			return card, false, e
 		}
 	}
-
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }
 
@@ -264,10 +262,18 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	}
 
 	// REVU for now it is ok if no tags are defined
-	// TODO systemics need to be added here as well
 
-	//	var updates []string // new tags
 	if isNew {
+		// TODO systemics need to be added here
+		// 		- object type -> create/update relevant tagmap
+		//		- day-tag: MMM-dd-yyyy (e.g. MAR-31-2018) tagmap
+		//		- only issue is REVU range-encoding: SIMPLE WAY
+		//		  is to check if day-tagmap exists (e.g. is this a new day?)
+		//		  and then create tagmaps for ALL days since last date by
+		//		  CLONING the previous/last day tagmap. This gets us range
+		// 		  encoding. (e.g. object on day T0 is on all daymaps for T0->..
+		//        and query (all object created before Tn or range (Ta, Tb)
+		//        returns that object by ANDing all day maps in that range.
 		key, e := idx.oidx.addObject(oid)
 		if e != nil {
 			return err.ErrorWithCause(e, "for new object")
@@ -295,24 +301,13 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		if e != nil {
 			return e
 		}
-		/*
-			tagmap, ok := idx.tagmaps[tag]
-			if !ok {
-				var e error
-				tagmap, e = loadTagmap(tag, true)
-				if e != nil {
-					return err.Bug("loadTagmap(%s) - %v",
-						tag, e)
-				}
-				idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
-			}
-		*/
 		updated := tagmap.update(setBits, uint(key)) // REVU should we change tagmap?
 		if updated {
 			system.Debugf("updated tagmap (%s) for object (key:%d)", tag, key)
 		}
+		// REVU compression of updated tagmaps
+		// REVU check indexManager.Close ..
 	}
-
 	return nil
 }
 
@@ -329,7 +324,6 @@ func (idx *indexManager) loadTagmap(tag string, create, add bool) (*Tagmap, erro
 			idx.tagmaps[tag] = tagmap // add it - saved on indexManager.close
 		}
 	}
-
 	return tagmap, nil
 }
 
@@ -450,6 +444,7 @@ func (idx *indexManager) DeleteObject(oid *system.Oid) (bool, error) {
 	}
 
 	// TODO clear the tagmaps of card ..
+	// TODO compress the tagmaps ...
 
 	return true, nil
 }
