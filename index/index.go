@@ -157,6 +157,7 @@ func (idx *indexManager) Close() error {
 
 	// save loaded tagmaps. (may be nop). Any error is a bug.
 	for tag, tagmap := range idx.tagmaps {
+		// tagmap compresses on save ...
 		if _, e := tagmap.save(); e != nil {
 			return err.BugWithCause(e, "on tagmap(%s).Save", tag)
 		}
@@ -305,8 +306,6 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		if updated {
 			system.Debugf("updated tagmap (%s) for object (key:%d)", tag, key)
 		}
-		// REVU compression of updated tagmaps
-		// REVU check indexManager.Close ..
 	}
 	return nil
 }
@@ -444,7 +443,6 @@ func (idx *indexManager) DeleteObject(oid *system.Oid) (bool, error) {
 	}
 
 	// TODO clear the tagmaps of card ..
-	// TODO compress the tagmaps ...
 
 	return true, nil
 }
@@ -525,8 +523,6 @@ func (idx *indexManager) RemoveTags(oid *system.Oid, tags ...string) ([]string, 
 		if !ok {
 			panic(err.Bug("tagmap(%s) update returned false (key:%d)", tag, card.Key()))
 		}
-		// REVU should compress here ..
-		// TODO also in index object ..
 	}
 
 	return updates, nil
