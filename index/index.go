@@ -3,8 +3,11 @@
 package index
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/digest"
@@ -266,6 +269,12 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 
 	if isNew {
 		// TODO systemics need to be added here
+		systemics, e := getObjectSystemics(card)
+		if e != nil {
+			return err.ErrorWithCause(e, "for new object")
+		}
+		tags = append(tags, systemics...)
+
 		// 		- object type -> create/update relevant tagmap
 		//		- day-tag: MMM-dd-yyyy (e.g. MAR-31-2018) tagmap
 		//		- only issue is REVU range-encoding: SIMPLE WAY
@@ -553,4 +562,55 @@ func (v selectSpec) verify() error {
 		return nil
 	}
 	return errors.Bug("selectSpec.verify: invalid select spec: %d", v)
+}
+
+/// systemics //////////////////////////////////////////////////////////////////
+
+func getObjectSystemics(card Card) ([]string, error) {
+	var err = errors.For("index.getObjectSystemics")
+
+	// day tag
+	var systemics = []string{
+		dayTag(),
+		typeTag(card.Type()),
+	}
+
+	// File extension
+	// Note: it is possible that a user may choose to define a tag that collides
+	// with an, e.g. '.txt.', extension. For now the 'ext:' prefix addresses such
+	// a case, but the query api ~is:
+	//
+	// 		gart-find --ext pdf --tags "...." # find all pdf objects + tags
+	//  or
+	// 		gart-find --no-ext --tags "...."  # find all objects with no extension + ..
+	//
+	// so even if user (for whatever reason) has applied e.g. '.txt' tag, it can
+	// not collide in the tag.Map. Of course, the prefix is necessary.
+	//
+	// ex: "ext:pdf" # .pdf extension
+	// ex: "ext:"    # no extension
+	if card.Type() == system.File {
+		fd, e := fs.GetFileDetails(card.(FileCard).Paths()[0])
+		if e != nil {
+			return nil, err.ErrorWithCause(e, "using card.path[0]")
+		}
+		var ext = "systemic:ext:"
+		if fd.Ext != "" {
+			ext += fd.Ext[1:]
+		}
+		systemics = append(systemics, ext)
+	}
+
+	return systemics, nil
+}
+
+func typeTag(otype system.Otype) string {
+	return fmt.Sprintf("systemic:type:%s", otype.String())
+}
+
+// All gart objects are tagged with the journal date. This function retuns
+// a tag name of form "MMM-dd-YYYY" (e.g. MAR-21-2018).
+func dayTag() string {
+	y, m, d := time.Now().Date()
+	return fmt.Sprintf("systemic:day:%s-%02d-%d", strings.ToLower(m.String()[:3]), d, y)
 }
