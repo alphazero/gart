@@ -1,0 +1,57 @@
+-- Doost!
+
+TODOs as (apr-08-2018)
+
+* minimal system features *
+
+Current design is to have a (projected) front-end for gart that uses the system
+capabilities. This will keep the system internals simple. More complex features
+will be enabled through composition of these minimal system features.
+
+As of commit 0cc56b9f884f8a01f3afbf1c188ccf143cabda9b (gart-2.0 branch):
+	
+	- add/remove file or text objects
+	- index.Card for objects records key, tags and data (paths, text)
+	- index.Tagmap records associated object keys for a given tag 
+	- objects.idx maps object key -> oid
+
+	- IndexManager provides the interface to the above including
+		- add/remove object tags
+		- add/remove file object paths
+		- search for objects by (All, Any, None) tags
+		- load specific object (card) and print details
+
+What is not yet coded:
+
+	- review of index
+>>>		- make sure compress is called on indexManager.Close
+
+	- comprehensive tests - so far have relied on functional tests
+		- tedious comprehensive unit tests
+>>>		- solid functional tests
+
+	- list all objects
+		- by type:
+			1: O(n) n:cards      - walk the cards/ directories
+>>>    		2: O(n) n:wahl.bytes - systemic tagmap
+				* create a tagmap for object type 
+				* search by type convert type search to tag search 
+>>>		    (include) add systemic (file extension, day-tag)
+
+	- track ref-cnt for a given tag
+		2 options for this:
+			1: O(1) - use a tag.dictionary
+				* this requires refactoring 1.0/tagmap.go to tagdict.go
+
+			2: O(1) - update index.Tagmap so header keeps count of set bits
+				* this requires taking all direct access to tagmap.bitmap out of
+				index.go
+				* update header to write count
+
+			3: O(n) - just use the bitmap for the tag
+				* add methods to Wahl to count set bits.
+
+	- list all tags
+		1: O(n) n:cards - walk the cards/ directories
+		2: O(n) n:tags  - use a tag.dictionary
+ 
