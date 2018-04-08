@@ -152,12 +152,76 @@ func OR(bitmaps ...*Wahl) (*Wahl, error) {
 // function's relative computational costs. It is advisable to perform a compress
 // after the bitmap setting is done.
 func (w *Wahl) Set(bits ...uint) bool {
+	return w.set(true, bits...)
+}
+
+// Clear sets the given 'bits' of the bitmap to 0. It is irrelevant whether the bitmap
+// is in compressed or decompressed state.
+//
+// Clear method will not perform a final compress before returning given that
+// function's relative computational costs. It is advisable to perform a compress
+// after the bitmap setting is done.
+func (w *Wahl) Clear(bits ...uint) bool {
+	return w.set(false, bits...)
+}
+
+var clearMask32 = [31]uint32{
+	0x7ffffffe,
+	0x7ffffffd,
+	0x7ffffffb,
+	0x7ffffff7,
+	0x7fffffef,
+	0x7fffffdf,
+	0x7fffffbf,
+	0x7fffff7f,
+	0x7ffffeff,
+	0x7ffffdff,
+	0x7ffffbff,
+	0x7ffff7ff,
+	0x7fffefff,
+	0x7fffdfff,
+	0x7fffbfff,
+	0x7fff7fff,
+	0x7ffeffff,
+	0x7ffdffff,
+	0x7ffbffff,
+	0x7ff7ffff,
+	0x7fefffff,
+	0x7fdfffff,
+	0x7fbfffff,
+	0x7f7fffff,
+	0x7effffff,
+	0x7dffffff,
+	0x7bffffff,
+	0x77ffffff,
+	0x6fffffff,
+	0x5fffffff,
+	0x3fffffff,
+}
+
+// Set the bits to the given bitval (true=>1, false=>0)
+func (w *Wahl) set(bitval bool, bits ...uint) bool {
 	var bitslen = len(bits)
 	if bitslen == 0 {
 		return false
 	}
 	if bitslen > 1 {
 		sort.Uints(bits)
+	}
+
+	var setCase, nopCase uint32
+	var setter func(bitnum uint) (bval uint32)
+	var blockMask uint32
+	if bitval { // Set
+		setCase = 0x02
+		nopCase = 0x03
+		blockMask = 0x80000000
+		setter = func(bitnum uint) uint32 { return 1 << ((bitnum % 31) % 0x1f) }
+	} else { // Clear
+		setCase = 0x03
+		nopCase = 0x02
+		blockMask = 0xc0000000
+		setter = func(bitnum uint) uint32 { return clearMask32[(bitnum%31)%0x1f] }
 	}
 
 	// add additional blocks to w.arr if necessary
@@ -180,11 +244,10 @@ func (w *Wahl) Set(bits ...uint) bool {
 			bmin, bmax, rn = blockRange(w.arr[i], int(bmax))
 		}
 		switch block := w.arr[i]; {
-		case block>>30 == 0x2:
-			// fill-0 needs to be split (into 3 or 2 blocks) or changed into a tile
+		case block>>30 == setCase:
+			// fill-x needs to be split (into 3 or 2 blocks) or changed into a tile
 			if rn == 1 { // change to tile
-				var bit = uint(bitnum % 31)
-				w.arr[i] = 1 << (bit & 0x1f)
+				w.arr[i] = setter(bitnum)
 				continue
 			}
 			// splits
@@ -192,21 +255,19 @@ func (w *Wahl) Set(bits ...uint) bool {
 			rn_z := rn - rn_a - 1
 			switch {
 			case rn_a == 0: // split in 2 - set bit in 1st block
-				var bit = uint(bitnum % 31)
-				w.arr[i] = 1 << (bit & 0x1f)
+				w.arr[i] = setter(bitnum)
 				arr := make([]uint32, len(w.arr)+1)
 				copy(arr, w.arr[:i+1])
-				arr[i+1] = 0x80000000 | uint32(rn_z)
+				arr[i+1] = blockMask | uint32(rn_z)
 				copy(arr[i+2:], w.arr[i+1:])
 				w.arr = arr
 				// update block info
 				bmax = bmin + 30
 			case rn_z == 0: // split in 2 - set bit in 2nd block
 				arr := make([]uint32, len(w.arr)+1)
-				w.arr[i] = 0x80000000 | uint32(rn_a)
+				w.arr[i] = blockMask | uint32(rn_a)
 				copy(arr, w.arr[:i+1])
-				var bit = uint(bitnum % 31)
-				arr[i+1] = 1 << (bit & 0x1f)
+				arr[i+1] = setter(bitnum)
 				copy(arr[i+2:], w.arr[i+1:])
 				w.arr = arr
 				// update block info - current is the new tile added
@@ -215,11 +276,10 @@ func (w *Wahl) Set(bits ...uint) bool {
 				bmax = bmin + 30
 			default: // split in 3 - set bit in middle block
 				arr := make([]uint32, len(w.arr)+2)
-				w.arr[i] = 0x80000000 | uint32(rn_a)
+				w.arr[i] = blockMask | uint32(rn_a)
 				copy(arr, w.arr[:i+1])
-				var bit = uint(bitnum % 31)
-				arr[i+1] = 1 << (bit & 0x1f)
-				arr[i+2] = 0x80000000 | uint32(rn_z)
+				arr[i+1] = setter(bitnum)
+				arr[i+2] = blockMask | uint32(rn_z)
 				copy(arr[i+3:], w.arr[i+1:])
 				w.arr = arr
 				// update block info - current is the new tile added
@@ -227,17 +287,19 @@ func (w *Wahl) Set(bits ...uint) bool {
 				bmin += uint(rn_a * 31)
 				bmax = bmin + 30
 			}
-		case block>>30 == 0x3: // fill-1 is already set, next bit!
+		case block>>30 == nopCase: // fill-x is already bitval filled , next bit!
 			continue
-		default: // tile needs to have bitpos 'bitnum' set
+		default: // tile needs to have bitpos 'bitnum' set to bitval
 			// REVU it is likely faster to just set the bit (even if already set)
-			// than branch to check if it needs to be se.
+			// than branch to check if it needs to be set.
 			// Consequence of this is that this function always returns true 'updated'.
-			var bit = uint(bitnum % 31)
-			w.arr[i] |= 1 << (bit & 0x1f)
+			if bitval {
+				w.arr[i] |= setter(bitnum)
+			} else {
+				w.arr[i] &= setter(bitnum)
+			}
 		}
 	}
-
 	return true
 }
 
@@ -387,6 +449,15 @@ func (w *Wahl) Compress() bool {
 	}
 
 	return false
+}
+
+// REVU nest helper in TODO consolidated LogicalOp (And/Or)
+// maxInt returns the maximum of inputs (a, b)
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // Bitwise logical AND, returns result in a newly allocated bitmap.
