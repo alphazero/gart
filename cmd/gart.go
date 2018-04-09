@@ -13,9 +13,7 @@ import (
 var _ = system.Debug
 
 type Cmd struct {
-	name string
-	//	args []string
-	//	flags  *flag.FlagSet
+	name   string
 	option interface{}
 	run    func() error
 }
@@ -51,18 +49,20 @@ func (cmd *Cmd) parseArgs(args []string) error {
 		return cmd.tagCmd(args[1:])
 	}
 
-	return errors.NotImplemented("cmd.parseArgs")
+	return ErrUsage
 }
-
-func usage() {}
-
-var ErrUsage = errors.Error("usage")
 
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
 
 	var cmd Cmd
-	if e := cmd.parseArgs(os.Args); e != nil {
+	switch e := cmd.parseArgs(os.Args); {
+	case e == nil:
+	case e == ErrUsage:
+		exitOnUsage()
+	case e == ErrInterrupt:
+		exitOnInterrupt()
+	default:
 		exitOnError(e)
 	}
 	if e := cmd.run(); e != nil {
@@ -72,6 +72,13 @@ func main() {
 	os.Exit(0)
 }
 
+/// exit handling //////////////////////////////////////////////////////////////
+
+var (
+	ErrUsage     = errors.Error("usage")
+	ErrInterrupt = errors.Error("interrupted")
+)
+
 // exit codes
 const (
 	EC_OK = iota
@@ -80,6 +87,16 @@ const (
 	EC_INTERRUPT
 	EC_FAULT
 )
+
+func exitOnUsage() {
+	fmt.Fprintf(os.Stderr, "%v\n", errors.NotImplemented("cmd/usage"))
+	os.Exit(EC_USAGE)
+}
+
+func exitOnInterrupt() {
+	fmt.Fprintf(os.Stderr, "%v\n", errors.NotImplemented("cmd/onInterrupt"))
+	os.Exit(EC_USAGE)
+}
 
 func exitOnError(e error) {
 	fmt.Fprintf(os.Stderr, "%v\n", e)
