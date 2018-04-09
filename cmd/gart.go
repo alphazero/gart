@@ -3,13 +3,14 @@
 package main
 
 import (
-	//	"flag"
 	"fmt"
 	"os"
 
 	"github.com/alphazero/gart/syslib/errors"
-	//	"github.com/alphazero/gart/system"
+	"github.com/alphazero/gart/system"
 )
+
+var _ = system.Debug
 
 type Cmd struct {
 	name string

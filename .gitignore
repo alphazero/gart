@@ -1,3 +1,5 @@
+cmd/gart
+cmd/gart-debug
 play/
 temp/
 bin/
