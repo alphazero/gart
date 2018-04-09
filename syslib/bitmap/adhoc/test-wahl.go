@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/alphazero/gart/syslib/bitmap"
+	"github.com/alphazero/gart/syslib/errors"
 )
 
 /// adhoc test /////////////////////////////////////////////////////////////////
@@ -34,11 +35,24 @@ func tryCompressed() {
 		lotsofones[i] = uint(i + 1000)
 	}
 
+	var bits []uint
+
 	var wahl_1 = bitmap.NewWahl()
-	wahl_1.Set(0, 30, 63, 93)
-	wahl_1.Set(lotsofones[:333]...)
+	bits = []uint{0, 30, 63, 93}
+	wahl_1.Set(bits...)
+	verifySet(wahl_1, bits)
+
+	bits = lotsofones[:333]
+	wahl_1.Set(bits...)
+	verifySet(wahl_1, bits)
+
 	wahl_1.Bits().Print(os.Stdout)
+
+	bits = []uint{0, 30, 63, 93}
+	bits = append(bits, lotsofones[:333]...)
 	wahl_1.Compress()
+	verifySet(wahl_1, bits)
+
 	wahl_1.Print(os.Stdout)
 
 	var wahl_2 = bitmap.NewWahl()
@@ -71,18 +85,24 @@ func tryCompressed() {
 	// test Clear
 	fmt.Printf("=== TEST Clear ==================\n")
 	fmt.Printf("=== clear anded bitmap ==========\n")
-	wahl_1_and_2.Clear(0)                // clear tile
-	wahl_1_and_2.Clear(95)               // nop tile
-	wahl_1_and_2.Clear(222)              // clear fill-0 (nop)
-	wahl_1_and_2.Clear(1023, 1025, 1027) // clear fill-1
+	bits = []uint{0, 95, 222, 1023, 1025, 1027}
+	wahl_1_and_2.Clear(bits...)
+	verifyClear(wahl_1_and_2, bits)
+
 	wahl_1_and_2.Compress()
+	verifyClear(wahl_1_and_2, bits)
+
 	wahl_1_and_2.Bits().Print(os.Stdout)
 	wahl_1_and_2.Print(os.Stdout)
 
 	fmt.Printf("=== clear or'd bitmap -==========\n")
-	wahl_1_or_2.Clear(1, 30)                        // clear tile
-	wahl_1_or_2.Clear(1023, 1052, 1111, 1300, 1302) // clear fill-1
+	bits = []uint{1, 30, 1023, 1052, 1111, 1300, 1302}
+	wahl_1_or_2.Clear(bits...)
+	verifyClear(wahl_1_or_2, bits)
+
 	wahl_1_or_2.Compress()
+	verifyClear(wahl_1_or_2, bits)
+
 	wahl_1_or_2.Bits().Print(os.Stdout)
 	wahl_1_or_2.Print(os.Stdout)
 
@@ -102,13 +122,34 @@ func mapArray(a []int) map[int]bool {
 	}
 	return a_map
 }
+
+func verifySet(w *bitmap.Wahl, a []uint) {
+	w_map := mapArray(w.Bits())
+	for _, bit := range a {
+		// bit must be in map
+		if !w_map[int(bit)] {
+			panic(errors.Bug("Set: bit %d is not in bitmap\n", bit))
+		}
+	}
+}
+
+func verifyClear(w *bitmap.Wahl, a []uint) {
+	w_map := mapArray(w.Bits())
+	for _, bit := range a {
+		// bit must -not- be in map
+		if w_map[int(bit)] {
+			panic(errors.Bug("Clear: bit %d is in bitmap\n", bit))
+		}
+	}
+}
+
 func verifyAnd(a, b, and *bitmap.Wahl) {
 	a_map := mapArray(a.Bits())
 	b_map := mapArray(b.Bits())
 	for _, bit := range and.Bits() {
 		// bit must be in both maps for AND
 		if !(a_map[bit] && b_map[bit]) {
-			fmt.Printf("AND: bit %d is not in both maps\n", bit)
+			panic(errors.Bug("AND: bit %d is not in both maps\n", bit))
 		}
 	}
 }
@@ -119,7 +160,7 @@ func verifyOr(a, b, or *bitmap.Wahl) {
 	for _, bit := range or.Bits() {
 		// bit must be in both maps for AND
 		if !(a_map[bit] || b_map[bit]) {
-			fmt.Printf("OR: bit %d is not in either maps\n", bit)
+			panic(errors.Bug("OR: bit %d is not in either maps\n", bit))
 		}
 	}
 }
