@@ -131,7 +131,7 @@ func (h *cardFileHeader) Print(w io.Writer) {
 	fmt.Fprintf(w, "flags:     %08b\n", h.flags)
 }
 func (h *cardFileHeader) Debug() {
-	w := system.Writer
+	w := system.DebugWriter
 	fmt.Fprintf(w, "crc32:     %08x\n", h.crc32)
 	fmt.Fprintf(w, "type:      %s\n", h.otype)
 	fmt.Fprintf(w, "version:   %d\n", h.version)
@@ -165,7 +165,7 @@ func (c *cardFile) Print(w io.Writer) {
 }
 
 func (c *cardFile) Debug() {
-	w := system.Writer
+	w := system.DebugWriter
 	fmt.Fprintf(w, "--- card ---------------\n")
 	c.header.Debug()
 	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
@@ -554,7 +554,7 @@ func (c *textCard) Print(w io.Writer) {
 }
 func (c *textCard) Debug() {
 	c.cardFile.Debug()
-	w := system.Writer
+	w := system.DebugWriter
 	fmt.Fprintf(w, "text-len:  %d (debug)\n", len(c.text))
 	fmt.Fprintf(w, "text:      %q\n", c.text)
 	fmt.Fprintf(w, "------------------------\n\n")
@@ -607,7 +607,7 @@ func (c *fileCard) Print(w io.Writer) {
 	fmt.Fprintf(w, "------------------------\n\n")
 }
 func (c *fileCard) Debug() {
-	c.Print(system.Writer)
+	c.Print(system.DebugWriter)
 }
 
 func (c *fileCard) Paths() []string {

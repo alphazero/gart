@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/alphazero/gart/syslib/errors"
@@ -22,7 +23,7 @@ var Debug bool // = true
 var DebugFlag string
 
 // Set by init(), either /dev/null or stderr (if Debug is true)
-var Writer io.Writer
+var DebugWriter io.Writer
 
 // panics if any errors are encountered.
 func init() {
@@ -30,10 +31,10 @@ func init() {
 		Debug = true
 	}
 	if Debug {
-		Writer = os.Stderr
+		DebugWriter = os.Stderr
 	} else {
 		var e error
-		Writer, e = os.Open(os.DevNull)
+		DebugWriter, e = os.Open(os.DevNull)
 		if e != nil {
 			panic(errors.FaultWithCause(e, "runtime.init: unexpected error"))
 		}
@@ -81,8 +82,8 @@ func init() {
 			panic(errors.Fault("paths[%d]: %q is not safe!", i, path))
 		}
 	}
-	Debugf("system/runtime.go: system.init() ---------------------")
-	Debugf("system.Writer is %s", Writer.(*os.File).Name())
+	Debugf("--- system.init() ---------------------")
+	Debugf("system.DebugWriter is %s", DebugWriter.(*os.File).Name())
 	Debugf("RepoPath:          %q", RepoPath)
 	Debugf("TagsPath:          %q", TagsPath)
 	Debugf("TagDictionaryPath: %q", TagDictionaryPath)
@@ -90,7 +91,7 @@ func init() {
 	Debugf("IndexCardsPath:    %q", IndexCardsPath)
 	Debugf("IndexTagmapsPath:  %q", IndexTagmapsPath)
 	Debugf("ObjectIndexPath:   %q", ObjectIndexPath)
-	Debugf("system/runtime.go: system.init() ------------- end ---")
+	Debugf("--- system.init() ------------- end ---")
 	// end sanity check
 
 	// errors
@@ -104,5 +105,12 @@ func Debugf(fmtstr string, a ...interface{}) {
 	if !Debug {
 		return
 	}
-	fmt.Fprintf(Writer, "debug - "+fmtstr+"\n", a...)
+	var prefix = "debug: "
+	_, file, line, ok := runtime.Caller(1)
+	if ok {
+		gpp := "gart/"
+		cpx := strings.LastIndex(file, gpp) + len(gpp)
+		prefix = fmt.Sprintf("debug [%s:%d]: ", file[cpx:], line)
+	}
+	fmt.Fprintf(DebugWriter, prefix+fmtstr+"\n", a...)
 }
