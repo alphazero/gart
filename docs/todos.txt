@@ -24,23 +24,15 @@ As of commit 0cc56b9f884f8a01f3afbf1c188ccf143cabda9b (gart-2.0 branch):
 What is not yet coded:
 
 	- review of index
->>>		- make sure compress is called on indexManager.Close
+>>> 	address remaning REVUs and TODOS
 
 	- comprehensive tests - so far have relied on functional tests
 		- tedious comprehensive unit tests
 >>>		- solid functional tests
 
-	- list all objects
-		- by type:
-			1: O(n) n:cards      - walk the cards/ directories
->>>    		2: O(n) n:wahl.bytes - systemic tagmap
-				* create a tagmap for object type 
-				* search by type convert type search to tag search 
->>>		    (include) add systemic (file extension, day-tag)
-
 	- track ref-cnt for a given tag
 		2 options for this:
-			1: O(1) - use a tag.dictionary
+>>>			1: O(1) - use a tag.dictionary
 				* this requires refactoring 1.0/tagmap.go to tagdict.go
 
 			2: O(1) - update index.Tagmap so header keeps count of set bits
@@ -53,5 +45,5 @@ What is not yet coded:
 
 	- list all tags
 		1: O(n) n:cards - walk the cards/ directories
-		2: O(n) n:tags  - use a tag.dictionary
+>>>		2: O(n) n:tags  - use a tag.dictionary
  
