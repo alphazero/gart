@@ -463,8 +463,65 @@ func maxInt(a, b int) int {
 // Bitwise logical AND, returns result in a newly allocated bitmap.
 // Returns ErrInvalidArg if input is nil.
 func (w Wahl) And(other *Wahl) (*Wahl, error) {
+	return w.Bitwise(AndOp, other)
+}
+
+// Bitwise logical OR, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+func (w Wahl) Or(other *Wahl) (*Wahl, error) {
+	return w.Bitwise(OrOp, other)
+}
+
+// Bitwise logical XOR, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+func (w Wahl) Xor(other *Wahl) (*Wahl, error) {
+	return w.Bitwise(XorOp, other)
+}
+
+type bitwiseOp byte
+
+const (
+	_ bitwiseOp = iota
+	AndOp
+	OrOp
+	XorOp
+)
+
+func (w Wahl) Bitwise(op bitwiseOp, other *Wahl) (*Wahl, error) {
 	if other == nil {
 		return nil, errors.ErrInvalidArg
+	}
+	var mixpair func(int, uint32) uint32
+	var tilepair func(a, b uint32) uint32
+	var fillpair func(a, b int) uint32
+	switch op {
+	case AndOp:
+		mixpair = func(fval int, val uint32) uint32 {
+			if fval == 1 {
+				return val // val & all 1 is val
+			}
+			return 0 // val & all 0 is 0
+		}
+		tilepair = func(a, b uint32) uint32 { return a & b }
+		fillpair = func(a, b int) uint32 { return uint32((a & b) << 30) }
+	case OrOp:
+		mixpair = func(fval int, val uint32) uint32 {
+			if fval == 1 {
+				return 0x7fffffff // val | all 1 is all 1
+			}
+			return val // val | all 0 is val
+		}
+		tilepair = func(a, b uint32) uint32 { return a | b }
+		fillpair = func(a, b int) uint32 { return uint32((a | b) << 30) }
+	case XorOp:
+		mixpair = func(fval int, val uint32) uint32 {
+			if fval == 1 {
+				return 0x7fffffff ^ val // do xor
+			}
+			return val // val ^ all 0 is val
+		}
+		tilepair = func(a, b uint32) uint32 { return a ^ b }
+		fillpair = func(a, b int) uint32 { return uint32((a ^ b) << 30) }
 	}
 
 	// alias bitmap names for notational convenience
@@ -481,13 +538,13 @@ outer:
 		for {
 			switch {
 			case !(wb1.fill || wb2.fill): // two tiles
-				res[k] = wb1.val & wb2.val
+				res[k] = tilepair(wb1.val, wb2.val) // HERE
 				k++
 				i++
 				j++
 				continue outer
 			case wb1.fill && wb2.fill: // two fills
-				fill := uint32(0x80000000) | uint32((wb1.fval&wb2.fval)<<30) // HERE
+				fill := uint32(0x80000000) | fillpair(wb1.fval, wb2.fval) // HERE
 				switch {
 				case wb1.rlen > wb2.rlen:
 					rlen := uint32(wb2.rlen)
@@ -523,11 +580,12 @@ outer:
 					continue outer
 				}
 			case wb1.fill: // w2 is a tile
-				var tile uint32
-				if wb1.fval == 1 { // HERE correct AND
-					tile = wb2.val
-				}
-				res[k] = tile
+				//				var tile = wb2.val // assume tile 0 HERE
+				//				if wb1.fval == 1 {
+				//					tile = 0x7FFFFFFF
+				//				}
+				//				res[k] = tile
+				res[k] = mixpair(wb1.fval, wb2.val)
 				k++
 				j++
 				if j >= wlen2 {
@@ -544,11 +602,12 @@ outer:
 				}
 				continue outer
 			case wb2.fill:
-				var tile uint32
-				if wb2.fval == 1 { // HERE correct AND
-					tile = wb1.val
-				}
-				res[k] = tile
+				//				var tile = wb2.val // assume tile 0 HERE
+				//				if wb2.fval == 1 {
+				//					tile = 0x7FFFFFFF
+				//				}
+				//				res[k] = tile
+				res[k] = mixpair(wb2.fval, wb1.val)
 				k++
 				i++
 				if i >= wlen1 {
@@ -567,7 +626,6 @@ outer:
 			}
 		}
 	}
-	fmt.Println()
 	wahl := &Wahl{res}
 	wahl.Compress()
 
