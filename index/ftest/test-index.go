@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/alphazero/gart/index"
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
@@ -75,7 +76,7 @@ op_verified:
 	}
 
 	if option.op == "r" && len(tagnames) > 0 {
-		system.Debugf("test-index: ignoring -tags for option 'r'")
+		debug.Printf("test-index: ignoring -tags for option 'r'")
 		goto tags_ok
 	}
 
@@ -286,7 +287,7 @@ func addObject(tags ...string) error {
 	}
 	log("indexed object (type:%s oid:%s key:%d added:%t)", card.Type(), card.Oid().Fingerprint(), card.Key(), added)
 
-	card.Print(system.DebugWriter)
+	card.Print(debug.Writer)
 
 	return nil
 }
@@ -303,7 +304,7 @@ func queryByTag(tags ...string) error {
 		log("closed indexManager")
 	}()
 
-	system.Debugf("==== RUN QUERY =====================================")
+	debug.Printf("==== RUN QUERY =====================================")
 	oids, e := idx.Select(index.All, tags...)
 	if e != nil {
 		exitOnError(errors.ErrorWithCause(e, "test-index: index.Select"))
@@ -316,7 +317,7 @@ func queryByTag(tags ...string) error {
 		}
 		card.Print(os.Stdout)
 	}
-	system.Debugf("==== RUN QUERY ============================= end ===")
+	debug.Printf("==== RUN QUERY ============================= end ===")
 	return nil
 }
 

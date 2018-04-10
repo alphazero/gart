@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/digest"
@@ -22,8 +23,8 @@ import (
 var (
 	ErrIndexInitialized    = errors.Error("index is already initialized")
 	ErrIndexNotInitialized = errors.Error("index is not initialized")
-	ErrObjectIndexExist    = errors.Error("%s exists", system.ObjectIndexPath)
-	ErrObjectIndexNotExist = errors.Error("%s does not exist", system.ObjectIndexPath)
+	ErrObjectIndexExist    = errors.Error("%s exists", repo.ObjectIndexPath)
+	ErrObjectIndexNotExist = errors.Error("%s does not exist", repo.ObjectIndexPath)
 	ErrObjectIndexClosed   = errors.Error("object index is closeed")
 )
 
@@ -48,46 +49,46 @@ func Initialize(reinit bool) error {
 	switch reinit {
 	case true:
 		_debug := func(path string) { _debug0(path, "does not exist") }
-		if e := fs.VerifyFile(system.ObjectIndexPath); e != nil {
-			_debug(system.ObjectIndexPath)
+		if e := fs.VerifyFile(repo.ObjectIndexPath); e != nil {
+			_debug(repo.ObjectIndexPath)
 			return ErrIndexNotInitialized
 		}
-		if e := fs.VerifyDir(system.IndexTagmapsPath); e != nil {
-			_debug(system.IndexTagmapsPath)
+		if e := fs.VerifyDir(repo.IndexTagmapsPath); e != nil {
+			_debug(repo.IndexTagmapsPath)
 			return ErrIndexNotInitialized
 		}
-		if e := fs.VerifyDir(system.IndexCardsPath); e != nil {
-			_debug(system.IndexCardsPath)
+		if e := fs.VerifyDir(repo.IndexCardsPath); e != nil {
+			_debug(repo.IndexCardsPath)
 			return ErrIndexNotInitialized
 		}
-		debug.Printf("warn - rm -rf %q", system.IndexPath)
-		if e := os.RemoveAll(system.IndexPath); e != nil {
+		debug.Printf("warn - rm -rf %q", repo.IndexPath)
+		if e := os.RemoveAll(repo.IndexPath); e != nil {
 			return errors.FaultWithCause(e,
-				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
+				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
 		}
-		if e := os.Mkdir(system.IndexPath, system.DirPerm); e != nil {
+		if e := os.Mkdir(repo.IndexPath, repo.DirPerm); e != nil {
 			return errors.FaultWithCause(e,
-				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
+				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
 		}
 	default:
 		_debug := func(path string) { _debug0(path, "exists") }
-		if e := fs.VerifyFile(system.ObjectIndexPath); e == nil {
-			_debug(system.ObjectIndexPath)
+		if e := fs.VerifyFile(repo.ObjectIndexPath); e == nil {
+			_debug(repo.ObjectIndexPath)
 			return ErrIndexInitialized
 		}
-		if e := fs.VerifyDir(system.IndexTagmapsPath); e == nil {
-			_debug(system.IndexTagmapsPath)
+		if e := fs.VerifyDir(repo.IndexTagmapsPath); e == nil {
+			_debug(repo.IndexTagmapsPath)
 			return ErrIndexInitialized
 		}
-		if e := fs.VerifyDir(system.IndexCardsPath); e == nil {
-			_debug(system.IndexCardsPath)
+		if e := fs.VerifyDir(repo.IndexCardsPath); e == nil {
+			_debug(repo.IndexCardsPath)
 			return ErrIndexInitialized
 		}
 	}
 
-	var dirs = []string{system.IndexCardsPath, system.IndexTagmapsPath}
+	var dirs = []string{repo.IndexCardsPath, repo.IndexTagmapsPath}
 	for _, dir := range dirs {
-		if e := os.Mkdir(dir, system.DirPerm); e != nil {
+		if e := os.Mkdir(dir, repo.DirPerm); e != nil {
 			return errors.FaultWithCause(e,
 				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, dir)
 		}

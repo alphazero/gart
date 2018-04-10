@@ -12,11 +12,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
-	"github.com/alphazero/gart/system"
 )
 
 var ErrTagNotExist = errors.Error("Tag does not exit")
@@ -124,7 +124,7 @@ func (t *Tagmap) Print(w io.Writer) {
 func TagmapFilename(tag string) string {
 	tag = strings.ToLower(tag)
 	hash := fmt.Sprintf("%x.bitmap", digest.SumUint64([]byte(tag)))
-	path := filepath.Join(system.IndexTagmapsPath, hash[:2])
+	path := filepath.Join(repo.IndexTagmapsPath, hash[:2])
 	return filepath.Join(path, hash[2:])
 }
 
@@ -139,7 +139,7 @@ func createTagmap(tag string) (*Tagmap, error) {
 
 	// if dir structure does not exist, create it.
 	dir := filepath.Dir(filename)
-	if e := os.MkdirAll(dir, system.DirPerm); e != nil {
+	if e := os.MkdirAll(dir, repo.DirPerm); e != nil {
 		return nil, err.ErrorWithCause(e, "dir:%q", dir)
 	}
 
@@ -186,7 +186,7 @@ func loadTagmap(tag string, create bool) (*Tagmap, error) {
 	/// open file ///////////////////////////////////////////////////
 
 	filename := TagmapFilename(tag)
-	file, e := os.OpenFile(filename, os.O_RDONLY, system.FilePerm)
+	file, e := os.OpenFile(filename, os.O_RDONLY, repo.FilePerm)
 	if e != nil {
 		if os.IsNotExist(e) {
 			if !create {

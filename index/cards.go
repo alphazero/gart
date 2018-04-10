@@ -13,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
@@ -186,7 +187,7 @@ func (c *cardFile) Debug() {
 
 func cardFilename(oid *system.Oid) string {
 	oidstr := oid.String()
-	return filepath.Join(system.IndexCardsPath, oidstr[:2], oidstr[2:])
+	return filepath.Join(repo.IndexCardsPath, oidstr[:2], oidstr[2:])
 }
 
 func cardExists(oid *system.Oid) bool {
@@ -354,7 +355,7 @@ func LoadCard(oid *system.Oid) (Card, error) {
 	}
 
 	// we're always reading and immediately closing
-	file, e := os.OpenFile(filename, os.O_RDONLY, system.FilePerm)
+	file, e := os.OpenFile(filename, os.O_RDONLY, repo.FilePerm)
 	if e != nil {
 		return nil, err.ErrorWithCause(e, "on open - unexpected")
 	}
@@ -439,7 +440,7 @@ func (c *cardFile) save() (bool, error) {
 		}
 		c.source = cardFilename(c.oid)
 		dir := filepath.Dir(c.source)
-		if e := os.MkdirAll(dir, system.DirPerm); e != nil {
+		if e := os.MkdirAll(dir, repo.DirPerm); e != nil {
 			return false, err.Bug("os.Mkdirall: %s", e)
 		}
 	}

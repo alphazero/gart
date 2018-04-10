@@ -11,6 +11,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -35,7 +36,7 @@ const (
 	mmap_idx_file_code uint64 = 0x8fe452c6d1f55c66 // sha256("mmaped-index-file")[:8]
 )
 
-var oidxFilename string = system.ObjectIndexPath
+var oidxFilename string = repo.ObjectIndexPath
 
 // objectsHeader related consts
 const (
@@ -258,7 +259,7 @@ func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 
 	/// open file and map objectFile /////////////////////////////////
 
-	file, e := os.OpenFile(oidxFilename, oflags, system.FilePerm)
+	file, e := os.OpenFile(oidxFilename, oflags, repo.FilePerm)
 	if e != nil {
 		return nil, e
 	}

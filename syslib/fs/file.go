@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/debug"
-	"github.com/alphazero/gart/system"
 )
 
 /// types //////////////////////////////////////////////////////////////////////
@@ -70,7 +70,7 @@ func GetFileDetails(name string) (*FileDetails, error) {
 // Creates a new file. In-arg ops is OR'd with std. create flags.
 func OpenNewFile(fname string, ops int) (*os.File, error) {
 	flags := os.O_CREATE | os.O_EXCL | os.O_SYNC
-	return os.OpenFile(fname, flags|ops, system.FilePerm)
+	return os.OpenFile(fname, flags|ops, repo.FilePerm)
 }
 
 // Creates a new swap file. If the swap file already exists and
@@ -131,7 +131,7 @@ func ReadFull(fname string) ([]byte, error) {
 
 	// REVU why not just use os.Open(fname) ?
 	var flags = os.O_RDONLY
-	file, e := os.OpenFile(fname, flags, system.FilePerm) // REVU check if perm here makes any diff
+	file, e := os.OpenFile(fname, flags, repo.FilePerm) // REVU check if perm here makes any diff
 	if e != nil {
 		return nil, e
 	}
@@ -165,7 +165,7 @@ func WalkDirs(rootpath string, dirs []string, fn func(string) error) error {
 
 // verify path, that it is a directory, and that the permissions are perm
 func VerifyDir(path string) error {
-	fi, e := verifyFileOrDir(path, system.DirPerm)
+	fi, e := verifyFileOrDir(path, repo.DirPerm)
 	if e != nil {
 		return e
 	}
@@ -178,7 +178,7 @@ func VerifyDir(path string) error {
 
 // verify path, that it is a regular file, and that the permissions are filePerm
 func VerifyFile(path string) error {
-	fi, e := verifyFileOrDir(path, system.FilePerm)
+	fi, e := verifyFileOrDir(path, repo.FilePerm)
 	if e != nil {
 		return e
 	}
