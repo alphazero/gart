@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/system"
 )
 
@@ -12,6 +13,6 @@ func main() {
 
 	// throw some errors:
 
-	system.Debugf("%v", system.ErrIndexExist)
-	system.Debugf("%v", system.ErrIndexNotExist)
+	debug.Printf("%v", system.ErrIndexExist)
+	debug.Printf("%v", system.ErrIndexNotExist)
 }

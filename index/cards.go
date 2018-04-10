@@ -13,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -131,7 +132,7 @@ func (h *cardFileHeader) Print(w io.Writer) {
 	fmt.Fprintf(w, "flags:     %08b\n", h.flags)
 }
 func (h *cardFileHeader) Debug() {
-	w := system.DebugWriter
+	w := debug.Writer
 	fmt.Fprintf(w, "crc32:     %08x\n", h.crc32)
 	fmt.Fprintf(w, "type:      %s\n", h.otype)
 	fmt.Fprintf(w, "version:   %d\n", h.version)
@@ -165,7 +166,7 @@ func (c *cardFile) Print(w io.Writer) {
 }
 
 func (c *cardFile) Debug() {
-	w := system.DebugWriter
+	w := debug.Writer
 	fmt.Fprintf(w, "--- card ---------------\n")
 	c.header.Debug()
 	fmt.Fprintf(w, "oid:       %s\n", c.oid.Fingerprint())
@@ -554,7 +555,7 @@ func (c *textCard) Print(w io.Writer) {
 }
 func (c *textCard) Debug() {
 	c.cardFile.Debug()
-	w := system.DebugWriter
+	w := debug.Writer
 	fmt.Fprintf(w, "text-len:  %d (debug)\n", len(c.text))
 	fmt.Fprintf(w, "text:      %q\n", c.text)
 	fmt.Fprintf(w, "------------------------\n\n")
@@ -607,7 +608,7 @@ func (c *fileCard) Print(w io.Writer) {
 	fmt.Fprintf(w, "------------------------\n\n")
 }
 func (c *fileCard) Debug() {
-	c.Print(system.DebugWriter)
+	c.Print(debug.Writer)
 }
 
 func (c *fileCard) Paths() []string {

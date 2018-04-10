@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alphazero/gart/syslib/bitmap"
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -38,10 +39,10 @@ var (
 // Function may also return an error with cause.
 func Initialize(reinit bool) error {
 
-	system.Debugf("index.Initialize: reinit: %t", reinit)
+	debug.Printf("index.Initialize: reinit: %t", reinit)
 
 	_debug0 := func(path, s string) {
-		system.Debugf("index.Initialize(%t): verify-file:%q %s", reinit, path, s)
+		debug.Printf("index.Initialize(%t): verify-file:%q %s", reinit, path, s)
 	}
 
 	switch reinit {
@@ -59,7 +60,7 @@ func Initialize(reinit bool) error {
 			_debug(system.IndexCardsPath)
 			return ErrIndexNotInitialized
 		}
-		system.Debugf("warn - rm -rf %q", system.IndexPath)
+		debug.Printf("warn - rm -rf %q", system.IndexPath)
 		if e := os.RemoveAll(system.IndexPath); e != nil {
 			return errors.FaultWithCause(e,
 				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, system.IndexPath)
@@ -313,7 +314,7 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		}
 		updated := tagmap.update(setBits, uint(key)) // REVU should we change tagmap?
 		if updated {
-			system.Debugf("updated tagmap (%s) for object (key:%d)", tag, key)
+			debug.Printf("updated tagmap (%s) for object (key:%d)", tag, key)
 		}
 	}
 	return nil
@@ -395,15 +396,15 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 	}
 
 	// XXX debug only
-	system.Debugf("query {select %d for tags %v}", spec, tags)
-	system.Debugf("\tkeys (cnt:%d):", len(keys))
+	debug.Printf("query {select %d for tags %v}", spec, tags)
+	debug.Printf("\tkeys (cnt:%d):", len(keys))
 	for _, key := range keys {
-		system.Debugf("\tkey: %d", key)
+		debug.Printf("\tkey: %d", key)
 	}
-	system.Debugf("\toids (cnt:%d):", len(oids))
+	debug.Printf("\toids (cnt:%d):", len(oids))
 
 	for _, oid := range oids {
-		system.Debugf("\toid: %s", oid.Fingerprint())
+		debug.Printf("\toid: %s", oid.Fingerprint())
 	}
 	// XXX debug only - END
 

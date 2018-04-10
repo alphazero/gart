@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/system"
 )
 
@@ -171,7 +172,7 @@ func VerifyDir(path string) error {
 	if !fi.IsDir() {
 		return fmt.Errorf("err - fs.verifyDir - not a directory: %s", path)
 	}
-	system.Debugf("fs.VerifyDir: %q -- ok", path)
+	debug.Printf("fs.VerifyDir: %q -- ok", path)
 	return nil
 }
 
@@ -184,7 +185,7 @@ func VerifyFile(path string) error {
 	if !fi.Mode().IsRegular() {
 		return fmt.Errorf("err - fs.verifyFile - not a regular file: %s", path)
 	}
-	system.Debugf("fs.VerifyFile: %q -- ok", path)
+	debug.Printf("fs.VerifyFile: %q -- ok", path)
 	return nil
 }
 

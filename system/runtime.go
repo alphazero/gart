@@ -5,14 +5,12 @@
 package system
 
 import (
-	"fmt"
-	"io"
 	"os"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 )
 
@@ -23,27 +21,29 @@ var Debug bool // = true
 var DebugFlag string
 
 // Set by init(), either /dev/null or stderr (if Debug is true)
-var DebugWriter io.Writer
+//var DebugWriter io.Writer
 
 // panics if any errors are encountered.
 func init() {
+	var err = errors.For("system.init")
+
 	if DebugFlag == "true" {
 		Debug = true
 	}
-	if Debug {
-		DebugWriter = os.Stderr
+	if Debug { // distinct if check as sometimes Debug is set to true w/out build flags
+		debug.Writer = os.Stderr
 	} else {
 		var e error
-		DebugWriter, e = os.Open(os.DevNull)
+		debug.Writer, e = os.Open(os.DevNull)
 		if e != nil {
-			panic(errors.FaultWithCause(e, "runtime.init: unexpected error"))
+			panic(err.FaultWithCause(e, "unexpected error"))
 		}
 	}
 
 	// gart repo is in user's home dir.
 	user, e := user.Current()
 	if e != nil {
-		panic(errors.FaultWithCause(e, "runtime.init: unexpected error"))
+		panic(err.FaultWithCause(e, "unexpected error"))
 	}
 
 	/// initialize non-const system vars ////////////////////////////
@@ -82,16 +82,17 @@ func init() {
 			panic(errors.Fault("paths[%d]: %q is not safe!", i, path))
 		}
 	}
-	Debugf("--- system.init() ---------------------")
-	Debugf("system.DebugWriter is %s", DebugWriter.(*os.File).Name())
-	Debugf("RepoPath:          %q", RepoPath)
-	Debugf("TagsPath:          %q", TagsPath)
-	Debugf("TagDictionaryPath: %q", TagDictionaryPath)
-	Debugf("IndexPath:         %q", IndexPath)
-	Debugf("IndexCardsPath:    %q", IndexCardsPath)
-	Debugf("IndexTagmapsPath:  %q", IndexTagmapsPath)
-	Debugf("ObjectIndexPath:   %q", ObjectIndexPath)
-	Debugf("--- system.init() ------------- end ---")
+	debug.Printf("debug.Writer is %s", debug.Writer.(*os.File).Name())
+	debug := debug.For("system.init")
+	debug.Printf("--- system.init() ---------------------")
+	debug.Printf("RepoPath:          %q", RepoPath)
+	debug.Printf("TagsPath:          %q", TagsPath)
+	debug.Printf("TagDictionaryPath: %q", TagDictionaryPath)
+	debug.Printf("IndexPath:         %q", IndexPath)
+	debug.Printf("IndexCardsPath:    %q", IndexCardsPath)
+	debug.Printf("IndexTagmapsPath:  %q", IndexTagmapsPath)
+	debug.Printf("ObjectIndexPath:   %q", ObjectIndexPath)
+	debug.Printf("--- system.init() ------------- end ---")
 	// end sanity check
 
 	// errors
@@ -99,18 +100,4 @@ func init() {
 	ErrIndexExist = errors.Error("%q exists", IndexPath)
 	ErrIndexNotExist = errors.Error("%q does not exist", IndexPath)
 
-}
-
-func Debugf(fmtstr string, a ...interface{}) {
-	if !Debug {
-		return
-	}
-	var prefix = "debug: "
-	_, file, line, ok := runtime.Caller(1)
-	if ok {
-		gpp := "gart/"
-		cpx := strings.LastIndex(file, gpp) + len(gpp)
-		prefix = fmt.Sprintf("debug [%s:%d]: ", file[cpx:], line)
-	}
-	fmt.Fprintf(DebugWriter, prefix+fmtstr+"\n", a...)
 }
