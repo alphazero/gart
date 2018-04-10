@@ -48,7 +48,7 @@ const (
 
 func init() {
 	// verify system size assumptions central to objects.idx file
-	if system.OidSize != 32 {
+	if system.OidSize != digest.HashSize {
 		panic(errors.Fault("index/objects.go: Oid-Size:%d", system.OidSize))
 	}
 }

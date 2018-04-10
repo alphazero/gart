@@ -10,13 +10,12 @@ import (
 
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
-	"github.com/alphazero/gart/system"
 )
 
 /// consts and vars ///////////////////////////////////////////////////////////
 
 const (
-	HashSize = system.OidSize
+	HashSize = 32 // B2B is 64B
 )
 
 /// blob cyrtographic hash ////////////////////////////////////////////////////
