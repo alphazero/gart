@@ -3,14 +3,15 @@
 package main
 
 import (
+	"context"
+
 	"github.com/alphazero/gart/syslib/errors"
 )
 
-func (cmd *Cmd) helpCmd([]string) error {
-	cmd.run = helpCommand
-	return nil
+func parseHelpArgs(args []string) (Command, Option, error) {
+	return helpCommand, nil, nil
 }
 
-func helpCommand() error {
-	return errors.NotImplemented("cmd/helpCommand")
+func helpCommand(context.Context, Option) error {
+	return errors.NotImplemented("cmd.helpCommand")
 }

@@ -3,16 +3,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 
 	"github.com/alphazero/gart/syslib/errors"
 )
 
 type listOption struct {
-	force bool
+	force bool // XXX
 }
 
-func (cmd *Cmd) listCmd(args []string) error {
+func parseListArgs(args []string) (Command, Option, error) {
 	var option listOption
 
 	flags := flag.NewFlagSet("gart-list", flag.ExitOnError)
@@ -21,11 +22,15 @@ func (cmd *Cmd) listCmd(args []string) error {
 		flags.Parse(args[1:])
 	}
 
-	cmd.option = option
-	cmd.run = listCommand
-	return nil
+	return listCommand, option, nil
 }
 
-func listCommand() error {
-	return errors.NotImplemented("cmd/listCommand")
+func listCommand(ctx context.Context, option0 Option) error {
+	var err = errors.For("cmd.listCommand")
+
+	_, ok := option0.(listOption)
+	if !ok {
+		return err.InvalidArg("expecting listOption - %v", option0)
+	}
+	return err.NotImplemented()
 }

@@ -3,16 +3,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 
 	"github.com/alphazero/gart/syslib/errors"
 )
 
 type tagOption struct {
-	force bool
+	force bool // XXX
 }
 
-func (cmd *Cmd) tagCmd(args []string) error {
+func parseTagArgs(args []string) (Command, Option, error) {
 	var option tagOption
 
 	flags := flag.NewFlagSet("gart-tag", flag.ExitOnError)
@@ -21,11 +22,15 @@ func (cmd *Cmd) tagCmd(args []string) error {
 		flags.Parse(args[1:])
 	}
 
-	cmd.option = option
-	cmd.run = tagCommand
-	return nil
+	return tagCommand, option, nil
 }
 
-func tagCommand() error {
-	return errors.NotImplemented("cmd/tagCommand")
+func tagCommand(ctx context.Context, option0 Option) error {
+	var err = errors.For("cmd.tagCommand")
+
+	_, ok := option0.(tagOption)
+	if !ok {
+		return err.InvalidArg("expecting tagOption - %v", option0)
+	}
+	return err.NotImplemented()
 }

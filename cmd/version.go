@@ -3,17 +3,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go/build"
 	"os"
 )
 
-func (cmd *Cmd) versionCmd([]string) error {
-	cmd.run = versionCommand
-	return nil
+func parseVersionArgs(args []string) (Command, Option, error) {
+	return versionCommand, nil, nil
 }
 
-func versionCommand() error {
+func versionCommand(context.Context, Option) error {
 	hos := build.Default.GOOS
 	arch := build.Default.GOARCH
 	fmt.Fprintf(os.Stdout,

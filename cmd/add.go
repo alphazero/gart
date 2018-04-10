@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 
 	"github.com/alphazero/gart/syslib/errors"
@@ -14,7 +15,7 @@ type addOption struct {
 	tags string
 }
 
-func (cmd *Cmd) addCmd(args []string) error {
+func parseAddArgs(args []string) (Command, Option, error) {
 	var option addOption
 	flags := flag.NewFlagSet("gart-add", flag.ExitOnError)
 	flags.StringVar(&option.file, "file", option.file, "path of file object to archive")
@@ -24,11 +25,15 @@ func (cmd *Cmd) addCmd(args []string) error {
 		flags.Parse(args[1:])
 	}
 
-	cmd.option = option
-	cmd.run = addCommand
-	return nil
+	return addCommand, option, nil
 }
 
-func addCommand() error {
-	return errors.NotImplemented("cmd/addCommand")
+func addCommand(ctx context.Context, option Option) error {
+	var err = errors.For("cmd.addCommand")
+
+	option, ok := option.(addOption)
+	if !ok {
+		return err.InvalidArg("expecting addOption - %v", option)
+	}
+	return err.NotImplemented()
 }

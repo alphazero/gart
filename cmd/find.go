@@ -3,16 +3,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 
 	"github.com/alphazero/gart/syslib/errors"
 )
 
 type findOption struct {
-	force bool
+	force bool // XXX
 }
 
-func (cmd *Cmd) findCmd(args []string) error {
+func parseFindArgs(args []string) (Command, Option, error) {
 	var option findOption
 
 	flags := flag.NewFlagSet("gart-find", flag.ExitOnError)
@@ -21,11 +22,15 @@ func (cmd *Cmd) findCmd(args []string) error {
 		flags.Parse(args[1:])
 	}
 
-	cmd.option = option
-	cmd.run = findCommand
-	return nil
+	return findCommand, option, nil
 }
 
-func findCommand() error {
-	return errors.NotImplemented("cmd/findCommand")
+func findCommand(ctx context.Context, option Option) error {
+	var err = errors.For("cmd.findCommand")
+
+	option, ok := option.(findOption)
+	if !ok {
+		return err.InvalidArg("expecting findOption - %v", option)
+	}
+	return err.NotImplemented()
 }

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -12,60 +13,61 @@ import (
 
 var _ = system.Debug
 
-type Cmd struct {
-	name   string
-	option interface{}
-	run    func() error
-}
+type Command func(context.Context, Option) error
+type Option interface{}
 
-func (cmd *Cmd) parseArgs(args []string) error {
+func parseArgs(args []string) (Command, Option, error) {
+	var cname string
+
 	if len(args) == 1 {
-		cmd.name = "help"
+		cname = "help"
 	} else {
 		if args[1][0] == '-' {
-			return ErrUsage
+			return nil, nil, ErrUsage
 		}
-		cmd.name = args[1]
+		cname = args[1]
 	}
 
-	switch cmd.name {
+	switch cname {
 	case "help":
-		return cmd.helpCmd(nil)
+		return parseHelpArgs(nil)
 	case "version":
-		return cmd.versionCmd(nil)
+		return parseVersionArgs(nil)
 	case "list":
-		return cmd.listCmd(args[1:])
+		return parseListArgs(args[1:])
 	case "init":
-		return cmd.initCmd(args[1:])
+		return parseInitArgs(args[1:])
 	case "add":
-		return cmd.addCmd(args[1:])
+		return parseAddArgs(args[1:])
 	case "delete":
-		return cmd.deleteCmd(args[1:])
+		return parseDeleteArgs(args[1:])
 	case "update":
-		return cmd.updateCmd(args[1:])
+		return parseUpdateArgs(args[1:])
 	case "find":
-		return cmd.findCmd(args[1:])
+		return parseFindArgs(args[1:])
 	case "tag":
-		return cmd.tagCmd(args[1:])
+		return parseTagArgs(args[1:])
 	}
 
-	return ErrUsage
+	return nil, nil, ErrUsage
 }
 
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
 
-	var cmd Cmd
-	switch e := cmd.parseArgs(os.Args); {
-	case e == nil:
-	case e == ErrUsage:
+	command, option, e := parseArgs(os.Args)
+	switch e {
+	case nil:
+	case ErrUsage:
 		exitOnUsage()
-	case e == ErrInterrupt:
+	case ErrInterrupt:
 		exitOnInterrupt()
 	default:
 		exitOnError(e)
 	}
-	if e := cmd.run(); e != nil {
+
+	var ctx = context.Background()
+	if e := command(ctx, option); e != nil {
 		exitOnError(e)
 	}
 

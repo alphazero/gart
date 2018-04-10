@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 
 	"github.com/alphazero/gart/syslib/errors"
@@ -12,7 +13,7 @@ type deleteOption struct {
 	force bool
 }
 
-func (cmd *Cmd) deleteCmd(args []string) error {
+func parseDeleteArgs(args []string) (Command, Option, error) {
 	var option deleteOption
 
 	flags := flag.NewFlagSet("gart-delete", flag.ExitOnError)
@@ -21,11 +22,15 @@ func (cmd *Cmd) deleteCmd(args []string) error {
 		flags.Parse(args[1:])
 	}
 
-	cmd.option = option
-	cmd.run = deleteCommand
-	return nil
+	return deleteCommand, option, nil
 }
 
-func deleteCommand() error {
-	return errors.NotImplemented("cmd/deleteCommand")
+func deleteCommand(ctx context.Context, option Option) error {
+	var err = errors.For("cmd.deleteCommand")
+
+	option, ok := option.(deleteOption)
+	if !ok {
+		return err.InvalidArg("expecting deleteOption - %v", option)
+	}
+	return err.NotImplemented()
 }
