@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
 )
@@ -49,6 +50,7 @@ func parseArgs(args []string) (Command, Option, error) {
 		return parseTagArgs(args[1:])
 	}
 
+	debug.Printf("unknown command - args: %q", args)
 	return nil, nil, ErrUsage
 }
 
