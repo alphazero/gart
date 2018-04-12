@@ -1,0 +1,7 @@
+#!/bin/bash
+
+echo "build gart"
+build
+echo "build gart (debug)"
+build-debug
+

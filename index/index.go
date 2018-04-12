@@ -118,8 +118,8 @@ type indexManager struct {
 
 type IndexManager interface {
 	UsingTags(tags ...string) error
-	IndexText(text string, tags ...string) (Card, bool, error)
-	IndexFile(filename string, tags ...string) (Card, bool, error)
+	IndexText(bool, string, ...string) (Card, bool, error)
+	IndexFile(bool, string, ...string) (Card, bool, error)
 	Select(spec selectSpec, tags ...string) ([]*system.Oid, error)
 	DeleteObject(oid *system.Oid) (bool, error)
 	DeleteObjectsByTag(tags ...string) (int, error)
@@ -192,37 +192,51 @@ func (idx *indexManager) UsingTags(tags ...string) error {
 	return nil
 }
 
+func (idx *indexManager) StatText(text string) (*system.Oid, error) {
+	md := digest.Sum([]byte(text))
+	oid, e := system.NewOid(md[:])
+	if e != nil {
+		panic(errors.Bug("indexManager.StatText: %v", e))
+	}
+	return oid, nil
+}
+
 // Indexes the text object. If object is new it is added with tags specified. If not
 // updated tags (if any) are added. See indexObject.
-func (idx *indexManager) IndexText(text string, tags ...string) (Card, bool, error) {
+func (idx *indexManager) IndexText(strict bool, text string, tags ...string) (Card, bool, error) {
 	var err = errors.For("indexManager.IndexText")
 
+	// text specific
 	md := digest.Sum([]byte(text))
 	oid, e := system.NewOid(md[:])
 	if e != nil {
 		panic(err.BugWithCause(e, "unexpected"))
 	}
 
+	var isNew bool
 	var card Card
-	var isNew = !cardExists(oid)
-	if isNew {
+	if cardExists(oid) {
+		if strict {
+			return nil, false, err.Error("object exists - oid:%s", oid.Fingerprint())
+		}
+		card, e = LoadCard(oid)
+		if e != nil {
+			return card, false, e
+		}
+	} else {
 		var e error
 		card, e = NewTextCard(oid, text)
 		if e != nil {
 			return nil, true, err.BugWithCause(e, "unexpected")
 		}
-	} else {
-		card, e = LoadCard(oid)
-		if e != nil {
-			return card, false, e
-		}
+		isNew = true
 	}
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }
 
 // Indexes the file object. If object is new it is added with tags specified. If not
 // updated tags (if any), or the filename (if new) are added. See indexObject.
-func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool, error) {
+func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string) (Card, bool, error) {
 	var err = errors.For("indexManager.IndexFile")
 
 	if !filepath.IsAbs(filename) {
@@ -236,15 +250,13 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 	if e != nil {
 		panic(err.BugWithCause(e, "unexpected"))
 	}
+
+	var isNew bool
 	var card Card
-	var isNew = !cardExists(oid)
-	if isNew {
-		var e error
-		card, e = NewFileCard(oid, filename)
-		if e != nil {
-			return card, true, err.BugWithCause(e, "on new card")
+	if cardExists(oid) {
+		if strict {
+			return nil, false, err.Error("object exists - oid:%s", oid.Fingerprint())
 		}
-	} else {
 		card, e = LoadCard(oid)
 		if e != nil {
 			return card, false, e
@@ -254,6 +266,13 @@ func (idx *indexManager) IndexFile(filename string, tags ...string) (Card, bool,
 		if e != nil {
 			return card, false, e
 		}
+	} else {
+		var e error
+		card, e = NewFileCard(oid, filename)
+		if e != nil {
+			return nil, true, err.BugWithCause(e, "unexpected")
+		}
+		isNew = true
 	}
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }

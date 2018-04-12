@@ -3,62 +3,19 @@
 package gart
 
 import (
-	. "context"
+	"context"
+	"path/filepath"
 
 	"github.com/alphazero/gart/index"
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/system"
 )
 
 var _ = errors.For
 var _ = debug.For
 
-// Session represents a multi-op gart session.
-type Session interface {
-	AddText(ctx Context, text string, tags ...string) (index.Card, error)
-	AddFile(ctx Context, filename string, tags ...string) (index.Card, error)
-
-	Log(ctx Context) []string
-	Close(ctx Context) error
-}
-
-type session struct {
-}
-
-func OpenSession(ctx Context) Session {
-	//	var err = errors.For("gart.OpenSession")
-	var debug = debug.For("gart.OpenSession")
-	debug.Printf("called - ctx:%v", ctx)
-
-	s := &session{}
-
-	return s
-}
-
-func (s *session) AddText(ctx Context, text string, tags ...string) (index.Card, error) {
-	var err = errors.For("gart#session.AddText")
-	var debug = debug.For("gart#session.AddText")
-	debug.Printf("called - text:%q tags: %q")
-
-	return nil, err.NotImplemented()
-}
-func (s *session) AddFile(ctx Context, filename string, tags ...string) (index.Card, error) {
-	var err = errors.For("gart#session.Close")
-	var debug = debug.For("gart#session.Close")
-	debug.Printf("called - filename:%q tags: %q")
-
-	return nil, err.NotImplemented()
-}
-func (s *session) Log(ctx Context) []string {
-	return []string{}
-}
-func (s *session) Close(ctx Context) error {
-	var err = errors.For("gart#session.Close")
-	var debug = debug.For("gart#session.Close")
-	debug.Printf("called")
-
-	return err.NotImplemented()
-}
+/// stateless ops //////////////////////////////////////////////////////////////
 
 func InitRepo(force bool) (bool, error) {
 	//	var err = errors.For("gart.InitRepo")
@@ -75,4 +32,123 @@ func InitRepo(force bool) (bool, error) {
 		return false, e
 	}
 	return true, nil
+}
+
+/// Session ////////////////////////////////////////////////////////////////////
+
+// Session represents a multi-op gart session.
+type Session interface {
+	// AddObject (strict, type, spec, tags...)
+	AddObject(bool, system.Otype, string, ...string) (index.Card, bool, error)
+
+	Log() []string
+	Close() error
+}
+
+type session struct {
+	ctx     context.Context
+	op      Op
+	idx     index.IndexManager
+	idxMode index.OpMode
+}
+
+func OpenSession(ctx context.Context, op Op) (Session, error) {
+	var err = errors.For("gart.OpenSession")
+	var debug = debug.For("gart.OpenSession")
+	debug.Printf("called - ctx:%v op:%08b", ctx, op)
+
+	var idxMode index.OpMode
+	switch op {
+	case Add, Update, Compact, Tag:
+		idxMode = index.Write
+	case Find, List:
+		idxMode = index.Read
+	}
+
+	idx, e := index.OpenIndexManager(index.Write)
+	if e != nil {
+		return nil, err.ErrorWithCause(e, "op:%s idxMode:%s", op, idxMode)
+	}
+
+	s := &session{
+		ctx:     ctx,
+		op:      op,
+		idx:     idx,
+		idxMode: idxMode,
+	}
+
+	// REVU important
+	// TODO add session shutdown handler to context
+
+	return s, nil
+}
+
+func (s *session) Close() error {
+	var err = errors.For("gart#session.Close")
+	var debug = debug.For("gart#session.Close")
+	debug.Printf("called")
+
+	if e := s.idx.Close(); e != nil {
+		return err.ErrorWithCause(e, "op:%s idxMode:%s", s.op, s.idxMode)
+	}
+	return nil
+}
+
+func (s *session) AddObject(strict bool, otype system.Otype, spec string, tags ...string) (index.Card, bool, error) {
+	var err = errors.For("gart#session.AddObject")
+	var debug = debug.For("gart#session.AddObject")
+	debug.Printf("called - strict:%t otype:%s spec:%q tags: %q", strict, otype, spec, tags)
+
+	switch otype {
+	case system.Text:
+		return s.idx.IndexText(strict, spec, tags...)
+	case system.File:
+		path, e := filepath.Abs(spec)
+		if e != nil {
+			return nil, false, err.ErrorWithCause(e, "unexpected error on filepath.Abs")
+		}
+		return s.idx.IndexFile(strict, path, tags...)
+	case system.URL, system.URI:
+		return nil, false, err.InvalidArg("%s type not supported", otype)
+	}
+	panic(err.Bug("unreachable"))
+}
+
+func (s *session) Log() []string {
+	return []string{}
+}
+
+/// Op /////////////////////////////////////////////////////////////////////////
+
+type Op byte
+
+const (
+	_ Op = iota
+	Add
+	Remove
+	Update
+	Find // REVU diff between find and list is ?
+	List
+	Tag
+	Compact
+)
+
+func (v Op) String() string {
+	switch v {
+	case Add:
+		return "Op:Add"
+	case Remove:
+		return "Op:Remove"
+	case Update:
+		return "Op:Update"
+	case Find:
+		return "Op:Find"
+	case List:
+		return "Op:List"
+	case Tag:
+		return "Op:Tag"
+	case Compact:
+		return "Op:Compact"
+	}
+	panic(errors.Bug("unknown gart.Op: %d", v))
 }
