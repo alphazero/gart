@@ -1,4 +1,4 @@
 #!/bin/bash
 
-rm gart
-rm gart-debug
+rm $GOPATH/src/github.com/alphazero/gart/cmd/gart
+rm $GOPATH/src/github.com/alphazero/gart/cmd/gart-debug

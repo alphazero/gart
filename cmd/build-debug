@@ -1,6 +1,10 @@
 #!/bin/bash
 
+export cmdpath=$GOPATH/src/github.com/alphazero/gart/cmd
+export outfile=$cmdpath/gart-debug
 go build \
 	-ldflags="-X github.com/alphazero/gart/system.DebugFlag=true" \
-	-o $GOPATH/src/github.com/alphazero/gart/cmd/gart-debug \
-	*.go
+	-o $outfile \
+	$cmdpath/*.go
+
+chmod +x $outfile
