@@ -3,15 +3,17 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/alphazero/gart"
 	"github.com/alphazero/gart/index"
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
-	"github.com/alphazero/gart/syslib/util"
 	"github.com/alphazero/gart/system"
 	"github.com/alphazero/gart/system/log"
 )
@@ -108,21 +110,25 @@ func addSpecifiedObjects(ctx context.Context, option addOption) error {
 
 	log.Log("session - begin")
 
-	tags := parseTags(option.tagspec)
-	for _, text := range option.args {
-		card, added, e := session.AddObject(option.strict, option.otype, text, tags...)
+	var tags = parseTags(option.tagspec)
+	for _, spec := range option.args {
+		if len(spec) == 0 {
+			continue
+		}
+		card, added, e := session.AddObject(option.strict, option.otype, spec, tags...)
 		if e != nil {
 			if index.IsObjectExistErr(e) {
-				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), util.ShortenStr(text, 24))
+				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), spec)
 				continue
 			}
 			return e
 		}
-		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, util.ShortenStr(text, 24))
+		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, spec)
 	}
 	return nil
 }
 
+// TODO signal handling
 func addStreamedObjects(ctx context.Context, option addOption) error {
 	var err = errors.For("cmd.addStreamedObjects")
 	var debug = debug.For("cmd.addStreamedObjects")
@@ -134,7 +140,29 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 	defer session.Close()
 	debug.Printf("using session: %v", session)
 
-	// TODO read stdin until closed
-
-	return err.NotImplemented()
+	var tags = parseTags(option.tagspec)
+	var r = bufio.NewReader(os.Stdin)
+	for {
+		line, e := r.ReadBytes('\n')
+		if e != nil {
+			break
+		}
+		spec := string(line[:len(line)-1])
+		if len(spec) == 0 {
+			continue
+		}
+		card, added, e := session.AddObject(option.strict, option.otype, spec, tags...)
+		if e != nil {
+			if index.IsObjectExistErr(e) {
+				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), spec)
+				continue
+			}
+			return e
+		}
+		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, spec)
+	}
+	if e == io.EOF {
+		return nil
+	}
+	return e
 }

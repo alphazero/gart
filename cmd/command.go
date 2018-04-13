@@ -86,7 +86,8 @@ func main() {
 		exitOnError(e)
 	}
 
-	if option.isVerbose() {
+	// help, etc. have no flags
+	if option != nil && option.isVerbose() {
 		log.Verbose(os.Stderr)
 	}
 
