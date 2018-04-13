@@ -15,6 +15,7 @@ import (
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
+	"github.com/alphazero/gart/syslib/util"
 	"github.com/alphazero/gart/system" // TODO  REVU decision for OID in system ..
 )
 
@@ -217,7 +218,7 @@ func (idx *indexManager) IndexText(strict bool, text string, tags ...string) (Ca
 	var card Card
 	if cardExists(oid) {
 		if strict {
-			return nil, false, err.Error("object exists - oid:%s", oid.Fingerprint())
+			return nil, false, err.Error("text object exists - oid:%s - %q", oid.Fingerprint(), util.ShortenStr(text, 24))
 		}
 		card, e = LoadCard(oid)
 		if e != nil {

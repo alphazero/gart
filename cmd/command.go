@@ -17,6 +17,10 @@ var _ = system.Debug
 type Command func(context.Context, Option) error
 type Option interface{}
 
+func log(fmtstr string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, fmtstr, a...)
+}
+
 func parseArgs(args []string) (Command, Option, error) {
 	var cname string
 
