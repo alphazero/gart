@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	//	"runtime"
 	"sort"
 	"syscall"
 	"time"
@@ -43,6 +44,8 @@ const (
 	objectsHeaderSize = 0x1000
 	objectsPageSize   = 0x1000
 	objectsRecordSize = system.OidSize
+	objectsPerPage    = objectsPageSize / objectsRecordSize
+	ocntExtendMask    = objectsPerPage - 1
 )
 
 /// objects.idx specific inits /////////////////////////////////////////////////
@@ -235,6 +238,7 @@ func createObjectIndex() error {
 // In case of error results, the oidxFile pointer will be nil and file closed.
 func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 
+	// fmt.Fprintf(os.Stdout, "openObjectIndex(%s) called\n", opMode)
 	/// verify opmod and init accordingly ///////////////////////////
 
 	if e := opMode.verify(); e != nil {
@@ -286,15 +290,9 @@ func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 		return nil, e
 	}
 
-	return oidx, nil
-}
+	//	oidx.header.Print(os.Stdout)
 
-// closeIndex closes the index, at which point the reference to the pointer
-// should be discarded.
-//
-// Returns index.ErrObjectIndexClosed if index has already been closed.
-func (oidx *oidxFile) closeIndex() error {
-	return oidx.unmapAndClose()
+	return oidx, nil
 }
 
 // TODO change key to int64
@@ -315,7 +313,7 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 	}
 
 	var offset = ((oidx.header.ocnt) << 5) + objectsHeaderSize
-	if oidx.header.ocnt&0x7f == 0 {
+	if oidx.header.ocnt&ocntExtendMask == 0 {
 		// need new page
 		if e := oidx.extendBy(objectsPageSize); e != nil {
 			return key, e
@@ -436,6 +434,10 @@ next_key:
 //
 // Returns
 func (oidx *oidxFile) mmap(offset int64, length int, remap bool) error {
+	//	fmt.Fprintf(os.Stdout, "mmap called\n")
+	//	pc, file, line, ok := runtime.Caller(1)
+	//	fmt.Fprintf(os.Stdout, "%d %s %d %t\n", pc, file, line, ok)
+	//	oidx.header.Print(os.Stdout)
 	if oidx.buf != nil {
 		if !remap {
 			return errors.Bug("oidxFile.mmap: mmap with existing mapping - remap: %t", remap)
@@ -465,12 +467,17 @@ func (oidx *oidxFile) mmap(offset int64, length int, remap bool) error {
 }
 
 func (oidx *oidxFile) unmap() error {
+	//	fmt.Fprintf(os.Stdout, "unmap called\n")
+	//	pc, file, line, ok := runtime.Caller(1)
+	//	fmt.Fprintf(os.Stdout, "%d %s %d %t\n", pc, file, line, ok)
+	//	oidx.header.Print(os.Stdout)
 	if oidx.buf == nil {
 		return errors.Bug("oidxFile.unmap: buf is nil")
 	}
-	if oidx.modified {
-		return errors.Bug("oidxFile.unmap: modified is true")
-	}
+	// BUG oidx.mmap calls this directly on remap
+	//	if oidx.modified {
+	//		return errors.Bug("oidxFile.unmap: modified is true")
+	//	}
 	if e := syscall.Munmap(oidx.buf); e != nil {
 		return errors.ErrorWithCause(e, "oidxFile.unmap")
 	}
@@ -479,17 +486,26 @@ func (oidx *oidxFile) unmap() error {
 	return nil
 }
 
-func (oidx *oidxFile) unmapAndClose() error {
+// closeIndex closes the index, at which point the reference to the pointer
+// should be discarded. If modified, the header info is reencoded to the mapped
+// buffer before unmapping and closing the file. (This is because the header is
+// copied from mapped buffer on open/mmap and updates to header fields are not
+// direclty recorded on the mapped buffer.)
+//
+// Returns index.ErrObjectIndexClosed if index has already been closed.
+func (oidx *oidxFile) closeIndex() error {
+	//func (oidx *oidxFile) unmapAndClose() error {
+	var err = errors.For("oidxFile.unmapAndClose")
 	if oidx.modified {
 		oidx.header.updated = time.Now().UnixNano()
 		oidx.header.encode(oidx.buf)
 		oidx.modified = false
 	}
 	if e := oidx.unmap(); e != nil {
-		return errors.ErrorWithCause(e, "oidxFile.unmapAndClose")
+		return err.ErrorWithCause(e, "oidx.unmap")
 	}
 	if e := oidx.file.Close(); e != nil {
-		return errors.ErrorWithCause(e, "oidxFile.unmapAndClose")
+		return err.ErrorWithCause(e, "file.Close")
 	}
 	oidx.header = nil
 	oidx.file = nil
@@ -503,24 +519,24 @@ func (oidx *oidxFile) unmapAndClose() error {
 // oidxFile.extendBy extends the file size by delta, and then remaps the
 // oidxFile buffer.
 func (oidx *oidxFile) extendBy(delta int64) error {
-
+	//	fmt.Fprintf(os.Stdout, "extendBy(%d) called\n", delta)
 	errorWithCause := errors.ErrorWithCause
 
 	size := oidx.finfo.Size() + delta
 	if e := oidx.file.Truncate(size); e != nil {
-		oidx.unmapAndClose()
+		oidx.closeIndex()
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 	// update state
 	finfo, e := oidx.file.Stat()
 	if e != nil {
-		oidx.unmapAndClose()
+		oidx.closeIndex()
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 	oidx.finfo = finfo
 	// remap
 	if e := oidx.mmap(0, int(oidx.finfo.Size()), true); e != nil {
-		oidx.unmapAndClose()
+		oidx.closeIndex()
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 

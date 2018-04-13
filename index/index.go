@@ -67,15 +67,16 @@ func (v Error) Error() string {
 //
 // Function may also return an error with cause.
 func Initialize(reinit bool) error {
-
-	debug.Printf("index.Initialize: reinit: %t", reinit)
+	var debug = debug.For("index.Initialize")
+	debug.Printf("reinit: %t", reinit)
 
 	_debug0 := func(path, s string) {
-		debug.Printf("index.Initialize(%t): verify-file:%q %s", reinit, path, s)
+		debug.Printf("reinit:%t - verify-file:%q %s", reinit, path, s)
 	}
 
 	switch reinit {
 	case true:
+		//		println(time.Now().UnixNano())
 		_debug := func(path string) { _debug0(path, "does not exist") }
 		if e := fs.VerifyFile(repo.ObjectIndexPath); e != nil {
 			_debug(repo.ObjectIndexPath)
@@ -89,15 +90,18 @@ func Initialize(reinit bool) error {
 			_debug(repo.IndexCardsPath)
 			return ErrIndexNotInitialized
 		}
+		//		println(time.Now().UnixNano())
 		debug.Printf("warn - rm -rf %q", repo.IndexPath)
 		if e := os.RemoveAll(repo.IndexPath); e != nil {
 			return errors.FaultWithCause(e,
 				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
 		}
+		//		println(time.Now().UnixNano())
 		if e := os.Mkdir(repo.IndexPath, repo.DirPerm); e != nil {
 			return errors.FaultWithCause(e,
 				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
 		}
+		//		println(time.Now().UnixNano())
 	default:
 		_debug := func(path string) { _debug0(path, "exists") }
 		if e := fs.VerifyFile(repo.ObjectIndexPath); e == nil {
