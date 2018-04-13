@@ -1,3 +1,6 @@
 #!/bin/bash
 
-go build -ldflags="-X github.com/alphazero/gart/system.DebugFlag=true" -o gart-debug *.go
+go build \
+	-ldflags="-X github.com/alphazero/gart/system.DebugFlag=true" \
+	-o $GOPATH/src/github.com/alphazero/gart/cmd/gart-debug \
+	*.go
