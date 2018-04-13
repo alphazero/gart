@@ -10,6 +10,7 @@ import (
 )
 
 type tagOption struct {
+	cmdOption
 	force bool // XXX
 }
 

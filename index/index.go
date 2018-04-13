@@ -15,7 +15,6 @@ import (
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
-	"github.com/alphazero/gart/syslib/util"
 	"github.com/alphazero/gart/system" // TODO  REVU decision for OID in system ..
 )
 
@@ -27,7 +26,35 @@ var (
 	ErrObjectIndexExist    = errors.Error("%s exists", repo.ObjectIndexPath)
 	ErrObjectIndexNotExist = errors.Error("%s does not exist", repo.ObjectIndexPath)
 	ErrObjectIndexClosed   = errors.Error("object index is closeed")
+	ErrObjectExist         = errors.Error("object exists")
+	ErrObjectNotExist      = errors.Error("object does not exist")
 )
+
+type Error struct {
+	Otype system.Otype
+	Oid   *system.Oid
+	Err   error
+}
+
+func IsObjectExistErr(e0 error) bool {
+	e, ok := e0.(Error)
+	if !ok {
+		return false
+	}
+	return e.Err == ErrObjectExist
+}
+func IsObjectNotExistErr(e0 error) bool {
+	e, ok := e0.(Error)
+	if !ok {
+		return false
+	}
+	return e.Err == ErrObjectNotExist
+}
+func (v Error) Error() string {
+	return fmt.Sprintf("%s - %s object %s ", v.Err.Error(), v.Otype, v.Oid.Fingerprint())
+}
+
+/// index ops //////////////////////////////////////////////////////////////////
 
 // index.Initialize creates the canonical index files for the repo. The index
 // directory itself is assumed to exist per toplevel gart initialization.
@@ -218,7 +245,7 @@ func (idx *indexManager) IndexText(strict bool, text string, tags ...string) (Ca
 	var card Card
 	if cardExists(oid) {
 		if strict {
-			return nil, false, err.Error("text object exists - oid:%s - %q", oid.Fingerprint(), util.ShortenStr(text, 24))
+			return nil, false, Error{system.Text, oid, ErrObjectExist}
 		}
 		card, e = LoadCard(oid)
 		if e != nil {
@@ -245,7 +272,7 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 	}
 	md, e := digest.SumFile(filename)
 	if e != nil {
-		panic(err.BugWithCause(e, "unexpected"))
+		return nil, false, err.InvalidArg(e.Error())
 	}
 	oid, e := system.NewOid(md[:])
 	if e != nil {
@@ -256,7 +283,7 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 	var card Card
 	if cardExists(oid) {
 		if strict {
-			return nil, false, err.Error("object exists - oid:%s", oid.Fingerprint())
+			return nil, false, Error{system.Text, oid, ErrObjectExist}
 		}
 		card, e = LoadCard(oid)
 		if e != nil {

@@ -10,6 +10,7 @@ import (
 )
 
 type updateOption struct {
+	cmdOption
 	force bool // XXX
 }
 

@@ -8,9 +8,11 @@ import (
 
 	"github.com/alphazero/gart"
 	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/system/log"
 )
 
 type initOption struct {
+	cmdOption
 	force bool
 }
 
@@ -18,6 +20,7 @@ func parseInitArgs(args []string) (Command, Option, error) {
 	var option initOption
 
 	flags := flag.NewFlagSet("gart-init", flag.ExitOnError)
+	option.usingVerboseFlag(flags)
 	flags.BoolVar(&option.force, "force", option.force, "force re-initialization of repo")
 	if len(args) > 1 {
 		flags.Parse(args[1:])
@@ -36,7 +39,7 @@ func initCommand(ctx context.Context, option0 Option) error {
 
 	ok, e := gart.InitRepo(option.force)
 	if ok {
-		// log.Info("initialized repo.")
+		log.Log("initialized repo")
 	}
 	return e
 }

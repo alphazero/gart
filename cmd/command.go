@@ -4,22 +4,36 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
+	"github.com/alphazero/gart/system/log"
 )
 
 var _ = system.Debug
 
 type Command func(context.Context, Option) error
-type Option interface{}
-
-func log(fmtstr string, a ...interface{}) {
-	fmt.Fprintf(os.Stderr, fmtstr, a...)
+type Option interface {
+	isVerbose() bool
+	isStrict() bool
 }
+type cmdOption struct {
+	verbose bool
+	strict  bool
+}
+
+func (p *cmdOption) usingVerboseFlag(fs *flag.FlagSet) {
+	fs.BoolVar(&(*p).verbose, "verbose", p.verbose, "verbose emits op log to stderr")
+}
+func (p *cmdOption) usingStrictFlag(fs *flag.FlagSet, info string) {
+	fs.BoolVar(&(*p).strict, "strict", p.strict, info)
+}
+func (v cmdOption) isVerbose() bool { return v.verbose }
+func (v cmdOption) isStrict() bool  { return v.strict }
 
 func parseArgs(args []string) (Command, Option, error) {
 	var cname string
@@ -70,6 +84,10 @@ func main() {
 		exitOnInterrupt()
 	default:
 		exitOnError(e)
+	}
+
+	if option.isVerbose() {
+		log.Verbose(os.Stderr)
 	}
 
 	var ctx = context.Background()

@@ -10,6 +10,7 @@ import (
 )
 
 type findOption struct {
+	cmdOption
 	force bool // XXX
 }
 

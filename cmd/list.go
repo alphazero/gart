@@ -10,6 +10,7 @@ import (
 )
 
 type listOption struct {
+	cmdOption
 	force bool // XXX
 }
 

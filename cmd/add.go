@@ -8,15 +8,16 @@ import (
 	"strings"
 
 	"github.com/alphazero/gart"
+	"github.com/alphazero/gart/index"
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/util"
 	"github.com/alphazero/gart/system"
+	"github.com/alphazero/gart/system/log"
 )
 
 type addOption struct {
-	strict  bool
-	stream  bool
+	cmdOption
 	text    bool
 	url     bool
 	tagspec string
@@ -31,12 +32,12 @@ type addOption struct {
 // find . -type f -name "*.pdf" | gart add --test -tags "pithy quotes"
 func parseAddArgs(args []string) (Command, Option, error) {
 	var option = addOption{
-		//		file:  true,
 		otype: system.File,
 	}
 
 	flags := flag.NewFlagSet("gart add", flag.ExitOnError)
-	flags.BoolVar(&option.strict, "strict", option.strict, "if set add will not updated existing objects")
+	option.usingVerboseFlag(flags)
+	option.usingStrictFlag(flags, "add new objects only - no updates")
 	flags.BoolVar(&option.text, "text", option.text, "archive text object(s) -- overrides default file type")
 	flags.BoolVar(&option.url, "url", option.url, "archive url object(s) -- overrides default file type")
 	flags.StringVar(&option.tagspec, "tags", option.tagspec, "required - csv list of tags to apply to object")
@@ -93,28 +94,31 @@ func addCommand(ctx context.Context, option0 Option) error {
 
 func addSpecifiedObjects(ctx context.Context, option addOption) error {
 	var err = errors.For("cmd.addSpecifiedObjects")
-	var debug = debug.For("cmd.addSpecifiedObjects")
-
-	debug.Printf("options:%v\n", option)
+	//	var debug = debug.For("cmd.addSpecifiedObjects")
+	//	debug.Printf("options:%v\n", option)
 
 	session, e := gart.OpenSession(ctx, gart.Add)
 	if e != nil {
 		return err.Error("could not open session - %v", e)
 	}
-	defer session.Close()
-	debug.Printf("using session: %v", session)
+	defer func() {
+		session.Close()
+		log.Log("session - close")
+	}()
+
+	log.Log("session - begin")
 
 	tags := parseTags(option.tagspec)
 	for _, text := range option.args {
-		debug.Printf("add %s %q", option.otype, util.ShortenStr(text, 24))
 		card, added, e := session.AddObject(option.strict, option.otype, text, tags...)
 		if e != nil {
-			log("%s\n", e) // TODO system.Log ..
-			continue
-			//			debug.Printf("err - adding %s %q - %s", option.otype, s, e)
-			//			return e
+			if index.IsObjectExistErr(e) {
+				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), util.ShortenStr(text, 24))
+				continue
+			}
+			return e
 		}
-		log("%s (added: %t) %q", card.Oid().Fingerprint(), added, util.ShortenStr(text, 24))
+		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, util.ShortenStr(text, 24))
 	}
 	return nil
 }

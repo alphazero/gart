@@ -10,6 +10,7 @@ import (
 )
 
 type deleteOption struct {
+	cmdOption
 	force bool
 }
 
