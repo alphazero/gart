@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	//	"runtime"
 	"sort"
 	"syscall"
 	"time"
@@ -434,10 +433,6 @@ next_key:
 //
 // Returns
 func (oidx *oidxFile) mmap(offset int64, length int, remap bool) error {
-	//	fmt.Fprintf(os.Stdout, "mmap called\n")
-	//	pc, file, line, ok := runtime.Caller(1)
-	//	fmt.Fprintf(os.Stdout, "%d %s %d %t\n", pc, file, line, ok)
-	//	oidx.header.Print(os.Stdout)
 	if oidx.buf != nil {
 		if !remap {
 			return errors.Bug("oidxFile.mmap: mmap with existing mapping - remap: %t", remap)
@@ -455,7 +450,9 @@ func (oidx *oidxFile) mmap(offset int64, length int, remap bool) error {
 
 	oidx.buf = buf
 	oidx.offset = offset
-	// REVU modified should be reset here, no?
+
+	// read header on initial mapping
+	// header is updated to file only on closeIndex.
 	if !remap {
 		if e := oidx.header.decode(oidx.buf); e != nil {
 			oidx.unmap()
@@ -467,17 +464,9 @@ func (oidx *oidxFile) mmap(offset int64, length int, remap bool) error {
 }
 
 func (oidx *oidxFile) unmap() error {
-	//	fmt.Fprintf(os.Stdout, "unmap called\n")
-	//	pc, file, line, ok := runtime.Caller(1)
-	//	fmt.Fprintf(os.Stdout, "%d %s %d %t\n", pc, file, line, ok)
-	//	oidx.header.Print(os.Stdout)
 	if oidx.buf == nil {
 		return errors.Bug("oidxFile.unmap: buf is nil")
 	}
-	// BUG oidx.mmap calls this directly on remap
-	//	if oidx.modified {
-	//		return errors.Bug("oidxFile.unmap: modified is true")
-	//	}
 	if e := syscall.Munmap(oidx.buf); e != nil {
 		return errors.ErrorWithCause(e, "oidxFile.unmap")
 	}
