@@ -4,6 +4,7 @@ package system
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/alphazero/gart/syslib/errors"
 )
@@ -71,6 +72,21 @@ func (oid *Oid) Encode(buf []byte) error {
 	return nil
 }
 
+func ParseOid(oidstr string) (*Oid, error) {
+	var err = errors.For("system.ParseOid")
+	var dat [OidSize]byte
+	var i = 0
+	for i < len(oidstr) {
+		n, e := strconv.ParseUint(oidstr[i:i+2], 16, 8)
+		if e != nil {
+			return nil, err.Error("oidstr:%q - err: %v", oidstr, e)
+		}
+		dat[i>>1] = byte(n)
+		i += 2
+	}
+	return NewOid(dat[:])
+}
+
 // NewOid expects a slice of atleast OidSize bytes, which will be validated
 // and then copied for the allocated Oid.
 //
@@ -98,9 +114,11 @@ valid:
 	return &oid, nil
 }
 
+const FingerprintSize = 10
+
 func (oid *Oid) Fingerprint() string {
 	s := fmt.Sprintf("%x", oid.dat) // just in case String() changes ..
-	return s[:7] + ".." + s[len(s)-4:]
+	return s[:FingerprintSize] + ".."
 }
 func (oid *Oid) String() string { return fmt.Sprintf("%x", oid.dat) }
 

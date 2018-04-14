@@ -335,7 +335,40 @@ func (c *cardFile) debugStr() string {
 
 /// io ops /////////////////////////////////////////////////////////////////////
 
-// REVU this would have to partially create cardFile and then pass it to newTypeCard
+func FindCard(oidstr string) ([]Card, error) {
+	var err = errors.For("index.FindCard")
+	if oidstr == "" {
+		return nil, err.InvalidArg("oidstr is zero-len")
+	}
+	if len(oidstr) < 3 {
+		return nil, err.InvalidArg("oidstr len:%d", len(oidstr))
+	}
+	var pattern string = filepath.Join(repo.IndexCardsPath, oidstr[:2], oidstr[2:])
+	if len(oidstr) < system.OidSize*2 {
+		pattern += "*"
+	}
+
+	files, e := filepath.Glob(pattern)
+	if e != nil {
+		return nil, err.ErrorWithCause(e, "on Glob(%s)", pattern)
+	}
+
+	var cards = make([]Card, len(files))
+	for i, f := range files {
+		debug.Printf("file:%s", f)
+		oid, e := system.ParseOid(oidstr[:2] + filepath.Base(f))
+		if e != nil {
+			return cards, err.Bug("unexpected - %s", e)
+		}
+		card, e := LoadCard(oid)
+		if e != nil {
+			return cards, err.Bug("unexpected - %s", e)
+		}
+		cards[i] = card
+	}
+	return cards, nil
+}
+
 func LoadCard(oid *system.Oid) (Card, error) {
 	var err = errors.For("index.LoadCard")
 

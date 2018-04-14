@@ -34,6 +34,11 @@ func InitRepo(force bool) (bool, error) {
 	return true, nil
 }
 
+// REVU rather not have cmds access index directly.
+func FindCard(oidspec string) ([]index.Card, error) {
+	return index.FindCard(oidspec)
+}
+
 /// Session ////////////////////////////////////////////////////////////////////
 
 // Session represents a multi-op gart session.

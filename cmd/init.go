@@ -19,11 +19,13 @@ type initOption struct {
 func parseInitArgs(args []string) (Command, Option, error) {
 	var option initOption
 
-	flags := flag.NewFlagSet("gart-init", flag.ExitOnError)
-	option.usingVerboseFlag(flags)
-	flags.BoolVar(&option.force, "force", option.force, "force re-initialization of repo")
+	option.flags = flag.NewFlagSet("gart-init", flag.ExitOnError)
+	option.usingVerboseFlag0()
+	option.flags.BoolVar(&option.force, "force", option.force,
+		"force re-initialization of repo")
+
 	if len(args) > 1 {
-		flags.Parse(args[1:])
+		option.flags.Parse(args[1:])
 	}
 
 	return initCommand, option, nil

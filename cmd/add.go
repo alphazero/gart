@@ -37,21 +37,29 @@ func parseAddArgs(args []string) (Command, Option, error) {
 		otype: system.File,
 	}
 
-	flags := flag.NewFlagSet("gart add", flag.ExitOnError)
-	option.usingVerboseFlag(flags)
-	option.usingStrictFlag(flags, "add new objects only - no updates")
-	flags.BoolVar(&option.text, "text", option.text, "archive text object(s) -- overrides default file type")
-	flags.BoolVar(&option.url, "url", option.url, "archive url object(s) -- overrides default file type")
-	flags.StringVar(&option.tagspec, "tags", option.tagspec, "required - csv list of tags to apply to object")
-	if len(args) < 1 {
-		return nil, nil, ErrUsage
+	option.flags = flag.NewFlagSet("gart add", flag.ExitOnError)
+	option.usingVerboseFlag0()
+	option.usingStrictFlag("add new objects only - no updates")
+	option.flags.BoolVar(&option.text, "text", option.text,
+		"archive text object(s) -- overrides default file type")
+	option.flags.BoolVar(&option.url, "url", option.url,
+		"archive url object(s) -- overrides default file type")
+	option.flags.StringVar(&option.tagspec, "tags", option.tagspec,
+		"required - csv list of tags to apply to object")
+
+	var debug = debug.For("cmd.parseAddArgs")
+
+	if len(args) < 2 {
+		debug.Printf("no flags specified")
+		return nil, option, ErrUsage
 	}
-	flags.Parse(args[1:])
+
+	option.flags.Parse(args[1:])
 	if option.tagspec == "" {
-		debug.Printf("cmd.ParseAddArgs: tags flag not provided")
-		return nil, nil, ErrUsage
+		debug.Printf("tags flag is required")
+		return nil, option, ErrUsage
 	}
-	option.args = flags.Args()
+	option.args = option.flags.Args()
 
 	return addCommand, option, nil
 }

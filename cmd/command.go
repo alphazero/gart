@@ -10,30 +10,48 @@ import (
 
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
-	"github.com/alphazero/gart/system"
 	"github.com/alphazero/gart/system/log"
 )
 
-var _ = system.Debug
+/// command generalization /////////////////////////////////////////////////////
 
+// general command func
 type Command func(context.Context, Option) error
+
+// base command options
 type Option interface {
+	flagSet() *flag.FlagSet
 	isVerbose() bool
 	isStrict() bool
 }
+
+// cmdOption supports Option interface and provides struct base for command
+// specific options.
 type cmdOption struct {
+	flags   *flag.FlagSet
 	verbose bool
 	strict  bool
 }
 
-func (p *cmdOption) usingVerboseFlag(fs *flag.FlagSet) {
-	fs.BoolVar(&(*p).verbose, "verbose", p.verbose, "verbose emits op log to stderr")
+func (p *cmdOption) setFlagSet(fs *flag.FlagSet) { p.flags = fs }
+
+func (p *cmdOption) usingVerboseFlag0() {
+	p.usingVerboseFlag("verbose emits op log to stderr")
 }
-func (p *cmdOption) usingStrictFlag(fs *flag.FlagSet, info string) {
-	fs.BoolVar(&(*p).strict, "strict", p.strict, info)
+
+func (p *cmdOption) usingVerboseFlag(info string) {
+	p.flags.BoolVar(&(*p).verbose, "verbose", p.verbose, info)
 }
-func (v cmdOption) isVerbose() bool { return v.verbose }
-func (v cmdOption) isStrict() bool  { return v.strict }
+
+func (p *cmdOption) usingStrictFlag(info string) {
+	p.flags.BoolVar(&(*p).strict, "strict", p.strict, info)
+}
+
+func (v cmdOption) flagSet() *flag.FlagSet { return v.flags }
+func (v cmdOption) isVerbose() bool        { return v.verbose }
+func (v cmdOption) isStrict() bool         { return v.strict }
+
+/// uniform command-line arg pre-processing ////////////////////////////////////
 
 func parseArgs(args []string) (Command, Option, error) {
 	var cname string
@@ -52,6 +70,8 @@ func parseArgs(args []string) (Command, Option, error) {
 		return parseHelpArgs(nil)
 	case "version":
 		return parseVersionArgs(nil)
+	case "info":
+		return parseInfoArgs(args[1:])
 	case "list":
 		return parseListArgs(args[1:])
 	case "init":
@@ -72,6 +92,8 @@ func parseArgs(args []string) (Command, Option, error) {
 	return nil, nil, ErrUsage
 }
 
+/// command-line process ///////////////////////////////////////////////////////
+
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
 
@@ -79,7 +101,11 @@ func main() {
 	switch e {
 	case nil:
 	case ErrUsage:
-		exitOnUsage()
+		var fs *flag.FlagSet
+		if option != nil {
+			fs = option.flagSet()
+		}
+		exitOnUsage(fs)
 	case ErrInterrupt:
 		exitOnInterrupt()
 	default:
@@ -91,6 +117,7 @@ func main() {
 		log.Verbose(os.Stderr)
 	}
 
+	// TODO interrupt handling
 	var ctx = context.Background()
 	if e := command(ctx, option); e != nil {
 		exitOnError(e)
@@ -115,8 +142,13 @@ const (
 	EC_FAULT
 )
 
-func exitOnUsage() {
-	fmt.Fprintf(os.Stderr, "%v\n", errors.NotImplemented("cmd/usage"))
+func exitOnUsage(flags *flag.FlagSet) {
+	if flags != nil {
+		flags.SetOutput(os.Stderr)
+		flags.Usage()
+	} else {
+		fmt.Fprintf(os.Stderr, "%v\n", errors.NotImplemented("gart top-level usage"))
+	}
 	os.Exit(EC_USAGE)
 }
 
