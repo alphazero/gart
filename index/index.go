@@ -154,6 +154,7 @@ type IndexManager interface {
 	IndexText(bool, string, ...string) (Card, bool, error)
 	IndexFile(bool, string, ...string) (Card, bool, error)
 	Select(spec selectSpec, tags ...string) ([]*system.Oid, error)
+	Exec(Query) ([]*system.Oid, error)
 	DeleteObject(oid *system.Oid) (bool, error)
 	DeleteObjectsByTag(tags ...string) (int, error)
 	RemoveTags(oid *system.Oid, tag ...string) ([]string, error)
@@ -387,6 +388,16 @@ func (idx *indexManager) loadTagmap(tag string, create, add bool) (*Tagmap, erro
 		}
 	}
 	return tagmap, nil
+}
+
+// REVU should return TODO ResultSet<T>
+func (idx *indexManager) Exec(query Query) ([]*system.Oid, error) {
+	var err = errors.For("indexManager.Exec")
+	var debug = debug.For("indexManager.Exec")
+
+	debug.Printf("called - query: %v", query)
+
+	return nil, err.NotImplemented()
 }
 
 // Select returns the Oids of all objects that have been tagged with all of the

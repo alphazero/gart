@@ -84,16 +84,16 @@ func findCommand(ctx context.Context, option0 Option) error {
 	var include = parseTags(option.inctags)
 	var exclude = parseTags(option.exctags)
 
-	var query = gart.Query()
-	query.WithTag(include...)
-	query.ExcludeTag(exclude...)
+	var qbuilder = gart.NewQuery().
+		IncludeTags(include...).
+		ExcludeTags(exclude...)
 	if option.otype != 0 {
-		query.OfType(option.otype)
+		qbuilder.OfType(option.otype)
 	}
 	if option.ext != "" {
-		query.WithExt(option.ext)
+		qbuilder.WithExtension(option.ext)
 	}
-	cards, e := session.Select(query)
+	cards, e := session.Exec(qbuilder.Build())
 	if e != nil {
 		return e
 	}
