@@ -62,6 +62,11 @@ func tryCompressed() {
 	wahl_2.Compress()
 	wahl_2.Print(os.Stdout)
 
+	// test NOT
+	fmt.Printf("=== TEST NOT ====================\n")
+	wahl_1_not := wahl_1.Not()
+	verifyNot(wahl_1, wahl_1_not)
+
 	// test AND
 	fmt.Printf("=== TEST AND ====================\n")
 	wahl_1_and_2, e := wahl_1.And(wahl_2)
@@ -143,6 +148,21 @@ func verifyClear(w *bitmap.Wahl, a []uint) {
 	}
 }
 
+func verifyNot(w, wnot *bitmap.Wahl) {
+	var w_max, wnot_max = w.Max(), wnot.Max()
+	if w_max != wnot_max {
+		panic(errors.Bug("NOT: max %d != !max %d\n", w_max, wnot_max))
+	}
+	w_map := mapArray(w.Bits())
+	wnot_map := mapArray(wnot.Bits())
+	for n := 0; n < w_max; n++ {
+		// if n is in w it must -not- be in wnot
+		// if n is in wnot it must -not- be in w
+		if w_map[n] && wnot_map[n] {
+			panic(errors.Bug("NOT: bit %d is in both\n", n))
+		}
+	}
+}
 func verifyAnd(a, b, and *bitmap.Wahl) {
 	a_map := mapArray(a.Bits())
 	b_map := mapArray(b.Bits())

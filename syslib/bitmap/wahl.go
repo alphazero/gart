@@ -460,6 +460,21 @@ func maxInt(a, b int) int {
 	return b
 }
 
+// Returns new bitmap that is the logical NOT of the receiver.
+// The new has same len and max as the
+func (w Wahl) Not() *Wahl {
+	var wnot = &Wahl{arr: make([]uint32, len(w.arr))}
+	for i, v := range w.arr {
+		switch v >> 31 {
+		case 1:
+			wnot.arr[i] = v ^ 0x40000000
+		default:
+			wnot.arr[i] = v ^ 0x7FFFFFFF
+		}
+	}
+	return wnot
+}
+
 // Bitwise logical AND, returns result in a newly allocated bitmap.
 // Returns ErrInvalidArg if input is nil.
 func (w Wahl) And(other *Wahl) (*Wahl, error) {
