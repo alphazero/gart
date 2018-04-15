@@ -23,7 +23,7 @@ func parseInfoArgs(args []string) (Command, Option, error) {
 	var option infoOption
 
 	option.flags = flag.NewFlagSet("gart info", flag.ExitOnError)
-	option.usingVerboseFlag("print all details")
+	option.usingVerboseFlag("emit oids in case of multiple results")
 	option.flags.StringVar(&option.oid, "oid", option.oid,
 		"required - oid of object")
 

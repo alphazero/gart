@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
+	//	"strings"
+	//	"time"
 
 	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/bitmap"
@@ -15,7 +15,8 @@ import (
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
-	"github.com/alphazero/gart/system" // TODO  REVU decision for OID in system ..
+	"github.com/alphazero/gart/system"
+	"github.com/alphazero/gart/system/systemic"
 )
 
 /// index package errors ///////////////////////////////////////////////////////
@@ -619,13 +620,17 @@ func (v selectSpec) verify() error {
 
 /// systemics //////////////////////////////////////////////////////////////////
 
+// REVU systemics need to be pulled up to system :)
+//      top-level commands have bare flag values for e.g. ext=pdf
+//		and that needs to be translated to "systemic:ext:pdf".
+
 func getObjectSystemics(card Card) ([]string, error) {
 	var err = errors.For("index.getObjectSystemics")
 
 	// day tag
 	var systemics = []string{
-		dayTag(),
-		typeTag(card.Type()),
+		systemic.TodayTag(),
+		systemic.TypeTag(card.Type().String()),
 	}
 
 	// File extension
@@ -651,12 +656,13 @@ func getObjectSystemics(card Card) ([]string, error) {
 		if fd.Ext != "" {
 			ext += fd.Ext[1:]
 		}
-		systemics = append(systemics, ext)
+		systemics = append(systemics, systemic.ExtTag(ext))
 	}
 
 	return systemics, nil
 }
 
+/*
 func typeTag(otype system.Otype) string {
 	return fmt.Sprintf("systemic:type:%s", otype.String())
 }
@@ -667,3 +673,4 @@ func dayTag() string {
 	y, m, d := time.Now().Date()
 	return fmt.Sprintf("systemic:day:%s-%02d-%d", strings.ToLower(m.String()[:3]), d, y)
 }
+*/

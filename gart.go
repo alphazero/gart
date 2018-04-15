@@ -45,6 +45,7 @@ func FindCard(oidspec string) ([]index.Card, error) {
 type Session interface {
 	// AddObject (strict, type, spec, tags...)
 	AddObject(bool, system.Otype, string, ...string) (index.Card, bool, error)
+	Select() ([]index.Card, error) // TODO figure out the signature
 
 	Log() []string
 	Close() error
@@ -121,6 +122,14 @@ func (s *session) AddObject(strict bool, otype system.Otype, spec string, tags .
 
 func (s *session) Log() []string {
 	return []string{}
+}
+
+func (s *session) Select() ([]index.Card, error) {
+	var err = errors.For("gart#session.Select")
+	var debug = debug.For("gart#session.Select")
+	debug.Printf("called")
+
+	return nil, err.NotImplemented()
 }
 
 /// Op /////////////////////////////////////////////////////////////////////////

@@ -5,6 +5,7 @@ package system
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/alphazero/gart/syslib/errors"
 )
@@ -52,9 +53,33 @@ func (v Otype) String() string {
 		return "uri"
 	case URL:
 		return "url"
+	default:
+		return "-invalid-" // because go stdlib flag ..
 	}
-	panic(errors.Bug("Otype.String: unknown type - %d", v))
+	//	panic(errors.Bug("Otype.String: unknown type - %d", v))
 }
+
+func (v *Otype) Set(spec string) error {
+	println(">> Set(" + spec + ")")
+	s := strings.ToLower(spec)
+	switch s {
+	case "data":
+		*v = Data
+	case "text":
+		*v = Text
+	case "file":
+		*v = File
+	case "uri":
+		*v = URI
+	case "url":
+		*v = URL
+	default:
+		return errors.InvalidArg("system.Otype", "unknown object type - %q", spec)
+	}
+	return nil
+}
+
+func (v *Otype) Get() interface{} { return v }
 
 /// Object Identity ////////////////////////////////////////////////////////////
 

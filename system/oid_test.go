@@ -3,8 +3,9 @@
 package system
 
 import (
-	"github.com/alphazero/gart/syslib/digest"
 	"testing"
+
+	"github.com/alphazero/gart/syslib/digest"
 )
 
 func TestParseOid(t *testing.T) {
