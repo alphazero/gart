@@ -18,7 +18,7 @@ import (
 // gart find -tags "a, b, c" -type file -ext "pdf"
 type findOption struct {
 	cmdOption
-	tagspec string // REVU this should be a type that support flag.Value
+	inctags, exctags string // REVU this should be a type that support flag.Value
 	//	exclude string
 	otype  system.Otype
 	ext    string
@@ -36,15 +36,15 @@ func parseFindArgs(args []string) (Command, Option, error) {
 	option.flags = flag.NewFlagSet("gart find", flag.ExitOnError)
 	option.usingVerboseFlag("verbose cmd op")
 	option.flags.Var(&option.otype, "type",
-		"filter by object type")
+		"objects type {file, text, url, uri}")
 	option.flags.StringVar(&option.ext, "ext", option.ext,
-		"filter by file extension (file type only)")
+		"objects with file extension (file type only)")
 	option.flags.BoolVar(&option.digest, "digest", option.digest,
 		"print single line digest of matching object")
-	option.flags.StringVar(&option.tagspec, "tags", option.tagspec,
-		"with tags tags (csv list)")
-	//	option.flags.StringVar(&option.tagspec, "exclude", option.tagspec,
-	//		"excluding tags (csv list)")
+	option.flags.StringVar(&option.inctags, "tags", option.inctags,
+		"objects with tags (csv list)")
+	option.flags.StringVar(&option.exctags, "exclude", option.exctags,
+		"exclude objects with tags (csv list)")
 
 	// default gart find w/ no tags returns all objects
 	if len(args) > 1 {
@@ -72,7 +72,7 @@ func findCommand(ctx context.Context, option0 Option) error {
 		}
 	}
 
-	session, e := gart.OpenSession(ctx, gart.Add)
+	session, e := gart.OpenSession(ctx, gart.Find)
 	if e != nil {
 		return err.Error("could not open session - %v", e)
 	}
@@ -81,7 +81,19 @@ func findCommand(ctx context.Context, option0 Option) error {
 		log.Log("session - close")
 	}()
 
-	cards, e := session.Select()
+	var include = parseTags(option.inctags)
+	var exclude = parseTags(option.exctags)
+
+	var query = gart.Query()
+	query.WithTag(include...)
+	query.ExcludeTag(exclude...)
+	if option.otype != 0 {
+		query.OfType(option.otype)
+	}
+	if option.ext != "" {
+		query.WithExt(option.ext)
+	}
+	cards, e := session.Select(query)
 	if e != nil {
 		return e
 	}

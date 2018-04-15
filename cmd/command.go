@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
@@ -90,6 +91,19 @@ func parseArgs(args []string) (Command, Option, error) {
 
 	debug.Printf("unknown command - args: %q", args)
 	return nil, nil, ErrUsage
+}
+
+func parseTags(tagspec string) []string {
+	var tags []string
+	for _, s := range strings.Split(tagspec, ",") {
+		s = strings.Trim(s, " ")
+		s = strings.ToLower(s)
+		if s == "" {
+			continue // ignore invalid ,, in spec
+		}
+		tags = append(tags, s)
+	}
+	return tags
 }
 
 /// command-line process ///////////////////////////////////////////////////////

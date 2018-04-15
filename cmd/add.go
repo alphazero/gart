@@ -8,7 +8,6 @@ import (
 	"flag"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/alphazero/gart"
 	"github.com/alphazero/gart/index"
@@ -62,19 +61,6 @@ func parseAddArgs(args []string) (Command, Option, error) {
 	option.args = option.flags.Args()
 
 	return addCommand, option, nil
-}
-
-func parseTags(tagspec string) []string {
-	var tags []string
-	for _, s := range strings.Split(tagspec, ",") {
-		s = strings.Trim(s, " ")
-		s = strings.ToLower(s)
-		if s == "" {
-			continue // ignore invalid ,, in spec
-		}
-		tags = append(tags, s)
-	}
-	return tags
 }
 
 // TODO context shutdown handler to close session.

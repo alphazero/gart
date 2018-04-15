@@ -10,6 +10,7 @@ import (
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
+	"github.com/alphazero/gart/system/systemic"
 )
 
 var _ = errors.For
@@ -39,13 +40,69 @@ func FindCard(oidspec string) ([]index.Card, error) {
 	return index.FindCard(oidspec)
 }
 
+type query struct {
+	include map[string]struct{}
+	exclude map[string]struct{}
+}
+
+func Query() *query {
+	return &query{
+		include: make(map[string]struct{}),
+		exclude: make(map[string]struct{}),
+	}
+}
+
+func (q *query) WithTag(tags ...string) *query {
+	for _, tag := range tags {
+		q.include[tag] = struct{}{}
+		delete(q.exclude, tag)
+	}
+	return q
+}
+
+func (q *query) ExcludeTag(tags ...string) *query {
+	for _, tag := range tags {
+		q.exclude[tag] = struct{}{}
+		delete(q.include, tag)
+	}
+	return q
+}
+
+func (q *query) OfType(otype system.Otype) *query {
+	var tag = systemic.TypeTag(otype.String())
+	q.include[tag] = struct{}{}
+	delete(q.exclude, tag)
+	return q
+}
+
+func (q *query) ExcludeType(otype system.Otype) *query {
+	var tag = systemic.TypeTag(otype.String())
+	q.exclude[tag] = struct{}{}
+	delete(q.include, tag)
+	return q
+}
+
+func (q *query) WithExt(ext string) *query {
+	var tag = systemic.ExtTag(ext)
+	q.include[tag] = struct{}{}
+	delete(q.exclude, tag)
+	return q
+}
+
+func (q *query) ExcludeExt(ext string) *query {
+	var tag = systemic.ExtTag(ext)
+	q.exclude[tag] = struct{}{}
+	delete(q.include, tag)
+	return q
+}
+
 /// Session ////////////////////////////////////////////////////////////////////
 
 // Session represents a multi-op gart session.
 type Session interface {
 	// AddObject (strict, type, spec, tags...)
 	AddObject(bool, system.Otype, string, ...string) (index.Card, bool, error)
-	Select() ([]index.Card, error) // TODO figure out the signature
+	Select(query *query) ([]index.Card, error) // TODO figure out the signature
 
 	Log() []string
 	Close() error
@@ -67,7 +124,7 @@ func OpenSession(ctx context.Context, op Op) (Session, error) {
 	switch op {
 	case Add, Update, Compact, Tag:
 		idxMode = index.Write
-	case Find, List:
+	case Find:
 		idxMode = index.Read
 	}
 
@@ -124,10 +181,10 @@ func (s *session) Log() []string {
 	return []string{}
 }
 
-func (s *session) Select() ([]index.Card, error) {
+func (s *session) Select(query *query) ([]index.Card, error) {
 	var err = errors.For("gart#session.Select")
 	var debug = debug.For("gart#session.Select")
-	debug.Printf("called")
+	debug.Printf("called - query: %v", query)
 
 	return nil, err.NotImplemented()
 }
@@ -141,7 +198,7 @@ const (
 	Add
 	Remove
 	Update
-	Find // REVU diff between find and list is ?
+	Find // REVU diff between find and list is Find requires a session.
 	List
 	Tag
 	Compact
