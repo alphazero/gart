@@ -73,7 +73,8 @@ func infoCommand(ctx context.Context, option0 Option) error {
 	switch option.isVerbose() {
 	case true:
 		debug.Printf("todo - verbose info emit for card\n%s\n", card.Oid())
-		card.Print(os.Stdout)
+		card.Debug()
+		//		card.Print(os.Stdout)
 	default:
 		debug.Printf("todo - minimal info emit for card\n%s\n", card.Oid())
 		card.Print(os.Stdout)

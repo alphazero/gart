@@ -391,12 +391,82 @@ func (idx *indexManager) loadTagmap(tag string, create, add bool) (*Tagmap, erro
 }
 
 // REVU should return TODO ResultSet<T>
-func (idx *indexManager) Exec(query Query) ([]*system.Oid, error) {
+func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
 	var err = errors.For("indexManager.Exec")
 	var debug = debug.For("indexManager.Exec")
+	debug.Printf("called - query: %v", qx)
 
-	debug.Printf("called - query: %v", query)
+	q, ok := qx.(*query)
+	if !ok {
+		return nil, err.InvalidArg("query is not *index.query - %v", qx)
+	}
+	debug.Printf("q: %v", q)
 
+	// the excluded tags
+	var xor = bitmap.NewWahl()
+	if len(q.exclude) > 0 {
+		// 1 - OR all excluded tags in query
+		// 2 - NOT the OR bitmap
+		var excluded []*bitmap.Wahl
+		for tag, _ := range q.exclude {
+			tagmap, ok := idx.tagmaps[tag]
+			if !ok {
+				var e error
+				tagmap, e = loadTagmap(tag, false) // do not create if tag is missing
+				if e != nil && e == ErrTagNotExist {
+					continue
+				}
+			}
+			excluded = append(excluded, tagmap.bitmap)
+		}
+		var e error
+		xor, e = bitmap.OR(excluded...)
+		if e != nil {
+			return nil, err.ErrorWithCause(e, "on exluded set OR")
+		}
+		debug.Printf(" xor: bits: %v", xor.Bits())
+		xor = xor.Not()
+		debug.Printf("!xor: bits: %v", xor.Bits())
+	}
+
+	// the included tags
+	var inc = bitmap.NewWahl() // empty set
+	if len(q.include) > 0 {
+		// 3 - AND all included tags in query
+		var included []*bitmap.Wahl
+		for tag, _ := range q.include {
+			tagmap, ok := idx.tagmaps[tag]
+			if !ok {
+				var e error
+				tagmap, e = loadTagmap(tag, false) // do not create if tag is missing
+				if e != nil && e == ErrTagNotExist {
+					return []*system.Oid{}, nil // if missing then result is the empty set
+				} else if e != nil {
+					return nil, err.Bug("loadTagmap(%s) - %v", tag, e)
+				}
+			}
+			included = append(included, tagmap.bitmap)
+		}
+		debug.Printf("included: len:%d", len(included))
+		var e error
+		inc, e = bitmap.AND(included...)
+		if e != nil {
+			return nil, err.ErrorWithCause(e, "on included set AND")
+		}
+		debug.Printf("inc: bits: %v", inc.Bits())
+	}
+
+	if xor.Len() > 0 {
+		// 4 - AND the NOT from 2
+		var e error
+		inc, e = bitmap.AND(inc, xor)
+		if e != nil {
+			return nil, err.ErrorWithCause(e, "on final result set AND")
+		}
+		debug.Printf("inc AND xor: %v", inc.Bits())
+	}
+	debug.Printf("results: %v", inc.Bits())
+	return idx.oidx.getOids([]int(inc.Bits())...)
 	return nil, err.NotImplemented()
 }
 

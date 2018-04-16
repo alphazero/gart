@@ -72,8 +72,9 @@ func OpenSession(ctx context.Context, op Op) (Session, error) {
 	case Find:
 		idxMode = index.Read
 	}
+	debug.Printf("idx opmode:%s", idxMode)
 
-	idx, e := index.OpenIndexManager(index.Write)
+	idx, e := index.OpenIndexManager(idxMode)
 	if e != nil {
 		return nil, err.ErrorWithCause(e, "op:%s idxMode:%s", op, idxMode)
 	}
@@ -133,10 +134,20 @@ func (s *session) Exec(query index.Query) ([]index.Card, error) {
 
 	oids, e := s.idx.Exec(query)
 	if e != nil {
+		debug.Printf("err: %v", e)
 		return nil, e
 	}
 	debug.Printf("oids:%v", oids)
-	return nil, err.NotImplemented()
+
+	var cards = make([]index.Card, len(oids))
+	for i, oid := range oids {
+		card, e := index.LoadCard(oid)
+		if e != nil {
+			return nil, err.ErrorWithCause(e, "on load of oid:%s", oid.Fingerprint())
+		}
+		cards[i] = card
+	}
+	return cards, nil
 }
 
 /// Op /////////////////////////////////////////////////////////////////////////

@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/alphazero/gart/repo"
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -237,7 +238,9 @@ func createObjectIndex() error {
 // In case of error results, the oidxFile pointer will be nil and file closed.
 func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 
-	// fmt.Fprintf(os.Stdout, "openObjectIndex(%s) called\n", opMode)
+	var debug = debug.For("index.openObjectIndex")
+	debug.Printf("called - opMode:%s", opMode)
+
 	/// verify opmod and init accordingly ///////////////////////////
 
 	if e := opMode.verify(); e != nil {

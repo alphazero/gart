@@ -90,11 +90,12 @@ func findCommand(ctx context.Context, option0 Option) error {
 	if option.otype != 0 {
 		qbuilder.OfType(option.otype)
 	}
-	if option.ext != "" {
+	if option.otype == system.File && option.ext != "-" {
 		qbuilder.WithExtension(option.ext)
 	}
 	cards, e := session.Exec(qbuilder.Build())
 	if e != nil {
+		debug.Printf("err: %v", e)
 		return e
 	}
 

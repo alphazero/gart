@@ -60,7 +60,6 @@ func (v Otype) String() string {
 }
 
 func (v *Otype) Set(spec string) error {
-	println(">> Set(" + spec + ")")
 	s := strings.ToLower(spec)
 	switch s {
 	case "data":
