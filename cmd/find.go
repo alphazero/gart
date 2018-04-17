@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/alphazero/gart"
@@ -101,7 +102,11 @@ func findCommand(ctx context.Context, option0 Option) error {
 
 	for _, card := range cards {
 		// TODO tigheten up emit options in flags
-		card.Print(os.Stdout)
+		if option.isVerbose() {
+			card.Print(os.Stdout)
+		} else {
+			fmt.Printf("%s %s %d\n", card.Type(), card.Oid().Fingerprint(), card.Version())
+		}
 	}
 
 	return nil
