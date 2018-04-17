@@ -543,12 +543,13 @@ func (w Wahl) Bitwise(op bitwiseOp, other *Wahl) (*Wahl, error) {
 	var w1, w2 = w, other
 	var i, j int // i indexes w1, j indexes w2
 	var wlen1, wlen2 int = w1.Len(), w2.Len()
-	var res = make([]uint32, (maxInt(w1.Max(), w2.Len())/31)+1)
+	var wb1, wb2 wahlBlock
+	var res = make([]uint32, (maxInt(w1.Max(), w2.Max())/31)+1)
 	var k int // k indexes res
 outer:
 	for i < wlen1 && j < wlen2 {
-		var wb1 = WahlBlock(w1.arr[i])
-		var wb2 = WahlBlock(w2.arr[j])
+		wb1 = WahlBlock(w1.arr[i])
+		wb2 = WahlBlock(w2.arr[j])
 	inner:
 		for {
 			switch {
@@ -562,6 +563,7 @@ outer:
 				fill := uint32(0x80000000) | fillpair(wb1.fval, wb2.fval) // HERE
 				switch {
 				case wb1.rlen > wb2.rlen:
+					wb1.rlen -= wb2.rlen // HERE move this up before if j ..
 					rlen := uint32(wb2.rlen)
 					fill |= rlen
 					res[k] = fill
@@ -570,10 +572,10 @@ outer:
 					if j >= wlen2 {
 						continue outer // just a formality - it's done
 					}
-					wb1.rlen -= wb2.rlen
 					wb2 = WahlBlock(w2.arr[j])
 					continue inner
 				case wb1.rlen < wb2.rlen:
+					wb2.rlen -= wb1.rlen // HERE move this up before if i ..
 					rlen := uint32(wb1.rlen)
 					fill |= rlen
 					res[k] = fill
@@ -582,7 +584,6 @@ outer:
 					if i >= wlen1 {
 						continue outer // just a formality - it's done
 					}
-					wb2.rlen -= wb1.rlen
 					wb1 = WahlBlock(w1.arr[i])
 					continue inner
 				default: // a match made in heaven ..
@@ -592,18 +593,15 @@ outer:
 					k++
 					i++
 					j++
+					// REVU what to do HERE ? if either i|j is >= then tail remains
 					continue outer
 				}
 			case wb1.fill: // w2 is a tile
-				//				var tile = wb2.val // assume tile 0 HERE
-				//				if wb1.fval == 1 {
-				//					tile = 0x7FFFFFFF
-				//				}
-				//				res[k] = tile
 				res[k] = mixpair(wb1.fval, wb2.val)
 				k++
 				j++
 				if j >= wlen2 {
+					// HERE copy rest of w1 to res
 					continue outer // just a formality - it's done
 				}
 				wb2 = WahlBlock(w2.arr[j])
@@ -613,19 +611,16 @@ outer:
 				}
 				i++
 				if i >= wlen1 {
+					// HERE copy rest of w2 to res
 					continue outer // just a formality - it's done
 				}
 				continue outer
-			case wb2.fill:
-				//				var tile = wb2.val // assume tile 0 HERE
-				//				if wb2.fval == 1 {
-				//					tile = 0x7FFFFFFF
-				//				}
-				//				res[k] = tile
+			case wb2.fill: // w2 is a tile
 				res[k] = mixpair(wb2.fval, wb1.val)
 				k++
 				i++
 				if i >= wlen1 {
+					// HERE copy rest of w2 to res
 					continue outer // just a formality - it's done
 				}
 				wb1 = WahlBlock(w1.arr[i])
@@ -635,6 +630,7 @@ outer:
 				}
 				j++
 				if j >= wlen2 {
+					// HERE copy rest of w1 to res
 					continue outer // just a formality - it's done
 				}
 				continue outer
