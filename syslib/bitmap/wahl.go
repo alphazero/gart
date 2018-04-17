@@ -558,7 +558,7 @@ outer:
 				k++
 				i++
 				j++
-				continue outer
+				continue outer // REVU ok
 			case wb1.fill && wb2.fill: // two fills
 				fill := uint32(0x80000000) | fillpair(wb1.fval, wb2.fval) // HERE
 				switch {
@@ -573,7 +573,7 @@ outer:
 						continue outer // just a formality - it's done
 					}
 					wb2 = WahlBlock(w2.arr[j])
-					continue inner
+					continue inner // REVU ok
 				case wb1.rlen < wb2.rlen:
 					wb2.rlen -= wb1.rlen // HERE move this up before if i ..
 					rlen := uint32(wb1.rlen)
@@ -585,54 +585,53 @@ outer:
 						continue outer // just a formality - it's done
 					}
 					wb1 = WahlBlock(w1.arr[i])
-					continue inner
+					continue inner // REVU ok
 				default: // a match made in heaven ..
 					rlen := uint32(wb1.rlen)
 					fill |= rlen
 					res[k] = fill
-					k++
 					i++
 					j++
-					// REVU what to do HERE ? if either i|j is >= then tail remains
-					continue outer
+					k++
+					continue outer // REVU ok
 				}
 			case wb1.fill: // w2 is a tile
 				res[k] = mixpair(wb1.fval, wb2.val)
-				k++
+				wb1.rlen--
+				i++
 				j++
+				k++
 				if j >= wlen2 {
 					// HERE copy rest of w1 to res
 					continue outer // just a formality - it's done
 				}
-				wb2 = WahlBlock(w2.arr[j])
-				if wb1.rlen > 1 {
-					wb1.rlen--
+				if wb1.rlen > 0 {
+					wb2 = WahlBlock(w2.arr[j])
 					continue inner
 				}
-				i++
-				if i >= wlen1 {
-					// HERE copy rest of w2 to res
-					continue outer // just a formality - it's done
-				}
+				//				if i >= wlen1 {
+				//					// HERE copy rest of w2 to res
+				//					continue outer // just a formality - it's done
+				//				}
 				continue outer
 			case wb2.fill: // w2 is a tile
 				res[k] = mixpair(wb2.fval, wb1.val)
+				wb2.rlen--
 				k++
 				i++
+				j++
 				if i >= wlen1 {
 					// HERE copy rest of w2 to res
 					continue outer // just a formality - it's done
 				}
-				wb1 = WahlBlock(w1.arr[i])
-				if wb2.rlen > 1 {
-					wb2.rlen--
+				if wb2.rlen > 0 {
+					wb1 = WahlBlock(w1.arr[i])
 					continue inner
 				}
-				j++
-				if j >= wlen2 {
-					// HERE copy rest of w1 to res
-					continue outer // just a formality - it's done
-				}
+				//				if j >= wlen2 {
+				//					// HERE copy rest of w1 to res
+				//					continue outer // just a formality - it's done
+				//				}
 				continue outer
 			}
 		}
