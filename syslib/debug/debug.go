@@ -20,10 +20,16 @@ type fnPrinter string
 
 func For(fname string) Printer { return fnPrinter(fname) }
 func (v fnPrinter) Printf(fmtstr string, a ...interface{}) {
+	if Writer == nil {
+		return
+	}
 	printf(3, string(v)+": "+fmtstr, a...)
 }
 
 func Printf(fmtstr string, a ...interface{}) {
+	if Writer == nil {
+		return
+	}
 	printf(2, fmtstr, a...)
 }
 
