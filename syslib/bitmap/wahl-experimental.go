@@ -68,8 +68,7 @@ func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb
 		const oor = "runtime error: index out of range"
 		if x := recover(); x != nil {
 			if e, ok := x.(error); ok && e.Error() == oor {
-				fmt.Printf("%q\n", e)
-				return
+				return // ok - expected
 			}
 			panic(errors.Bug("unexpected: %v", x))
 		}
