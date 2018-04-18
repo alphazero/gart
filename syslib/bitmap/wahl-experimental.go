@@ -7,17 +7,20 @@ import (
 	"github.com/alphazero/gart/syslib/errors"
 )
 
+const _TT, _TF, _FT, _FF = 0, 1, 2, 3
+
 func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
+
+	// apply logical op block by block
+	// es positions are w1_w2 e.g. TF means w1.tile w2.fill
 	i, j, k, res, wb1, wb2, es := w1.blockwise(op, w2)
 
-	var wlen1, wlen2 int = w1.Len(), w2.Len()
 	/// op finalization /////////////////////////////////////////////
 
 	// here let's check if any partially processed tail blocks remain
 	// we only care if op is XOR | OR.
-	// If loop terminated in end-state where the last block of the incompletely
-	// processed bitmap was a tile, then its associated wahlBlock (wb#) is pointing
 	if op != AndOp {
+		var wlen1, wlen2 int = w1.Len(), w2.Len()
 		var xarr []uint32
 		var xwb wahlBlock
 		var xoff int
@@ -25,7 +28,7 @@ func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
 		case i >= wlen1 && j >= wlen2:
 		case j >= wlen2:
 			fmt.Printf("i:%d - end-state:%s\n", i, es)
-			if es[0] == 'T' {
+			if wb1.rlen == 0 {
 				wb1 = WahlBlock(w1.arr[i])
 			}
 			xoff = i
@@ -33,7 +36,7 @@ func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
 			xwb = wb1
 		case i >= wlen1:
 			fmt.Printf("j:%d - end-state:%s\n", j, es)
-			if es[2] == 'T' {
+			if wb2.rlen == 0 {
 				wb2 = WahlBlock(w2.arr[j])
 			}
 			xarr = w2.arr
@@ -60,7 +63,7 @@ func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
 	return res
 }
 
-func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb1, wb2 wahlBlock, es string) {
+func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb1, wb2 wahlBlock, es byte) {
 
 	/// recover from expected OOR error /////////////////////////////
 
@@ -118,93 +121,79 @@ func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb
 
 	/// loop ////////////////////////////////////////////////////////
 
-	const TT, TF, FT, FF = 0x00, 0x01, 0x10, 0x11
 	res = make([]uint32, (maxInt(w1.Max(), w2.Max())/31)+1)
 outer:
 	for {
-		wb1 = WahlBlock(w1.arr[i])
-		wb2 = WahlBlock(w2.arr[j])
-		/*
-			00 TT
-			01 TF
-			10 FT
-			11 FF
-		*/
+		wb2 = WahlBlock(w2.arr[j]) // HERE
+		wb1 = WahlBlock(w1.arr[i]) // HERE
 	inner:
 		for {
-			mtyp := byte(wb2.val>>31 | ((wb1.val >> 31) << 1))
-			switch {
-			//			switch mtyp {
-			case !(wb1.fill || wb2.fill): // two tiles
-				//	case TT:
-				es = "T-T"
+			es = byte(wb2.val>>31 | ((wb1.val >> 31) << 1))
+			switch es {
+			case _TT:
 				res[k] = tilepair(wb1.val, wb2.val)
-				emit(mtyp, "tile-tile", i, j, k, wb1, wb2, WahlBlock(res[k]))
+				emit(es, "tile-tile", i, j, k, wb1, wb2, WahlBlock(res[k]))
+				wb1.rlen = 0
+				wb2.rlen = 0
 				k++
 				i++
 				j++
 				continue outer
-			case wb1.fill && wb2.fill: // two fills
-				//			case FF:
-				es = "F-F"
+			case _TF:
+				res[k] = mixpair(wb2.fval, wb1.val)
+				emit(es, "tile-fill", i, j, k, wb1, wb2, WahlBlock(res[k]))
+				wb1.rlen = 0
+				wb2.rlen--
+				k++
+				i++
+				if wb2.rlen > 0 {
+					wb1 = WahlBlock(w1.arr[i]) // HERE
+					continue inner
+				}
+				j++
+				continue outer
+			case _FT:
+				res[k] = mixpair(wb1.fval, wb2.val)
+				emit(es, "fill-tile", i, j, k, wb1, wb2, WahlBlock(res[k]))
+				wb1.rlen--
+				wb2.rlen = 0
+				k++
+				j++
+				if wb1.rlen > 0 {
+					wb2 = WahlBlock(w2.arr[j]) // HERE
+					continue inner
+				}
+				i++
+				continue outer
+			case _FF:
 				fill := uint32(0x80000000) | fillpair(wb1.fval, wb2.fval)
 				switch {
 				case wb1.rlen > wb2.rlen:
+					res[k] = fill | uint32(wb2.rlen)
+					emit(es, "fill-fill wb1 > wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
 					wb1.rlen -= wb2.rlen
-					rlen := uint32(wb2.rlen)
-					fill |= rlen
-					res[k] = fill
-					emit(mtyp, "fill-fill wb1 > wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
+					wb2.rlen = 0
 					k++
 					j++
-					wb2 = WahlBlock(w2.arr[j])
+					wb2 = WahlBlock(w2.arr[j]) // HERE
 				case wb1.rlen < wb2.rlen:
+					res[k] = fill | uint32(wb1.rlen)
+					emit(es, "fill-fill wb1 < wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
 					wb2.rlen -= wb1.rlen
-					rlen := uint32(wb1.rlen)
-					fill |= rlen
-					res[k] = fill
-					emit(mtyp, "fill-fill wb1 < wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
+					wb1.rlen = 0
 					k++
 					i++
-					wb1 = WahlBlock(w1.arr[i])
+					wb1 = WahlBlock(w1.arr[i]) // HERE
 				default: // a match made in heaven ..
-					rlen := uint32(wb1.rlen)
-					fill |= rlen
-					res[k] = fill
-					emit(mtyp, "fill-fill wb1 = wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
+					res[k] = fill | uint32(wb1.rlen)
+					emit(es, "fill-fill wb1 = wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
+					wb1.rlen = 0
+					wb2.rlen = 0
 					i++
 					j++
 					k++
 					continue outer
 				}
-			case wb1.fill: // w2 is a tile
-				//	case FT:
-				es = "F-T"
-				res[k] = mixpair(wb1.fval, wb2.val)
-				wb1.rlen--
-				emit(mtyp, "fill-tile", i, j, k, wb1, wb2, WahlBlock(res[k]))
-				k++
-				j++
-				if wb1.rlen > 0 {
-					wb2 = WahlBlock(w2.arr[j])
-					continue inner
-				}
-				i++
-				continue outer
-			case wb2.fill: // w1 is a tile
-				//	case TF:
-				es = "T-F"
-				res[k] = mixpair(wb2.fval, wb1.val)
-				wb2.rlen--
-				emit(mtyp, "tile-fill", i, j, k, wb1, wb2, WahlBlock(res[k]))
-				k++
-				i++
-				if wb2.rlen > 0 {
-					wb1 = WahlBlock(w1.arr[i])
-					continue inner
-				}
-				j++
-				continue outer
 			}
 		}
 	}
