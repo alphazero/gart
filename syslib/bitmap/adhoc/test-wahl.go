@@ -17,14 +17,14 @@ func main() {
 
 	fixXorBug()
 
-	/* REVU done - Thanks!
 	// to try:
 	// - find optimal way to use []int32 for wah
 	// - sketch out Wahl 32-bit encoding, compression, and logical ops
 	// Thank you FRIEND! Done!
 	tryUncompressed()
 	tryCompressed()
-	*/
+	/* REVU done - Thanks!
+	 */
 }
 
 func exitOnError(e error) {
