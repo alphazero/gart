@@ -137,7 +137,8 @@ func (s *session) Exec(query index.Query) ([]index.Card, error) {
 		debug.Printf("err: %v", e)
 		return nil, e
 	}
-	debug.Printf("oids:%v", oids)
+	debug.Printf("# oids:%v", len(oids))
+	return nil, err.NotImplemented()
 
 	var cards = make([]index.Card, len(oids))
 	for i, oid := range oids {

@@ -20,8 +20,7 @@ type QueryBuilder interface {
 }
 
 type Query interface {
-	excluded() []string
-	included() []string
+	asQuery() *query
 }
 
 type query struct {
@@ -29,37 +28,16 @@ type query struct {
 	exclude map[string]struct{}
 }
 
-func (q *query) Build() Query {
-	return q
-}
-
-func (q query) included() []string {
-	var tags = make([]string, len(q.include))
-	var i int
-	for k, _ := range q.include {
-		tags[i] = k
-		i++
-	}
-	return tags
-}
-func (q query) excluded() []string {
-	var tags = make([]string, len(q.exclude))
-	var i int
-	for k, _ := range q.exclude {
-		tags[i] = k
-		i++
-	}
-	return tags
-}
-
-var _ QueryBuilder = &query{}
-
 func NewQuery() *query {
 	return &query{
 		include: make(map[string]struct{}),
 		exclude: make(map[string]struct{}),
 	}
 }
+
+func (q *query) Build() Query { return q }
+
+func (q *query) asQuery() *query { return q }
 
 func (q *query) IncludeTags(tags ...string) *query {
 	for _, tag := range tags {

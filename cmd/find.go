@@ -87,6 +87,7 @@ func findCommand(ctx context.Context, option0 Option) error {
 
 	var qbuilder = gart.NewQuery().
 		IncludeTags(include...).
+		IncludeTags(systemics...).
 		ExcludeTags(exclude...)
 	if option.otype != 0 {
 		qbuilder.OfType(option.otype)
