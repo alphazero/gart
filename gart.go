@@ -4,6 +4,7 @@ package gart
 
 import (
 	"context"
+	"fmt" // XXX
 	"path/filepath"
 
 	"github.com/alphazero/gart/index"
@@ -127,6 +128,7 @@ func (s *session) Log() []string {
 	return []string{}
 }
 
+// TODO Select for query and modified signature.
 func (s *session) Exec(query index.Query) ([]index.Card, error) {
 	var err = errors.For("gart#session.Exec")
 	var debug = debug.For("gart#session.Exec")
@@ -137,7 +139,8 @@ func (s *session) Exec(query index.Query) ([]index.Card, error) {
 		debug.Printf("err: %v", e)
 		return nil, e
 	}
-	debug.Printf("# oids:%v", len(oids))
+	//	debug.Printf("# oids:%v", len(oids))
+	fmt.Printf("gart.Exec: found %v objects\n", len(oids))
 	return nil, err.NotImplemented()
 
 	var cards = make([]index.Card, len(oids))

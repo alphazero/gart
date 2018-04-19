@@ -390,12 +390,16 @@ func (idx *indexManager) loadTagmap(tag string, create, add bool) (*Tagmap, erro
 	}
 	return tagmap, nil
 }
+
+// XXX temp
 func now() int64 { return time.Now().UnixNano() }
 func timestamp(start int64, info string) int64 {
 	timenow := now()
-	fmt.Printf("%s: %d	| %d\n", info, timenow, timenow-start)
+	debug.Printf("%s: %d	| %d", info, timenow, timenow-start)
 	return timenow
 }
+
+// XXX temp END
 
 // REVU should return TODO ResultSet<T>
 func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
@@ -407,9 +411,9 @@ func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
 
 	var e error
 
-	var t0 = timestamp(0, "exec - start exmap")
+	//var t0 = timestamp(0, "exec - start exmap") // XXX
 	var exmap = bitmap.NewWahl()
-	//	if len(q.exclude) > 0 {
+
 	var excluded []*bitmap.Wahl
 	for tag, _ := range q.exclude {
 		tagmap, ok := idx.tagmaps[tag]
@@ -420,25 +424,24 @@ func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
 		}
 		excluded = append(excluded, tagmap.bitmap)
 	}
-	debug.Printf("excluded: len:%d", len(excluded))
+	//debug.Printf("excluded: len:%d", len(excluded))
 	if exmap, e = bitmap.Or(excluded...); e != nil {
 		return nil, err.ErrorWithCause(e, "on exluded set OR")
 	}
-	//	}
-	t0 = timestamp(t0, "exec - exmap computed")
-	//	debug.Printf("exmap: bits: %v", exmap.Bits())
-	exmap.Print(os.Stdout)
+
+	//t0 = timestamp(t0, "exec - exmap computed") // XXX
+	//exmap.Print(os.Stdout)                      // XXX
 
 	// the included tags
-	t0 = timestamp(t0, "exec - start inmap")
+	//t0 = timestamp(t0, "exec - start inmap") // XXX
 	var inmap = bitmap.NewWahl() // empty set
-	//	if len(q.include) > 0 {
+
 	var included []*bitmap.Wahl
 	for tag, _ := range q.include {
 		tagmap, ok := idx.tagmaps[tag]
 		if !ok {
 			if tagmap, e = loadTagmap(tag, false); e != nil && e == ErrTagNotExist {
-				debug.Printf("no such tag: %q", tag)
+				//			debug.Printf("no such tag: %q", tag)
 				return []*system.Oid{}, nil // fast-path return w/ empty set
 			} else if e != nil {
 				return nil, err.Bug("loadTagmap(%s) - %v", tag, e)
@@ -446,39 +449,35 @@ func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
 		}
 		included = append(included, tagmap.bitmap)
 	}
-	t0 = timestamp(t0, "inmap tagmaps loaded")
-	//	debug.Printf("included: len:%d", len(included))
+	//t0 = timestamp(t0, "inmap tagmaps loaded") // XXX
 	if inmap, e = bitmap.And(included...); e != nil {
 		return nil, err.ErrorWithCause(e, "on included set AND")
 	}
-	//	}
-	t0 = timestamp(t0, "inmap computed")
-	//	debug.Printf("inmap: bits: %v", inmap.Bits())
-	inmap.Print(os.Stdout)
+	//t0 = timestamp(t0, "inmap computed") // XXX
+	//inmap.Print(os.Stdout)               // XXX
 
 	if inmap.Len() == 0 {
 		return []*system.Oid{}, nil
 	}
 
-	t0 = timestamp(t0, "exec - start final and")
+	//t0 = timestamp(t0, "exec - start final and") // XXX
 	if exmap.Len() > 0 {
 		// {R} <- {I} & ( {I} ^ {Ex} }
 		if exmap, e = inmap.Xor(exmap); e != nil {
 			return nil, err.ErrorWithCause(e, "on XOR")
 		}
-		t0 = timestamp(t0, "inmap xor exampe computed")
+		//	t0 = timestamp(t0, "inmap xor exampe computed") // XXX
 		exmap.Print(os.Stdout)
 		if inmap, e = inmap.And(exmap); e != nil {
 			return nil, err.ErrorWithCause(e, "on AND")
 		}
-		t0 = timestamp(t0, "inmap AND exmap computed")
+		//	t0 = timestamp(t0, "inmap AND exmap computed") // XXX
 		inmap.Print(os.Stdout)
 	}
-	t0 = timestamp(t0, "exec - finand computed")
-	t0 = timestamp(t0, "bits begin")
+	//t0 = timestamp(t0, "exec - finand computed") // XXX
+	//t0 = timestamp(t0, "bits begin")             // XXX
 	bits := inmap.Bits()
-	t0 = timestamp(t0, "bits computed")
-	//	debug.Printf("results: %v", bits)
+	//t0 = timestamp(t0, "bits computed") // XXX
 	return idx.oidx.getOids([]int(bits)...)
 }
 
