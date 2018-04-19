@@ -421,7 +421,7 @@ func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
 		excluded = append(excluded, tagmap.bitmap)
 	}
 	debug.Printf("excluded: len:%d", len(excluded))
-	if exmap, e = bitmap.OR(excluded...); e != nil {
+	if exmap, e = bitmap.Or(excluded...); e != nil {
 		return nil, err.ErrorWithCause(e, "on exluded set OR")
 	}
 	//	}
@@ -448,7 +448,7 @@ func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
 	}
 	t0 = timestamp(t0, "inmap tagmaps loaded")
 	//	debug.Printf("included: len:%d", len(included))
-	if inmap, e = bitmap.AND(included...); e != nil {
+	if inmap, e = bitmap.And(included...); e != nil {
 		return nil, err.ErrorWithCause(e, "on included set AND")
 	}
 	//	}
@@ -559,13 +559,13 @@ func (idx *indexManager) Select(spec selectSpec, tags ...string) ([]*system.Oid,
 
 // Returns the logical AND of the following bitmaps.
 func (idx *indexManager) bitmapsAND(bitmaps []*bitmap.Wahl) ([]int, error) {
-	resmap, e := bitmap.AND(bitmaps...)
+	resmap, e := bitmap.And(bitmaps...)
 	return []int(resmap.Bits()), e
 }
 
 // Returns the logical OR of the following bitmaps.
 func (idx *indexManager) bitmapsOR(bitmaps []*bitmap.Wahl) ([]int, error) {
-	resmap, e := bitmap.AND(bitmaps...)
+	resmap, e := bitmap.And(bitmaps...)
 	return []int(resmap.Bits()), e
 }
 

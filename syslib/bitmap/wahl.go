@@ -106,31 +106,31 @@ func NewWahlInit(bits ...uint) *Wahl {
 	return w
 }
 
-// AND applies the logical AND operation to the given bitmaps, returning
+// And applies the logical AND operation to the given bitmaps, returning
 // the resulting bitmap. The input args are not modified.
 //
 // Returns nil, error if pair-wise Wahl.And returns any error.
-func AND(bitmaps ...*Wahl) (*Wahl, error) {
-	if len(bitmaps) == 0 {
-		return NewWahl(), nil
-	}
-
-	var resmap = bitmaps[0]
-	var e error
-	for _, bmap := range bitmaps[1:] {
-		resmap, e = resmap.And(bmap)
-		if e != nil {
-			return nil, e
-		}
-	}
-	return resmap, nil
+func And(bitmaps ...*Wahl) (*Wahl, error) {
+	return bitwise(AndOp, bitmaps...)
 }
 
-// OR applies the logical OR operation to the given bitmaps, returning
+// Or applies the logical OR operation to the given bitmaps, returning
 // the resulting bitmap. The input args are not modified.
 //
 // Returns nil, error if pair-wise Wahl.Or returns any error.
-func OR(bitmaps ...*Wahl) (*Wahl, error) {
+func Or(bitmaps ...*Wahl) (*Wahl, error) {
+	return bitwise(OrOp, bitmaps...)
+}
+
+// Xor applies the logical XOR operation to the given bitmaps, returning
+// the resulting bitmap. The input args are not modified.
+//
+// Returns nil, error if pair-wise Wahl.Xor returns any error.
+func Xor(bitmaps ...*Wahl) (*Wahl, error) {
+	return bitwise(XorOp, bitmaps...)
+}
+
+func bitwise(op bitwiseOp, bitmaps ...*Wahl) (*Wahl, error) {
 	if len(bitmaps) == 0 {
 		return NewWahl(), nil
 	}
@@ -138,7 +138,7 @@ func OR(bitmaps ...*Wahl) (*Wahl, error) {
 	var resmap = bitmaps[0]
 	var e error
 	for _, bmap := range bitmaps[1:] {
-		resmap, e = resmap.Or(bmap)
+		resmap, e = resmap.bitwise(op, bmap)
 		if e != nil {
 			return nil, e
 		}
@@ -146,6 +146,7 @@ func OR(bitmaps ...*Wahl) (*Wahl, error) {
 	return resmap, nil
 }
 
+// Set sets the given 'bits' of the bitmap. It is irrelevant whether the bitmap
 // Set sets the given 'bits' of the bitmap. It is irrelevant whether the bitmap
 // is in compressed or decompressed state.
 //
@@ -476,22 +477,22 @@ func (w Wahl) Not() *Wahl {
 	return wnot
 }
 
-// Bitwise logical AND, returns result in a newly allocated bitmap.
+// And appllies the bitwise logical AND, returns result in a newly allocated bitmap.
 // Returns ErrInvalidArg if input is nil.
 func (w Wahl) And(other *Wahl) (*Wahl, error) {
-	return w.Bitwise(AndOp, other)
+	return w.bitwise(AndOp, other)
 }
 
-// Bitwise logical OR, returns result in a newly allocated bitmap.
+// Or applies the bitwise logical OR, returns result in a newly allocated bitmap.
 // Returns ErrInvalidArg if input is nil.
 func (w Wahl) Or(other *Wahl) (*Wahl, error) {
-	return w.Bitwise(OrOp, other)
+	return w.bitwise(OrOp, other)
 }
 
-// Bitwise logical XOR, returns result in a newly allocated bitmap.
+// Xor applies the bitwise logical XOR, returns result in a newly allocated bitmap.
 // Returns ErrInvalidArg if input is nil.
 func (w Wahl) Xor(other *Wahl) (*Wahl, error) {
-	return w.Bitwise(XorOp, other)
+	return w.bitwise(XorOp, other)
 }
 
 type bitwiseOp byte
@@ -503,7 +504,7 @@ const (
 	XorOp
 )
 
-func (w1 Wahl) Bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
+func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 	if w2 == nil {
 		return nil, errors.ErrInvalidArg
 	}
@@ -859,7 +860,7 @@ type wahlBlock struct {
 	val  uint32
 	fill bool
 	fval int
-	rlen int // 1 for tiles assumed in Bitwise - do not change it.
+	rlen int // 1 for tiles assumed in bitwise() - do not change it.
 }
 
 func (b wahlBlock) bitRange(prevMax int) (uint, uint) {
