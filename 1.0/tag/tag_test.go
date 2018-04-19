@@ -1,3 +1,0 @@
-// Doost!
-
-package tag

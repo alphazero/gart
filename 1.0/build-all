@@ -1,8 +1,0 @@
-#!/bin/bash 
-
-#mkdir bin #if not exits ..
-
-PROCBASE="gart.go process.go"
-
-go build -o bin/gart-init $PROCBASE gart-init.go
-go build -o bin/gart-add  $PROCBASE gart-add.go

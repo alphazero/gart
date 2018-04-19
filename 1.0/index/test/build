@@ -1,7 +1,0 @@
-#!/bin/bash
-
-go build card-new.go
-go build card-read.go
-go build card-update.go
-go build idx-init.go
-
