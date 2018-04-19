@@ -3,22 +3,20 @@
 package bitmap
 
 import (
-	"fmt"
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 )
-
-const _TT, _TF, _FT, _FF = 0, 1, 2, 3
 
 func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
 
 	// apply logical op block by block
 	// es positions are w1_w2 e.g. TF means w1.tile w2.fill
-	i, j, k, res, wb1, wb2, es := w1.blockwise(op, w2)
+	i, j, k, res, wb1, wb2 := w1.blockwise(op, w2)
 
 	/// op finalization /////////////////////////////////////////////
 
-	// here let's check if any partially processed tail blocks remain
-	// we only care if op is XOR | OR.
+	// here we check if any partially processed tail blocks remain
+	// we only care if op is XOR | OR and append those directly to blockwise result.
 	if op != AndOp {
 		var wlen1, wlen2 int = w1.Len(), w2.Len()
 		var xarr []uint32
@@ -27,7 +25,7 @@ func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
 		switch {
 		case i >= wlen1 && j >= wlen2:
 		case j >= wlen2:
-			fmt.Printf("i:%d - end-state:%s\n", i, es)
+			debug.Printf("tail @ i:%d\n", i)
 			if wb1.rlen == 0 {
 				wb1 = WahlBlock(w1.arr[i])
 			}
@@ -35,7 +33,7 @@ func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
 			xarr = w1.arr
 			xwb = wb1
 		case i >= wlen1:
-			fmt.Printf("j:%d - end-state:%s\n", j, es)
+			debug.Printf("tail @ j:%d\n", j)
 			if wb2.rlen == 0 {
 				wb2 = WahlBlock(w2.arr[j])
 			}
@@ -45,25 +43,25 @@ func (w1 *Wahl) bitwise0(op bitwiseOp, w2 *Wahl) []uint32 {
 		default:
 			panic(errors.Bug("(i:%d of %d) - (j:%d of %d)", i, wlen1, j, wlen2))
 		}
-		fmt.Println("--------------")
+		debug.Printf("--------------")
 		if xarr != nil {
 			// mask off the first partial block in case it was a fill block
 			res[k] = (xwb.val & 0xc0000000) | uint32(xwb.rlen)
-			fmt.Printf("xwb %d %v\n", xoff, xwb)
-			fmt.Printf("res %d %v\n", k, WahlBlock(res[k]))
+			debug.Printf("xwb %d %v", xoff, xwb)
+			debug.Printf("res %d %v", k, WahlBlock(res[k]))
 			k++
 			xoff++
 			if xoff < len(xarr) {
 				n := copy(res[k:], xarr[xoff:])
-				fmt.Printf("copy(res[%d:], xarr[%d:]) -> %d\n", k, xoff, n)
+				debug.Printf("copy(res[%d:], xarr[%d:]) -> %d", k, xoff, n)
 			}
 		}
-		fmt.Println("--------------")
+		debug.Printf("--------------")
 	}
 	return res
 }
 
-func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb1, wb2 wahlBlock, es byte) {
+func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb1, wb2 wahlBlock) {
 
 	/// recover from expected OOR error /////////////////////////////
 
@@ -113,19 +111,22 @@ func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb
 	}
 
 	emit := func(mtyp byte, info string, i, j, k int, wb1, wb2, wb3 wahlBlock) {
-		fmt.Printf("--- %02b %s ------------------ \n", byte(mtyp), info)
-		fmt.Printf("%2d: %v\n", i, wb1)
-		fmt.Printf("%2d: %v\n", j, wb2)
-		fmt.Printf("%2d: %v\n", k, wb3)
+		debug.Printf("--- %02b %s ------------------", byte(mtyp), info)
+		debug.Printf("%2d: %v", i, wb1)
+		debug.Printf("%2d: %v", j, wb2)
+		debug.Printf("%2d: %v", k, wb3)
 	}
 
 	/// loop ////////////////////////////////////////////////////////
 
+	const _TT, _TF, _FT, _FF = 0, 1, 2, 3
+	var es byte
+
 	res = make([]uint32, (maxInt(w1.Max(), w2.Max())/31)+1)
 outer:
 	for {
-		wb2 = WahlBlock(w2.arr[j]) // HERE
-		wb1 = WahlBlock(w1.arr[i]) // HERE
+		wb1 = WahlBlock(w1.arr[i])
+		wb2 = WahlBlock(w2.arr[j])
 	inner:
 		for {
 			es = byte(wb2.val>>31 | ((wb1.val >> 31) << 1))
@@ -147,7 +148,7 @@ outer:
 				k++
 				i++
 				if wb2.rlen > 0 {
-					wb1 = WahlBlock(w1.arr[i]) // HERE
+					wb1 = WahlBlock(w1.arr[i])
 					continue inner
 				}
 				j++
@@ -160,7 +161,7 @@ outer:
 				k++
 				j++
 				if wb1.rlen > 0 {
-					wb2 = WahlBlock(w2.arr[j]) // HERE
+					wb2 = WahlBlock(w2.arr[j])
 					continue inner
 				}
 				i++
@@ -175,7 +176,7 @@ outer:
 					wb2.rlen = 0
 					k++
 					j++
-					wb2 = WahlBlock(w2.arr[j]) // HERE
+					wb2 = WahlBlock(w2.arr[j])
 				case wb1.rlen < wb2.rlen:
 					res[k] = fill | uint32(wb1.rlen)
 					emit(es, "fill-fill wb1 < wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
@@ -183,8 +184,8 @@ outer:
 					wb1.rlen = 0
 					k++
 					i++
-					wb1 = WahlBlock(w1.arr[i]) // HERE
-				default: // a match made in heaven ..
+					wb1 = WahlBlock(w1.arr[i])
+				default:
 					res[k] = fill | uint32(wb1.rlen)
 					emit(es, "fill-fill wb1 = wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
 					wb1.rlen = 0
