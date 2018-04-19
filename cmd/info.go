@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alphazero/gart"
 	"github.com/alphazero/gart/syslib/debug"
@@ -32,6 +33,7 @@ func parseInfoArgs(args []string) (Command, Option, error) {
 		if option.oid == "" {
 			return nil, option, ErrUsage
 		}
+		option.oid = strings.Split(option.oid, ".")[0]
 	} else {
 		return nil, option, ErrUsage
 	}
@@ -72,12 +74,9 @@ func infoCommand(ctx context.Context, option0 Option) error {
 	var card = cards[0]
 	switch option.isVerbose() {
 	case true:
-		debug.Printf("todo - verbose info emit for card\n%s\n", card.Oid())
-		card.Debug()
-		//		card.Print(os.Stdout)
+		card.Print(os.Stdout) // TODO add verbose flag to Card.Print
 	default:
-		debug.Printf("todo - minimal info emit for card\n%s\n", card.Oid())
-		card.Print(os.Stdout)
+		card.Print(os.Stdout) // TODO minimal info emit for card
 	}
 
 	return nil
