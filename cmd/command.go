@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/alphazero/gart/syslib/debug"
@@ -132,15 +133,29 @@ func main() {
 	}
 
 	// TODO interrupt handling
-	var ctx = context.Background()
-	if e := command(ctx, option); e != nil {
+	var ctx = interruptibleContext(context.Background())
+	e = command(ctx, option)
+	switch e {
+	case nil:
+	case ErrInterrupt:
+	default:
 		exitOnError(e)
 	}
-
 	os.Exit(0)
 }
 
 /// exit handling //////////////////////////////////////////////////////////////
+
+func interruptibleContext(parent context.Context) context.Context {
+	ctx, cancel := context.WithCancel(parent)
+	go func(cancel func()) {
+		var ch = make(chan os.Signal, 1)
+		signal.Notify(ch, os.Interrupt, os.Kill)
+		<-ch
+		cancel()
+	}(cancel)
+	return ctx
+}
 
 var (
 	ErrUsage     = errors.Error("usage")
@@ -167,8 +182,8 @@ func exitOnUsage(flags *flag.FlagSet) {
 }
 
 func exitOnInterrupt() {
-	fmt.Fprintf(os.Stderr, "%v\n", errors.NotImplemented("cmd/onInterrupt"))
-	os.Exit(EC_USAGE)
+	fmt.Fprintf(os.Stderr, "interrupted\n")
+	os.Exit(EC_INTERRUPT)
 }
 
 func exitOnError(e error) {
