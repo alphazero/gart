@@ -4,7 +4,6 @@ package gart
 
 import (
 	"context"
-	"fmt" // XXX
 	"path/filepath"
 
 	"github.com/alphazero/gart/index"
@@ -48,7 +47,7 @@ func NewQuery() index.QueryBuilder { return index.NewQuery() }
 type Session interface {
 	// AddObject (strict, type, spec, tags...)
 	AddObject(bool, system.Otype, string, ...string) (index.Card, bool, error)
-	Exec(query index.Query) ([]index.Card, error) // TODO figure out the signature
+	AsyncExec(query index.Query) (<-chan interface{}, <-chan error)
 
 	Log() []string
 	Close() error
@@ -129,29 +128,42 @@ func (s *session) Log() []string {
 }
 
 // TODO Select for query and modified signature.
-func (s *session) Exec(query index.Query) ([]index.Card, error) {
+func (s *session) AsyncExec(query index.Query) (<-chan interface{}, <-chan error) {
 	var err = errors.For("gart#session.Exec")
 	var debug = debug.For("gart#session.Exec")
 	debug.Printf("called - query: %v", query)
 
-	oids, e := s.idx.Exec(query)
-	if e != nil {
-		debug.Printf("err: %v", e)
-		return nil, e
-	}
-	//	debug.Printf("# oids:%v", len(oids))
-	fmt.Printf("gart.Exec: found %v objects\n", len(oids))
-	return nil, err.NotImplemented()
+	var oc = make(chan interface{}, 1)
+	var ec = make(chan error, 1)
 
-	var cards = make([]index.Card, len(oids))
-	for i, oid := range oids {
-		card, e := index.LoadCard(oid)
+	go func() {
+		oids, e := s.idx.Exec(query)
 		if e != nil {
-			return nil, err.ErrorWithCause(e, "on load of oid:%s", oid.Fingerprint())
+			debug.Printf("err: %v", e)
+			ec <- e
+			return
 		}
-		cards[i] = card
-	}
-	return cards, nil
+		debug.Printf("gart.Exec: found %v objects\n", len(oids))
+
+		for i, oid := range oids {
+			select {
+			case <-s.ctx.Done():
+				debug.Printf("loading cards - interrupted")
+				ec <- err.Error("interrupted (loaded %d of %d cards)", i, len(oids))
+				return
+			default:
+				card, e := index.LoadCard(oid)
+				if e != nil {
+					ec <- err.ErrorWithCause(e, "on load of oid:%s", oid.Fingerprint())
+					return
+				}
+				oc <- card
+			}
+		}
+		close(oc)
+		close(ec)
+	}()
+	return oc, ec
 }
 
 /// Op /////////////////////////////////////////////////////////////////////////
