@@ -313,6 +313,7 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 // REVU see gart-add in /1.0/ for refresh on systemics..
 func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) error {
 	var err = errors.For("indexManager.updateIndex")
+	var debug = debug.For("indexManager.updateIndex")
 
 	var oid = card.Oid()
 	if oid == nil {
@@ -361,6 +362,7 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	// 		function -- updateIndex -- it is OK. For recovery tool, it is not.
 	var key = card.Key()
 	for _, tag := range tags {
+		debug.Printf("load tagmap %q", tag)
 		tagmap, e := idx.loadTagmap(tag, true, true)
 		if e != nil {
 			return e
@@ -436,6 +438,7 @@ func (idx *indexManager) Exec(qx Query) ([]*system.Oid, error) {
 		tagmap, ok := idx.tagmaps[tag]
 		if !ok {
 			if tagmap, e = loadTagmap(tag, false); e != nil && e == ErrTagNotExist {
+				debug.Printf("no such tag: %q", tag)
 				return []*system.Oid{}, nil // fast-path return w/ empty set
 			} else if e != nil {
 				return nil, err.Bug("loadTagmap(%s) - %v", tag, e)
@@ -742,7 +745,7 @@ func getObjectSystemics(card Card) ([]string, error) {
 		if e != nil {
 			return nil, err.ErrorWithCause(e, "using card.path[0]")
 		}
-		var ext = "systemic:ext:"
+		var ext string // = "systemic:ext:"
 		if fd.Ext != "" {
 			ext += fd.Ext[1:]
 		}
