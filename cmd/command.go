@@ -132,7 +132,6 @@ func main() {
 		log.Verbose(os.Stderr)
 	}
 
-	// TODO interrupt handling
 	var ctx = interruptibleContext(context.Background())
 	e = command(ctx, option)
 	switch e {

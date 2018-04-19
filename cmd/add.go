@@ -90,8 +90,6 @@ func addCommand(ctx context.Context, option0 Option) error {
 
 func addSpecifiedObjects(ctx context.Context, option addOption) error {
 	var err = errors.For("cmd.addSpecifiedObjects")
-	//	var debug = debug.For("cmd.addSpecifiedObjects")
-	//	debug.Printf("options:%v\n", option)
 
 	session, e := gart.OpenSession(ctx, gart.Add)
 	if e != nil {
@@ -101,7 +99,6 @@ func addSpecifiedObjects(ctx context.Context, option addOption) error {
 		session.Close()
 		log.Log("session - close")
 	}()
-
 	log.Log("session - begin")
 
 	var tags = parseTags(option.tagspec)
@@ -109,30 +106,25 @@ func addSpecifiedObjects(ctx context.Context, option addOption) error {
 		if len(spec) == 0 {
 			continue
 		}
-		card, added, e := session.AddObject(option.strict, option.otype, spec, tags...)
-		if e != nil {
-			if index.IsObjectExistErr(e) {
-				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), spec)
-				continue
-			}
-			return e
+		if e = interruptibleAdd(ctx, session, option.strict, option.otype, spec, tags...); e != nil {
+			break
 		}
-		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, spec)
 	}
-	return nil
+	return e
 }
 
-// TODO signal handling
 func addStreamedObjects(ctx context.Context, option addOption) error {
 	var err = errors.For("cmd.addStreamedObjects")
-	var debug = debug.For("cmd.addStreamedObjects")
 
 	session, e := gart.OpenSession(ctx, gart.Add)
 	if e != nil {
 		return err.Error("could not open session - %v", e)
 	}
-	defer session.Close()
-	debug.Printf("using session: %v", session)
+	defer func() {
+		session.Close()
+		log.Log("session - close")
+	}()
+	log.Log("session - begin")
 
 	var tags = parseTags(option.tagspec)
 	var r = bufio.NewReader(os.Stdin)
@@ -145,18 +137,30 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 		if len(spec) == 0 {
 			continue
 		}
-		card, added, e := session.AddObject(option.strict, option.otype, spec, tags...)
-		if e != nil {
-			if index.IsObjectExistErr(e) {
-				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), spec)
-				continue
-			}
-			return e
+		if e = interruptibleAdd(ctx, session, option.strict, option.otype, spec, tags...); e != nil {
+			break
 		}
-		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, spec)
 	}
 	if e == io.EOF {
 		return nil
 	}
 	return e
+}
+
+func interruptibleAdd(ctx context.Context, session gart.Session, strict bool, typ system.Otype, spec string, tags ...string) error {
+	select {
+	case <-ctx.Done():
+		return ErrInterrupt
+	default:
+		card, added, e := session.AddObject(strict, typ, spec, tags...)
+		if e != nil {
+			if index.IsObjectExistErr(e) {
+				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), spec)
+				return nil
+			}
+			return e
+		}
+		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, spec)
+	}
+	return nil
 }
