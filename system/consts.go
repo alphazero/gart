@@ -34,5 +34,5 @@ const (
 */
 const (
 	OidSize        = 32  // bytes
-	MaxTagNameSize = 255 // bytes not chars.
+	MaxTagNameSize = 255 // bytes not chars. XXX deprecated
 )
