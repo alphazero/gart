@@ -42,6 +42,7 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
+	"time"
 	"unsafe"
 
 	"github.com/alphazero/gart/syslib/debug"
@@ -504,6 +505,14 @@ const (
 	XorOp
 )
 
+type timestamp int64
+
+func timenow() timestamp { return timestamp(time.Now().UnixNano()) }
+func (t0 *timestamp) delta(s string) {
+	now := time.Now().UnixNano()
+	fmt.Printf(">>> step:%s - dt:%s\n", s, time.Duration(now-int64(*t0)))
+	*t0 = timestamp(now)
+}
 func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 	if w2 == nil {
 		return nil, errors.ErrInvalidArg
@@ -511,59 +520,51 @@ func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 
 	/// blockwise application of ap /////////////////////////////////
 
+	t0 := timenow()
 	i, j, k, res, wb1, wb2 := w1.blockwise(op, w2)
+	t0.delta("blockwise")
 
 	/// op finalization /////////////////////////////////////////////
 
 	// here we check if any partially processed tail blocks remain
 	// we only care if op is XOR | OR and append those directly to blockwise result.
 	if op != AndOp {
+		debug.Printf("tail @ i:%d j:%d k:%d", i, j, k)
 		var wlen1, wlen2 int = w1.Len(), w2.Len()
-		var xarr []uint32
-		var xwb wahlBlock
-		var xoff int
 		switch {
 		case i >= wlen1 && j >= wlen2:
 		case j >= wlen2:
-			debug.Printf("tail @ i:%d\n", i)
-			if wb1.rlen == 0 {
-				wb1 = WahlBlock(w1.arr[i])
+			if wb1.rlen > 0 {
+				res[k] = (wb1.val & 0xc0000000) | uint32(wb1.rlen)
+				debug.Printf("wb1 %2d %v", i, wb1)
+				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
+				i++
+				k++
 			}
-			xoff = i
-			xarr = w1.arr
-			xwb = wb1
+			n := copy(res[k:], w1.arr[i:])
+			debug.Printf("copy(res[%d:], w1.arr[%d:]) -> %d", k+1, i+1, n)
 		case i >= wlen1:
-			debug.Printf("tail @ j:%d\n", j)
-			if wb2.rlen == 0 {
-				wb2 = WahlBlock(w2.arr[j])
+			if wb2.rlen > 0 {
+				res[k] = (wb2.val & 0xc0000000) | uint32(wb2.rlen)
+				debug.Printf("wb2 %2d %v", j, wb2)
+				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
+				j++
+				k++
 			}
-			xarr = w2.arr
-			xwb = wb2
-			xoff = j
+			n := copy(res[k:], w2.arr[j:])
+			debug.Printf("copy(res[%d:], w2.arr[%d:]) -> %d", k+1, j+1, n)
 		default:
 			panic(errors.Bug("(i:%d of %d) - (j:%d of %d)", i, wlen1, j, wlen2))
 		}
-		debug.Printf("--------------")
-		if xarr != nil {
-			// mask off the first partial block in case it was a fill block
-			res[k] = (xwb.val & 0xc0000000) | uint32(xwb.rlen)
-			debug.Printf("xwb %d %v", xoff, xwb)
-			debug.Printf("res %d %v", k, WahlBlock(res[k]))
-			k++
-			xoff++
-			if xoff < len(xarr) {
-				n := copy(res[k:], xarr[xoff:])
-				debug.Printf("copy(res[%d:], xarr[%d:]) -> %d", k, xoff, n)
-			}
-		}
-		debug.Printf("--------------")
 	}
 
+	t0.delta("blockwise - tail")
 	/// compress results ////////////////////////////////////////////
 
 	wahl := &Wahl{res}
 	wahl.Compress()
 
+	t0.delta("blockwise - compress")
 	return wahl, nil
 }
 

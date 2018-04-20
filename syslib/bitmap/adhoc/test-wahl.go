@@ -7,7 +7,9 @@ import (
 	"os"
 
 	"github.com/alphazero/gart/syslib/bitmap"
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/system"
 )
 
 /// adhoc test /////////////////////////////////////////////////////////////////
@@ -15,13 +17,14 @@ import (
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
 
+	debug.Printf("debug is working - %d", system.MaxTagNameSize)
 	fixXorBug()
 
 	// to try:
 	// - find optimal way to use []int32 for wah
 	// - sketch out Wahl 32-bit encoding, compression, and logical ops
 	// Thank you FRIEND! Done!
-	tryUncompressed()
+	//	tryUncompressed()
 	tryCompressed()
 	/* REVU done - Thanks!
 	 */
