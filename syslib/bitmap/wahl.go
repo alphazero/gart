@@ -45,7 +45,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/sort"
 )
@@ -529,30 +528,32 @@ func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 	// here we check if any partially processed tail blocks remain
 	// we only care if op is XOR | OR and append those directly to blockwise result.
 	if op != AndOp {
-		debug.Printf("tail @ i:%d j:%d k:%d", i, j, k)
+		//		debug.Printf("tail @ i:%d j:%d k:%d", i, j, k)
 		var wlen1, wlen2 int = w1.Len(), w2.Len()
 		switch {
 		case i >= wlen1 && j >= wlen2:
 		case j >= wlen2:
 			if wb1.rlen > 0 {
 				res[k] = (wb1.val & 0xc0000000) | uint32(wb1.rlen)
-				debug.Printf("wb1 %2d %v", i, wb1)
-				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
+				//				debug.Printf("wb1 %2d %v", i, wb1)
+				//				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
 				i++
 				k++
 			}
-			n := copy(res[k:], w1.arr[i:])
-			debug.Printf("copy(res[%d:], w1.arr[%d:]) -> %d", k+1, i+1, n)
+			copy(res[k:], w1.arr[i:])
+			//			n := copy(res[k:], w1.arr[i:])
+			//			debug.Printf("copy(res[%d:], w1.arr[%d:]) -> %d", k+1, i+1, n)
 		case i >= wlen1:
 			if wb2.rlen > 0 {
 				res[k] = (wb2.val & 0xc0000000) | uint32(wb2.rlen)
-				debug.Printf("wb2 %2d %v", j, wb2)
-				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
+				//				debug.Printf("wb2 %2d %v", j, wb2)
+				//				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
 				j++
 				k++
 			}
-			n := copy(res[k:], w2.arr[j:])
-			debug.Printf("copy(res[%d:], w2.arr[%d:]) -> %d", k+1, j+1, n)
+			copy(res[k:], w2.arr[j:])
+			//			n := copy(res[k:], w2.arr[j:])
+			//			debug.Printf("copy(res[%d:], w2.arr[%d:]) -> %d", k+1, j+1, n)
 		default:
 			panic(errors.Bug("(i:%d of %d) - (j:%d of %d)", i, wlen1, j, wlen2))
 		}
@@ -618,10 +619,10 @@ func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb
 	}
 
 	emit := func(info string, i, j, k int, wb1, wb2, wb3 wahlBlock) {
-		debug.Printf("--- %s ------------------", info)
-		debug.Printf("%2d: %v", i, wb1)
-		debug.Printf("%2d: %v", j, wb2)
-		debug.Printf("%2d: %v", k, wb3)
+		//		debug.Printf("--- %s ------------------", info)
+		//		debug.Printf("%2d: %v", i, wb1)
+		//		debug.Printf("%2d: %v", j, wb2)
+		//		debug.Printf("%2d: %v", k, wb3)
 	}
 
 	/// loop ////////////////////////////////////////////////////////
