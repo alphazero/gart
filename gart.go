@@ -45,19 +45,36 @@ func NewQuery() index.QueryBuilder { return index.NewQuery() }
 
 // Session represents a multi-op gart session.
 type Session interface {
-	// AddObject (strict, type, spec, tags...)
+	// adds object to the index. strict flag only adds new objects; if false
+	// new tags for existing objects are applied. in-arg spec semantics are per
+	// the object type.
+	//
+	// Returns card for object, bool flag indicating if newly added, and nil
+	// on success. On error, the card and flag values are undefined.
 	AddObject(bool, system.Otype, string, ...string) (index.Card, bool, error)
+	// Async processes the given query asynchronously, emitting selected objects
+	// in the first returned channel, and any errors encountered in the second
+	// channel.
 	AsyncExec(query index.Query) (<-chan interface{}, <-chan error)
 
 	Log() []string
-	Close() error
+
+	// Closes the session. If commit flag is true, changes made during the
+	// session are committed. Otherwise, they are rolled back.
+	Close(bool) error
+}
+
+type action struct {
+	oid *system.Oid
 }
 
 type session struct {
-	ctx     context.Context
-	op      Op
-	idx     index.IndexManager
-	idxMode index.OpMode
+	ctx         context.Context
+	op          Op
+	idx         index.IndexManager
+	idxMode     index.OpMode
+	log         []action
+	interrupted bool
 }
 
 func OpenSession(ctx context.Context, op Op) (Session, error) {
@@ -84,18 +101,16 @@ func OpenSession(ctx context.Context, op Op) (Session, error) {
 		op:      op,
 		idx:     idx,
 		idxMode: idxMode,
+		log:     make([]action, 0),
 	}
-
-	// REVU important
-	// TODO add session shutdown handler to context
 
 	return s, nil
 }
 
-func (s *session) Close() error {
+func (s *session) Close(commit bool) error {
 	var err = errors.For("gart#session.Close")
 	var debug = debug.For("gart#session.Close")
-	debug.Printf("called")
+	debug.Printf("called - commit: %t - s.interrupted: %t", commit, s.interrupted)
 
 	if e := s.idx.Close(); e != nil {
 		return err.ErrorWithCause(e, "op:%s idxMode:%s", s.op, s.idxMode)
@@ -150,6 +165,7 @@ func (s *session) AsyncExec(query index.Query) (<-chan interface{}, <-chan error
 			case <-s.ctx.Done():
 				debug.Printf("loading cards - interrupted")
 				ec <- err.Error("interrupted (loaded %d of %d cards)", i, len(oids))
+				s.interrupted = true
 				return
 			default:
 				card, e := index.LoadCard(oid)

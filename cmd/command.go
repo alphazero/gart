@@ -137,6 +137,7 @@ func main() {
 	switch e {
 	case nil:
 	case ErrInterrupt:
+		exitOnInterrupt()
 	default:
 		exitOnError(e)
 	}
@@ -181,11 +182,11 @@ func exitOnUsage(flags *flag.FlagSet) {
 }
 
 func exitOnInterrupt() {
-	fmt.Fprintf(os.Stderr, "interrupted\n")
+	log.Log("interrupted")
 	os.Exit(EC_INTERRUPT)
 }
 
 func exitOnError(e error) {
-	fmt.Fprintf(os.Stderr, "%v\n", e)
+	log.Log("%v", e)
 	os.Exit(EC_ERROR)
 }

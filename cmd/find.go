@@ -68,6 +68,8 @@ func findCommand(ctx context.Context, option0 Option) error {
 	}
 	debug.Printf("options:%v\n", option)
 
+	/// systemic flags //////////////////////////////////////////////
+
 	var systemics []string
 	if option.otype != 0 {
 		systemics = append(systemics, systemic.TypeTag(option.otype.String()))
@@ -76,15 +78,19 @@ func findCommand(ctx context.Context, option0 Option) error {
 		}
 	}
 
+	/// gart session ////////////////////////////////////////////////
+
 	var ctxChild, cancel = context.WithCancel(ctx)
 	session, e := gart.OpenSession(ctxChild, gart.Find)
 	if e != nil {
 		return err.Error("could not open session - %v", e)
 	}
 	defer func() {
-		session.Close()
+		session.Close(false) // REVU don't like commit as Session.Close arg ..
 		log.Log("session - close")
 	}()
+
+	/// find query spec /////////////////////////////////////////////
 
 	var include = parseTags(option.inctags)
 	var exclude = parseTags(option.exctags)
@@ -100,7 +106,8 @@ func findCommand(ctx context.Context, option0 Option) error {
 		qbuilder.WithExtension(option.ext)
 	}
 
-	// call async Exec
+	/// async exec //////////////////////////////////////////////////
+
 	oc, ec := session.AsyncExec(qbuilder.Build())
 	e = nil
 loop:

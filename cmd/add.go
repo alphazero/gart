@@ -95,22 +95,25 @@ func addSpecifiedObjects(ctx context.Context, option addOption) error {
 	if e != nil {
 		return err.Error("could not open session - %v", e)
 	}
-	defer func() {
-		session.Close()
-		log.Log("session - close")
-	}()
 	log.Log("session - begin")
+
+	var commit bool
+	defer func(cf *bool) {
+		session.Close(*cf)
+		log.Log("session - close - commit:%t", *cf)
+	}(&commit)
 
 	var tags = parseTags(option.tagspec)
 	for _, spec := range option.args {
 		if len(spec) == 0 {
 			continue
 		}
-		if e = interruptibleAdd(ctx, session, option.strict, option.otype, spec, tags...); e != nil {
-			break
+		if e := interruptibleAdd(ctx, session, option.strict, option.otype, spec, tags...); e != nil {
+			commit = false
+			return e
 		}
 	}
-	return e
+	return nil
 }
 
 func addStreamedObjects(ctx context.Context, option addOption) error {
@@ -120,31 +123,35 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 	if e != nil {
 		return err.Error("could not open session - %v", e)
 	}
-	defer func() {
-		session.Close()
-		log.Log("session - close")
-	}()
 	log.Log("session - begin")
+
+	var commit bool = true
+	defer func(cf *bool) {
+		session.Close(*cf)
+		log.Log("session - close - commit:%t", *cf)
+	}(&commit)
 
 	var tags = parseTags(option.tagspec)
 	var r = bufio.NewReader(os.Stdin)
 	for {
 		line, e := r.ReadBytes('\n')
 		if e != nil {
-			break
+			if e == io.EOF {
+				return nil
+			}
+			commit = false
+			return e
 		}
 		spec := string(line[:len(line)-1])
 		if len(spec) == 0 {
 			continue
 		}
 		if e = interruptibleAdd(ctx, session, option.strict, option.otype, spec, tags...); e != nil {
-			break
+			commit = false
+			return e
 		}
 	}
-	if e == io.EOF {
-		return nil
-	}
-	return e
+	return nil
 }
 
 func interruptibleAdd(ctx context.Context, session gart.Session, strict bool, typ system.Otype, spec string, tags ...string) error {
