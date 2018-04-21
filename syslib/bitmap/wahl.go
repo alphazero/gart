@@ -865,9 +865,31 @@ type wahlBlock struct {
 	rlen int // 1 for tiles assumed in bitwise() - do not change it.
 }
 
-func (b wahlBlock) bitRange(prevMax int) (uint, uint) {
-	min, max, _ := blockRange(b.val, prevMax)
-	return min, max
+func WahlBlock(v uint32) wahlBlock {
+	var block = wahlBlock{v, false, 0, 1} // assume tile
+	switch {
+	case v>>31 == 0: // tile
+		return block
+	case v>>30 == 0x3: // fill 1
+		block.fval = 1
+	case v>>30 == 0x1: // fill 0
+		block.fval = 0
+	}
+	block.fill = true
+	block.rlen = int(v & 0x3fffffff)
+	return block
+}
+
+// blockRange returns the min, max bit range of the given block 'b',
+// per a prior block's maximum max0. The final return value is the
+// run-length of the block b (which is independent of max0).
+func blockRange(b uint32, max0 int) (uint, uint, int) {
+	min := uint(max0) + 1
+	n := 1
+	if b>>31 > 0 {
+		n = int(b & 0x3fffffff)
+	}
+	return min, min + (uint(n) * 31) - 1, n
 }
 
 func (b wahlBlock) String() string {
@@ -884,32 +906,4 @@ func (b wahlBlock) String() string {
 			revbit>>2, revbit&0x3, typ, rlen*31, b.rlen*31)
 	}
 	return fmt.Sprintf("%031b-  %-6s +31   ", revbit>>1, typ)
-}
-
-func WahlBlock(v uint32) wahlBlock {
-	var block = wahlBlock{v, false, 0, 1} // assume tile
-	switch {
-	case v>>31 == 0: // tile
-		return block
-	case v>>30 == 0x3: // fill 1
-		block.fval = 1
-	case v>>30 == 0x1: // fill 0
-		block.fval = 0
-	}
-	block.fill = true
-	block.rlen = int(v & 0x3fffffff)
-	return block
-}
-
-// REVU should be a function of WahlBlock
-// blockRange returns the min, max bit range of the given block 'b',
-// per a prior block's maximum max0. The final return value is the
-// run-length of the block b (which is independent of max0).
-func blockRange(b uint32, max0 int) (uint, uint, int) {
-	min := uint(max0) + 1
-	n := 1
-	if b>>31 > 0 {
-		n = int(b & 0x3fffffff)
-	}
-	return min, min + (uint(n) * 31) - 1, n
 }
