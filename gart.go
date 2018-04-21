@@ -152,7 +152,7 @@ func (s *session) AsyncExec(query index.Query) (<-chan interface{}, <-chan error
 	var ec = make(chan error, 1)
 
 	go func() {
-		oids, e := s.idx.Exec(query)
+		oids, e := s.idx.Search(query)
 		if e != nil {
 			debug.Printf("err: %v", e)
 			ec <- e
