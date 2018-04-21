@@ -42,9 +42,9 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
-	"time"
 	"unsafe"
 
+	"github.com/alphazero/gart/syslib/bench"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/sort"
 )
@@ -504,14 +504,6 @@ const (
 	XorOp
 )
 
-type timestamp int64
-
-func timenow() timestamp { return timestamp(time.Now().UnixNano()) }
-func (t0 *timestamp) delta(s string) {
-	now := time.Now().UnixNano()
-	fmt.Printf(">>> step:%s - dt:%s\n", s, time.Duration(now-int64(*t0)))
-	*t0 = timestamp(now)
-}
 func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 	if w2 == nil {
 		return nil, errors.ErrInvalidArg
@@ -519,9 +511,9 @@ func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 
 	/// blockwise application of ap /////////////////////////////////
 
-	t0 := timenow()
+	t0 := bench.NewTimestamp()
 	i, j, k, res, wb1, wb2 := w1.blockwise(op, w2)
-	t0.delta("blockwise")
+	t0.Mark("blockwise")
 
 	/// op finalization /////////////////////////////////////////////
 
@@ -559,13 +551,13 @@ func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 		}
 	}
 
-	t0.delta("blockwise - tail")
+	t0.Mark("blockwise - tail")
 	/// compress results ////////////////////////////////////////////
 
 	wahl := &Wahl{res}
 	wahl.Compress()
 
-	t0.delta("blockwise - compress")
+	t0.Mark("blockwise - compress")
 	return wahl, nil
 }
 
