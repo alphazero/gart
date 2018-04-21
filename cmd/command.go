@@ -187,6 +187,6 @@ func exitOnInterrupt() {
 }
 
 func exitOnError(e error) {
-	log.Log("%v", e)
+	fmt.Fprintf(os.Stderr, "%v", e) // always emit errors
 	os.Exit(EC_ERROR)
 }

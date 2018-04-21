@@ -135,18 +135,6 @@ func Initialize(reinit bool) error {
 
 /// index manager //////////////////////////////////////////////////////////////
 
-// TODO
-// significant todo here is nailing down the 'query' for selecting all object ids
-// where tags are 'set'. Simple option is to for now just do a specific function for
-// querying OIDs for a given set of tags to be ANDed.
-
-// REVU be consistent with type name (exported or pkg prv.)
-type indexManager struct {
-	opMode  OpMode
-	oidx    *oidxFile
-	tagmaps map[string]*Tagmap
-}
-
 type IndexManager interface {
 	UsingTags(tags ...string) error
 	IndexText(bool, string, ...string) (Card, bool, error)
@@ -156,7 +144,28 @@ type IndexManager interface {
 	DeleteObject(oid *system.Oid) (bool, error)
 	DeleteObjectsByTag(tags ...string) (int, error)
 	RemoveTags(oid *system.Oid, tag ...string) ([]string, error)
+
+	Commit() error
+	Rollback() error
 	Close() error
+}
+
+// TODO
+// significant todo here is nailing down the 'query' for selecting all object ids
+// where tags are 'set'. Simple option is to for now just do a specific function for
+// querying OIDs for a given set of tags to be ANDed.
+
+type indexOp struct {
+	oid    *system.Oid
+	action string
+}
+
+// REVU be consistent with type name (exported or pkg prv.)
+type indexManager struct {
+	opMode  OpMode
+	oidx    *oidxFile
+	tagmaps map[string]*Tagmap
+	txLog   []indexOp
 }
 
 func OpenIndexManager(opMode OpMode) (IndexManager, error) {
@@ -165,20 +174,49 @@ func OpenIndexManager(opMode OpMode) (IndexManager, error) {
 		return nil, e
 	}
 
+	var txLog []indexOp
+	switch opMode {
+	case Write, Compact:
+		txLog = make([]indexOp, 0)
+	}
+
 	var idxmgr = &indexManager{
 		opMode:  opMode,
 		oidx:    oidx,
 		tagmaps: make(map[string]*Tagmap),
+		txLog:   txLog,
 	}
 
 	return idxmgr, nil
 }
 
+func (idx *indexManager) Commit() error {
+	var err = errors.For("indexManager.Commit")
+	return err.NotImplemented()
+}
+
+func (idx *indexManager) Rollback() error {
+	var err = errors.For("indexManager.Rollback")
+	return err.NotImplemented()
+}
+
 func (idx *indexManager) Close() error {
 	var err = errors.For("indexManager.Close")
+	var debug = debug.For("indexManager.Close")
+	debug.Printf("called - opMode:%s", idx.opMode)
 
 	if idx.oidx == nil || idx.tagmaps == nil {
 		return err.Bug("invalid state - already closed")
+	}
+
+	switch idx.opMode {
+	case Write, Compact:
+		if len(idx.txLog) > 0 {
+			return err.Error("uncommitted transactions")
+		}
+		debug.Printf("no transactions to commit")
+	default:
+		debug.Printf("read-only mode - no transactions to commit")
 	}
 
 	// invalidate instance regardless of any errors after this point

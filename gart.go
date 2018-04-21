@@ -64,16 +64,11 @@ type Session interface {
 	Close(bool) error
 }
 
-type action struct {
-	oid *system.Oid
-}
-
 type session struct {
 	ctx         context.Context
 	op          Op
 	idx         index.IndexManager
 	idxMode     index.OpMode
-	log         []action
 	interrupted bool
 }
 
@@ -101,19 +96,36 @@ func OpenSession(ctx context.Context, op Op) (Session, error) {
 		op:      op,
 		idx:     idx,
 		idxMode: idxMode,
-		log:     make([]action, 0),
 	}
 
 	return s, nil
 }
 
+/*
+func (s *session) Commit() error {
+	var err = errors.For("session.Commit")
+	return err.NotImplemented()
+}
+
+func (s *session) Rollback() error {
+	var err = errors.For("session.Rollback")
+	return err.NotImplemented()
+}
+*/
 func (s *session) Close(commit bool) error {
 	var err = errors.For("gart#session.Close")
 	var debug = debug.For("gart#session.Close")
-	debug.Printf("called - commit: %t - s.interrupted: %t", commit, s.interrupted)
+	debug.Printf("called - op:%s commit:%t s.interrupted:%t", s.op, commit, s.interrupted)
+
+	if commit {
+		if e := s.idx.Commit(); e != nil {
+			println("here")
+			return err.ErrorWithCause(e, "on commit - op:%s idxMode:%s", s.op, s.idxMode)
+		}
+	}
 
 	if e := s.idx.Close(); e != nil {
-		return err.ErrorWithCause(e, "op:%s idxMode:%s", s.op, s.idxMode)
+		return err.ErrorWithCause(e, "on close - op:%s idxMode:%s", s.op, s.idxMode)
 	}
 	return nil
 }
