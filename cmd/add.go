@@ -103,6 +103,7 @@ func addSpecifiedObjects(ctx context.Context, option addOption) error {
 			continue
 		}
 		if e = interruptibleAdd(ctx, session, option.strict, option.otype, spec, tags...); e != nil {
+			log.Error(e.Error())
 			break
 		}
 	}
@@ -139,6 +140,7 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 			continue
 		}
 		if e = interruptibleAdd(ctx, session, option.strict, option.otype, spec, tags...); e != nil {
+			log.Error(e.Error())
 			break
 		}
 	}
