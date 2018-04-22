@@ -235,9 +235,7 @@ func (idx *indexManager) Close(commit bool) error {
 	}
 
 	// save new|updated cards
-	var newObjects bool
 	for oid, card := range idx.cards {
-		newObjects = newObjects || card.Version() < 0
 		if ok, e := card.save(); e != nil || !ok {
 			return err.Bug("on card[%s].save - ok:%t e:%v", oid.Fingerprint(), ok, e)
 		}

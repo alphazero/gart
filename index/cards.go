@@ -36,6 +36,7 @@ type Card interface {
 	Oid() *system.Oid
 	Key() int64
 	Type() system.Otype // REVU use for systemics tags ..
+	IsNew() bool
 	Version() int
 	Print(io.Writer)
 	Debug()
@@ -233,6 +234,7 @@ func (c *cardFile) Oid() *system.Oid   { return c.oid }
 func (c *cardFile) Key() int64         { return c.header.key }
 func (c *cardFile) Type() system.Otype { return c.header.otype }
 func (c *cardFile) Version() int       { return int(c.header.version) }
+func (c *cardFile) IsNew() bool        { return int(c.header.version) < 0 }
 func (c *cardFile) setKey(key int64) error {
 	var err = errors.For("cardFile.setKey")
 	if c.header.key != -1 {
