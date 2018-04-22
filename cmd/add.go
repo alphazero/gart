@@ -127,11 +127,13 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 	var tags = parseTags(option.tagspec)
 	var r = bufio.NewReader(os.Stdin)
 	var line []byte
+	var n int
 	for {
 		line, e = r.ReadBytes('\n')
 		if e != nil {
 			break
 		}
+		n++
 		spec := string(line[:len(line)-1])
 		if len(spec) == 0 {
 			continue
@@ -140,11 +142,18 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 			break
 		}
 	}
-	var commit = e == nil || e == io.EOF // do not commit on other errors
+
+	var commit = e == nil || e == io.EOF // do not commit on any other error
 	if ec := session.Close(commit); ec != nil {
 		panic(err.Fault("on session close - %v", ec))
-	} else {
-		log.Log("session - close")
+	}
+	log.Log("session - close - %d items processed", n)
+
+	if e == io.EOF {
+		if n == 0 {
+			return err.Error("no items were read from stdin - eof")
+		}
+		return nil
 	}
 
 	return e

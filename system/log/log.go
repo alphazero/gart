@@ -5,9 +5,14 @@ package log
 import (
 	"fmt"
 	"io"
+	"os"
 )
 
 var Log func(string, ...interface{})
+
+func Error(fmtstr string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, fmtstr+"\n", a...)
+}
 
 func init() {
 	Log = quietLog()
