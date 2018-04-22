@@ -135,6 +135,10 @@ func Initialize(reinit bool) error {
 
 /// index manager //////////////////////////////////////////////////////////////
 
+// TODO
+// significant todo here is nailing down the 'query' for selecting all object ids
+// where tags are 'set'. Simple option is to for now just do a specific function for
+// querying OIDs for a given set of tags to be ANDed.
 type IndexManager interface {
 	UsingTags(tags ...string) error
 	IndexText(bool, string, ...string) (Card, bool, error)
@@ -145,27 +149,15 @@ type IndexManager interface {
 	DeleteObjectsByTag(tags ...string) (int, error)
 	RemoveTags(oid *system.Oid, tag ...string) ([]string, error)
 
-	Commit() error
 	Rollback() error
-	Close() error
+	Close(commit bool) error
 }
 
-// TODO
-// significant todo here is nailing down the 'query' for selecting all object ids
-// where tags are 'set'. Simple option is to for now just do a specific function for
-// querying OIDs for a given set of tags to be ANDed.
-
-type indexOp struct {
-	oid    *system.Oid
-	action string
-}
-
-// REVU be consistent with type name (exported or pkg prv.)
 type indexManager struct {
 	opMode  OpMode
 	oidx    *oidxFile
 	tagmaps map[string]*Tagmap
-	txLog   []indexOp
+	cards   map[*system.Oid]Card
 }
 
 func OpenIndexManager(opMode OpMode) (IndexManager, error) {
@@ -174,68 +166,92 @@ func OpenIndexManager(opMode OpMode) (IndexManager, error) {
 		return nil, e
 	}
 
-	var txLog []indexOp
-	switch opMode {
-	case Write, Compact:
-		txLog = make([]indexOp, 0)
-	}
-
 	var idxmgr = &indexManager{
 		opMode:  opMode,
 		oidx:    oidx,
 		tagmaps: make(map[string]*Tagmap),
-		txLog:   txLog,
+		cards:   make(map[*system.Oid]Card),
 	}
 
 	return idxmgr, nil
 }
 
-func (idx *indexManager) Commit() error {
-	var err = errors.For("indexManager.Commit")
-	return err.NotImplemented()
-}
-
+// REVU calling rollback now will leave object.idx in an inconsistent state
 func (idx *indexManager) Rollback() error {
 	var err = errors.For("indexManager.Rollback")
+	var debug = debug.For("indexManager.Rollback")
+	debug.Printf("modified cards:%d tagmaps:%d", len(idx.cards), len(idx.tagmaps))
+
+	// TODO is:
+	// 1 - update object.idx to use swap files
+	for key, _ := range idx.cards {
+		delete(idx.cards, key)
+		// TODO remove swap file
+	}
+	for key, _ := range idx.tagmaps {
+		delete(idx.tagmaps, key)
+		// TODO remove swap file
+	}
+
+	// TODO update object.idx to use swap files OR take a commit flag on Close
+	// REVU and then TODO remove that swap file here
+
 	return err.NotImplemented()
 }
 
-func (idx *indexManager) Close() error {
+func (idx *indexManager) Close(commit bool) error {
 	var err = errors.For("indexManager.Close")
 	var debug = debug.For("indexManager.Close")
-	debug.Printf("called - opMode:%s", idx.opMode)
+	debug.Printf("called - commit:%t idx.opMode:%s", commit, idx.opMode)
 
 	if idx.oidx == nil || idx.tagmaps == nil {
 		return err.Bug("invalid state - already closed")
 	}
 
+	var idxModified bool = (len(idx.tagmaps) + len(idx.cards)) > 0
+
 	switch idx.opMode {
 	case Write, Compact:
-		if len(idx.txLog) > 0 {
+		if idxModified && !commit {
 			return err.Error("uncommitted transactions")
 		}
-		debug.Printf("no transactions to commit")
 	default:
 		debug.Printf("read-only mode - no transactions to commit")
 	}
 
 	// invalidate instance regardless of any errors after this point
+	// using the index manager after this call returns will panic due to nils
 	defer func() {
 		idx.opMode = 0
 		idx.oidx = nil
 		idx.tagmaps = nil
+		idx.cards = nil
 	}()
 
+	// REVU see indexManager.Rollback to be consistent
+	// REVU this needs to pass the 'commit' flag OR use the 'save' pattern on commit==true
 	if e := idx.oidx.closeIndex(); e != nil {
 		return err.Bug("on oidx.closeIndex - opMode: %s - closed with e:%v", idx.opMode, e)
 	}
 
+	// save new|updated cards
+	var newObjects bool
+	for oid, card := range idx.cards {
+		newObjects = newObjects || card.Version() < 0
+		if ok, e := card.save(); e != nil || !ok {
+			return err.Bug("on card[%s].save - ok:%t e:%v", oid.Fingerprint(), ok, e)
+		}
+		debug.Printf("saved card[%s]", oid.Fingerprint())
+	}
 	// save loaded tagmaps. (may be nop). Any error is a bug.
 	for tag, tagmap := range idx.tagmaps {
-		// tagmap compresses on save ...
-		if _, e := tagmap.save(); e != nil {
+		// tagmap compresses on save so no need to compress it
+		if ok, e := tagmap.save(); e != nil {
 			return err.BugWithCause(e, "on tagmap(%s).Save", tag)
+		} else if !ok {
+			return err.Bug("tagmap[%s].save returned false, nil", tag)
 		}
+		debug.Printf("saved tagmap[%s]", tag)
 	}
 
 	return nil
@@ -332,9 +348,10 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 			return card, false, e
 		}
 		fileCard := card.(*fileCard)
-		_, e := fileCard.addPath(filename)
-		if e != nil {
+		if ok, e := fileCard.addPath(filename); e != nil {
 			return card, false, e
+		} else if ok {
+			idx.cards[oid] = card
 		}
 	} else {
 		var e error
@@ -347,7 +364,6 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 	return card, isNew, idx.updateIndex(card, isNew, tags...)
 }
 
-// REVU see gart-add in /1.0/ for refresh on systemics..
 func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) error {
 	var err = errors.For("indexManager.updateIndex")
 	var debug = debug.For("indexManager.updateIndex")
@@ -357,25 +373,14 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		return err.InvalidArg("oid is nil")
 	}
 
-	// REVU for now it is ok if no tags are defined
-
 	if isNew {
-		// TODO systemics need to be added here
+		// TODO day-tag: MMM-dd-yyyy range-encoding
 		systemics, e := getObjectSystemics(card)
 		if e != nil {
 			return err.ErrorWithCause(e, "for new object")
 		}
 		tags = append(tags, systemics...)
 
-		// 		- object type -> create/update relevant tagmap
-		//		- day-tag: MMM-dd-yyyy (e.g. MAR-31-2018) tagmap
-		//		- only issue is REVU range-encoding: SIMPLE WAY
-		//		  is to check if day-tagmap exists (e.g. is this a new day?)
-		//		  and then create tagmaps for ALL days since last date by
-		//		  CLONING the previous/last day tagmap. This gets us range
-		// 		  encoding. (e.g. object on day T0 is on all daymaps for T0->..
-		//        and query (all object created before Tn or range (Ta, Tb)
-		//        returns that object by ANDing all day maps in that range.
 		key, e := idx.oidx.addObject(oid)
 		if e != nil {
 			return err.ErrorWithCause(e, "for new object")
@@ -383,20 +388,16 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		if e := card.setKey(key); e != nil {
 			return err.Bug("setKey(%d) for new object - %s", key, e)
 		}
-	}
-	tags = card.addTag(tags...)
-	_shouldSave := isNew || len(tags) > 0
-	if ok, e := card.save(); e != nil {
-		return err.Error("card.Save() - %s", e)
-	} else if _shouldSave && !ok {
-		return err.Bug("card.Save -> false on newCard")
+		idx.cards[oid] = card
 	}
 
-	// TODO update relevant index tagmaps
-	// REVU this basically takes the card's tag def view since tags has been reduced
-	//		to the set that is -not- in the card. Certainly is more performant, but
-	//		if tagmaps are being 'rebuilt' from cards, this will not work. For this
-	// 		function -- updateIndex -- it is OK. For recovery tool, it is not.
+	tags = card.addTag(tags...)
+	if len(tags) > 0 {
+		// this may be redundant if it was new or (as FileCard) paths were added
+		idx.cards[oid] = card
+	}
+
+	// TODO REVU recover process
 	var key = card.Key()
 	for _, tag := range tags {
 		debug.Printf("load tagmap %q", tag)
@@ -404,7 +405,7 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		if e != nil {
 			return e
 		}
-		updated := tagmap.update(setBits, uint(key)) // REVU should we change tagmap?
+		updated := tagmap.update(setBits, uint(key))
 		if updated {
 			debug.Printf("updated tagmap (%s) for object (key:%d)", tag, key)
 		}

@@ -65,11 +65,12 @@ type Session interface {
 }
 
 type session struct {
-	ctx         context.Context
-	op          Op
-	idx         index.IndexManager
-	idxMode     index.OpMode
-	interrupted bool
+	ctx           context.Context
+	op            Op
+	idx           index.IndexManager
+	idxMode       index.OpMode
+	interrupted   bool
+	transactional bool
 }
 
 func OpenSession(ctx context.Context, op Op) (Session, error) {
@@ -78,9 +79,11 @@ func OpenSession(ctx context.Context, op Op) (Session, error) {
 	debug.Printf("called - ctx:%v op:%08b", ctx, op)
 
 	var idxMode index.OpMode
+	var transactional bool
 	switch op {
 	case Add, Update, Compact, Tag:
 		idxMode = index.Write
+		transactional = true
 	case Find:
 		idxMode = index.Read
 	}
@@ -92,41 +95,34 @@ func OpenSession(ctx context.Context, op Op) (Session, error) {
 	}
 
 	s := &session{
-		ctx:     ctx,
-		op:      op,
-		idx:     idx,
-		idxMode: idxMode,
+		ctx:           ctx,
+		op:            op,
+		idx:           idx,
+		idxMode:       idxMode,
+		transactional: transactional,
 	}
 
 	return s, nil
 }
 
-/*
-func (s *session) Commit() error {
-	var err = errors.For("session.Commit")
-	return err.NotImplemented()
-}
-
-func (s *session) Rollback() error {
-	var err = errors.For("session.Rollback")
-	return err.NotImplemented()
-}
-*/
 func (s *session) Close(commit bool) error {
 	var err = errors.For("gart#session.Close")
 	var debug = debug.For("gart#session.Close")
-	debug.Printf("called - op:%s commit:%t s.interrupted:%t", s.op, commit, s.interrupted)
+	debug.Printf("called - op:%s commit:%t s.transactional:%t", s.op, commit, s.transactional)
 
 	if commit {
-		if e := s.idx.Commit(); e != nil {
-			println("here")
-			return err.ErrorWithCause(e, "on commit - op:%s idxMode:%s", s.op, s.idxMode)
+		// REVU for now ignore if commit is 'true' on non-transactional sessions
+		if e := s.idx.Close(commit); e != nil {
+			return err.ErrorWithCause(e, "on idx.Close(%t) - op:%s idxMode:%s", commit, s.op, s.idxMode)
+		}
+	} else {
+		if s.transactional {
+			if e := s.idx.Rollback(); e != nil {
+				return err.ErrorWithCause(e, "on rollback - op:%s idxMode:%s", s.op, s.idxMode)
+			}
 		}
 	}
 
-	if e := s.idx.Close(); e != nil {
-		return err.ErrorWithCause(e, "on close - op:%s idxMode:%s", s.op, s.idxMode)
-	}
 	return nil
 }
 
