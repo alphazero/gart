@@ -182,21 +182,18 @@ func (idx *indexManager) Rollback() error {
 	var debug = debug.For("indexManager.Rollback")
 	debug.Printf("modified cards:%d tagmaps:%d", len(idx.cards), len(idx.tagmaps))
 
-	// TODO is:
-	// 1 - update object.idx to use swap files
 	for key, _ := range idx.cards {
 		delete(idx.cards, key)
-		// TODO remove swap file
 	}
 	for key, _ := range idx.tagmaps {
 		delete(idx.tagmaps, key)
-		// TODO remove swap file
 	}
 
-	// TODO update object.idx to use swap files OR take a commit flag on Close
-	// REVU and then TODO remove that swap file here
+	if e := idx.oidx.closeIndex(false); e != nil {
+		return err.ErrorWithCause(e, "on Rollback")
+	}
 
-	return err.NotImplemented()
+	return nil
 }
 
 func (idx *indexManager) Close(commit bool) error {
@@ -228,20 +225,26 @@ func (idx *indexManager) Close(commit bool) error {
 		idx.cards = nil
 	}()
 
-	// REVU see indexManager.Rollback to be consistent
-	// REVU this needs to pass the 'commit' flag OR use the 'save' pattern on commit==true
-	if e := idx.oidx.closeIndex(); e != nil {
+	// note: close must be called for object.idx file.
+	if e := idx.oidx.closeIndex(commit); e != nil {
 		return err.Bug("on oidx.closeIndex - opMode: %s - closed with e:%v", idx.opMode, e)
 	}
 
-	// save new|updated cards
+	if !commit {
+		return nil
+	}
+
+	// note: cards are in-memory objects
+	// note: save is a nop if card is not modified
 	for oid, card := range idx.cards {
 		if ok, e := card.save(); e != nil || !ok {
 			return err.Bug("on card[%s].save - ok:%t e:%v", oid.Fingerprint(), ok, e)
 		}
 		debug.Printf("saved card[%s]", oid.Fingerprint())
 	}
-	// save loaded tagmaps. (may be nop). Any error is a bug.
+
+	// note: tagmaps are in-memory objects
+	// note: save is a nop if tagmap is not modified
 	for tag, tagmap := range idx.tagmaps {
 		// tagmap compresses on save so no need to compress it
 		if ok, e := tagmap.save(); e != nil {

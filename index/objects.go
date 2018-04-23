@@ -140,7 +140,7 @@ type oidxFile struct {
 	header   *objectsHeader
 	opMode   OpMode
 	source   string
-	file     *os.File
+	file     *os.File    // HERE REVU s/file/wipfile/g
 	finfo    os.FileInfo // size is int64
 	flags    int
 	prot     int
@@ -191,6 +191,7 @@ func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
 	}
 }
 
+// HERE REVU this is ok - no changes
 // CreateObjectIndex creates the initial (header only/empty) objects.idx file.
 // The file is closed on return.
 //
@@ -199,6 +200,7 @@ func createObjectIndex() error {
 	var err = errors.For("index.createObjectIndex")
 
 	// create object index file
+	// HERE open swap file first.
 	file, e := fs.OpenNewFile(oidxFilename, os.O_WRONLY|os.O_APPEND)
 	if e != nil {
 		return e
@@ -265,6 +267,11 @@ func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 
 	/// open file and map objectFile /////////////////////////////////
 
+	// HERE REVU if mode is Write do what?
+	// REVU TODO always open in MAP_PRIVATE mode and on Extend
+	// we need to map to a swap file. this could get messy :) since
+	// on the first extend we need to create the swap file and copy the
+	// buffer from existing.  (Might as well do it here once cleanly).
 	file, e := os.OpenFile(oidxFilename, oflags, repo.FilePerm)
 	if e != nil {
 		return nil, e
@@ -478,6 +485,10 @@ func (oidx *oidxFile) unmap() error {
 	return nil
 }
 
+// HERE this needs to change
+// REVU if committing, we need to update the header (as before) and then swap
+//		with actual oidx.source file. if not, we need to remove the temp file.
+// REVU END
 // closeIndex closes the index, at which point the reference to the pointer
 // should be discarded. If modified, the header info is reencoded to the mapped
 // buffer before unmapping and closing the file. (This is because the header is
@@ -485,7 +496,7 @@ func (oidx *oidxFile) unmap() error {
 // direclty recorded on the mapped buffer.)
 //
 // Returns index.ErrObjectIndexClosed if index has already been closed.
-func (oidx *oidxFile) closeIndex() error {
+func (oidx *oidxFile) closeIndex(commit bool) error {
 	//func (oidx *oidxFile) unmapAndClose() error {
 	var err = errors.For("oidxFile.unmapAndClose")
 	if oidx.modified {
@@ -499,6 +510,11 @@ func (oidx *oidxFile) closeIndex() error {
 	if e := oidx.file.Close(); e != nil {
 		return err.ErrorWithCause(e, "file.Close")
 	}
+
+	if commit {
+		// swap the wipFile with actual source
+	}
+	// HERE remove the wipFile regardless
 	oidx.header = nil
 	oidx.file = nil
 	oidx.finfo = nil
@@ -508,6 +524,7 @@ func (oidx *oidxFile) closeIndex() error {
 	return nil
 }
 
+// HERE these are all closes on faults so we do -not- want to commit anyway
 // oidxFile.extendBy extends the file size by delta, and then remaps the
 // oidxFile buffer.
 func (oidx *oidxFile) extendBy(delta int64) error {
@@ -516,19 +533,19 @@ func (oidx *oidxFile) extendBy(delta int64) error {
 
 	size := oidx.finfo.Size() + delta
 	if e := oidx.file.Truncate(size); e != nil {
-		oidx.closeIndex()
+		oidx.closeIndex(false) // HERE << commit should be false
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 	// update state
 	finfo, e := oidx.file.Stat()
 	if e != nil {
-		oidx.closeIndex()
+		oidx.closeIndex(false) // HERE << discarding ..
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 	oidx.finfo = finfo
 	// remap
 	if e := oidx.mmap(0, int(oidx.finfo.Size()), true); e != nil {
-		oidx.closeIndex()
+		oidx.closeIndex(false) // HERE << discarding ..
 		return errorWithCause(e, "oidxFile.extendBy")
 	}
 
