@@ -11,6 +11,7 @@ import (
 
 	"github.com/alphazero/gart"
 	"github.com/alphazero/gart/index"
+	"github.com/alphazero/gart/syslib/bench"
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
@@ -125,6 +126,8 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 	}
 	log.Log("session - begin")
 
+	var t0 = bench.NewTimestamp()
+
 	var tags = parseTags(option.tagspec)
 	var r = bufio.NewReader(os.Stdin)
 	var line []byte
@@ -144,12 +147,14 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 			break
 		}
 	}
+	t0.Mark("add complemeted")
 
 	var commit = e == nil || e == io.EOF // do not commit on any other error
 	if ec := session.Close(commit); ec != nil {
 		panic(err.Fault("on session close - %v", ec))
 	}
-	log.Log("session - close - %d items processed", n)
+	t0.Mark("commit completed")
+	log.Log("session - close - %d items processed - commit:%t", n, commit)
 
 	if e == io.EOF {
 		if n == 0 {
