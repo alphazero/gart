@@ -182,7 +182,10 @@ func (idx *indexManager) Rollback() error {
 	var debug = debug.For("indexManager.Rollback")
 	debug.Printf("modified cards:%d tagmaps:%d", len(idx.cards), len(idx.tagmaps))
 
-	for key, _ := range idx.cards {
+	for key, card := range idx.cards {
+		if e := card.removeWip(); e != nil {
+			return err.Bug("on card[%s].removeWip - e:%v", card.Oid().Fingerprint(), e)
+		}
 		delete(idx.cards, key)
 	}
 	for key, _ := range idx.tagmaps {
@@ -349,10 +352,8 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 			return card, false, e
 		}
 		fileCard := card.(*fileCard)
-		if ok, e := fileCard.addPath(filename); e != nil {
+		if _, e := fileCard.addPath(filename); e != nil {
 			return card, false, e
-		} else if ok {
-			idx.cards[oid] = card
 		}
 	} else {
 		var e error
@@ -389,16 +390,18 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 		if e := card.setKey(key); e != nil {
 			return err.Bug("setKey(%d) for new object - %s", key, e)
 		}
-		idx.cards[oid] = card
 	}
 
 	tags = card.addTag(tags...)
-	if len(tags) > 0 {
-		// this may be redundant if it was new or (as FileCard) paths were added
+	if card.IsNew() || card.isModified() {
+		var oidfp = oid.Fingerprint()
+		debug.Printf("saving wip card - %s", oidfp)
+		if ok, e := card.saveWip(); !ok || e != nil {
+			return err.Bug("card.saveWip returned oid:%s ok:%t e:%v", oid.Fingerprint(), ok, e)
+		}
 		idx.cards[oid] = card
 	}
 
-	// TODO REVU recover process
 	var key = card.Key()
 	for _, tag := range tags {
 		debug.Printf("load tagmap %q", tag)
@@ -407,9 +410,9 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 			return e
 		}
 		updated := tagmap.update(setBits, uint(key))
-		if updated {
+		if updated { // XXX debug
 			debug.Printf("updated tagmap (%s) for object (key:%d)", tag, key)
-		}
+		} // XXX END
 	}
 	return nil
 }

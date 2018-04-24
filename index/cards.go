@@ -41,17 +41,18 @@ type Card interface {
 	Print(io.Writer)
 	Debug()
 	Tags() []string
-
+	/* -- index package private ----- */
 	setKey(int64) error               // index use only
 	addTag(tag ...string) []string    // returns updated tags, if any
 	removeTag(tag ...string) []string // returns removed tags, if any
-	isModified() bool
-	save() (bool, error) // index use only
-
-	markDeleted() bool // returns false if locked
-	IsDeleted() bool
-	markLocked()
-	IsLocked() bool
+	isModified() bool                 //
+	markDeleted() bool                // returns false if locked
+	IsDeleted() bool                  // returns true if card is marked deleted
+	markLocked()                      // marks card as deleted
+	IsLocked() bool                   // returns true if card is locked
+	saveWip() (bool, error)           // saves wip file - return true if card modified
+	removeWip() error                 // error if called without a saveWip | card not modified
+	save() (bool, error)              // swaps the wip file with the actual card (if any)
 }
 
 const cardHeaderSize = 40
@@ -126,6 +127,7 @@ type cardFile struct {
 	source   string
 	buf      []byte // from mmap
 	modified bool
+	wipSaved bool
 	encode   func([]byte) error
 }
 
@@ -458,8 +460,50 @@ func LoadCard(oid *system.Oid) (Card, error) {
 	return card, e
 }
 
+// saves the modified cardFile. If saveWip was previously called, function will
+// swaps the temp wip file with the actual cardfile (if any), otherwise, it
+// will first create the temp file and then swaps it.
 func (c *cardFile) save() (bool, error) {
 	var err = errors.For("cardFile.save")
+	var debug = debug.For("cardFile.save")
+
+	if c.modified && !c.wipSaved {
+		debug.Printf("save wip file")
+		if _, e := c.saveWip(); e != nil {
+			return false, err.ErrorWithCause(e, "on saveWip of modified card")
+		}
+	}
+
+	var swapfile = fs.SwapfileName(c.source)
+	if e := os.Rename(swapfile, c.source); e != nil {
+		return false, err.Error("os.Rename: %s", e)
+	}
+
+	c.wipSaved = false
+	return true, nil
+}
+
+func (c *cardFile) removeWip() error {
+	var err = errors.For("cardFile.removeWip")
+	var debug = debug.For("cardFile.removeWip")
+
+	if !c.wipSaved {
+		return err.Bug("invalid state - wip file was not saved.")
+	}
+
+	debug.Printf("remove wip file")
+	var swapfile = fs.SwapfileName(c.source)
+	if e := os.Remove(swapfile); e != nil {
+		return err.Error("os.Remove: %s", e)
+	}
+	c.wipSaved = false
+
+	return nil
+}
+
+// saveWip saves the cardFile to a .swp file if modified.
+func (c *cardFile) saveWip() (bool, error) {
+	var err = errors.For("cardFile.saveWip")
 
 	if !c.modified {
 		return false, nil
@@ -487,7 +531,7 @@ func (c *cardFile) save() (bool, error) {
 	if e != nil {
 		return false, err.Error("fs.OpenNewSwapFile: %s", e)
 	}
-	defer os.Remove(swapfile)
+	//	defer os.Remove(swapfile)
 	defer sfile.Close()
 
 	// write header and get length
@@ -523,13 +567,8 @@ func (c *cardFile) save() (bool, error) {
 		return false, err.Error("header.encode: %s", e)
 	}
 
-	/// swap //////////////////////////////////////////////////////////////////////
+	c.wipSaved = true
 
-	if e := os.Rename(swapfile, c.source); e != nil {
-		return false, err.Error("os.Rename: %s", e)
-	}
-
-	c.modified = false
 	return true, nil
 }
 
