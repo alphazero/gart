@@ -182,7 +182,6 @@ func exitOnUsage(flags *flag.FlagSet) {
 }
 
 func exitOnInterrupt() {
-	log.Log("interrupted")
 	os.Exit(EC_INTERRUPT)
 }
 
