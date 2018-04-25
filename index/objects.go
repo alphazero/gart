@@ -68,7 +68,7 @@ type objectsHeader struct {
 	created  int64
 	updated  int64
 	pcnt     uint64 // page count - 1..n
-	ocnt     int64  // object count - 1..n TODO change to int64
+	ocnt     int64  // object count - 1..n
 	reserved [4048]byte
 }
 
@@ -116,7 +116,7 @@ func (h *objectsHeader) decode(buf []byte) error {
 	}
 	crc64 := digest.Checksum64(buf[16:])
 	if crc64 != h.crc64 {
-		return err.Bug("invalid checksum: %d - expect: %d",
+		return err.Bug("invalid checksum: %x - expect: %x",
 			h.crc64, crc64)
 	}
 	if h.created == 0 {
@@ -140,7 +140,7 @@ type oidxFile struct {
 	header   *objectsHeader
 	opMode   OpMode
 	source   string
-	file     *os.File    // HERE REVU s/file/wipfile/g
+	file     *os.File
 	finfo    os.FileInfo // size is int64
 	flags    int
 	prot     int
@@ -191,7 +191,6 @@ func (oidx *oidxFile) hexdump(w io.Writer, page uint64) {
 	}
 }
 
-// HERE REVU this is ok - no changes
 // CreateObjectIndex creates the initial (header only/empty) objects.idx file.
 // The file is closed on return.
 //
@@ -200,7 +199,6 @@ func createObjectIndex() error {
 	var err = errors.For("index.createObjectIndex")
 
 	// create object index file
-	// HERE open swap file first.
 	file, e := fs.OpenNewFile(oidxFilename, os.O_WRONLY|os.O_APPEND)
 	if e != nil {
 		return e
@@ -267,11 +265,6 @@ func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 
 	/// open file and map objectFile /////////////////////////////////
 
-	// HERE REVU if mode is Write do what?
-	// REVU TODO always open in MAP_PRIVATE mode and on Extend
-	// we need to map to a swap file. this could get messy :) since
-	// on the first extend we need to create the swap file and copy the
-	// buffer from existing.  (Might as well do it here once cleanly).
 	file, e := os.OpenFile(oidxFilename, oflags, repo.FilePerm)
 	if e != nil {
 		return nil, e
@@ -304,7 +297,6 @@ func openObjectIndex(opMode OpMode) (*oidxFile, error) {
 	return oidx, nil
 }
 
-// TODO change key to int64
 func (oidx *oidxFile) nextKey() int64 { return oidx.header.ocnt }
 
 // addObject appends the given oid to the object index. Index must have been
@@ -321,7 +313,6 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 		return key, err.Bug("invalid op-mode:%s", oidx.opMode)
 	}
 
-	var offset = ((oidx.header.ocnt) << 5) + objectsHeaderSize
 	if oidx.header.ocnt&ocntExtendMask == 0 {
 		// need new page
 		if e := oidx.extendBy(objectsPageSize); e != nil {
@@ -329,6 +320,7 @@ func (oidx *oidxFile) addObject(oid *system.Oid) (int64, error) {
 		}
 		oidx.header.pcnt++
 	}
+	var offset = ((oidx.header.ocnt) << 5) + objectsHeaderSize
 	if e := oid.Encode(oidx.buf[offset:]); e != nil {
 		panic(err.FaultWithCause(e,
 			"oid:%s - offset:%d - buflen:%d", oid, offset, len(oidx.buf)))
@@ -485,24 +477,65 @@ func (oidx *oidxFile) unmap() error {
 	return nil
 }
 
-// HERE this needs to change
-// REVU if committing, we need to update the header (as before) and then swap
-//		with actual oidx.source file. if not, we need to remove the temp file.
-// REVU END
+func (oidx *oidxFile) extendBy(delta int64) error {
+	var err = errors.For("oidxFile.extendBy")
+
+	size := oidx.finfo.Size() + delta
+	if e := oidx.file.Truncate(size); e != nil {
+		oidx.closeIndex(false)
+		return err.Error("on truncate to size:%d - %v", size, e)
+	}
+	// update state
+	finfo, e := oidx.file.Stat()
+	if e != nil {
+		oidx.closeIndex(false)
+		return e
+	}
+	oidx.finfo = finfo
+	// remap
+	if e := oidx.mmap(0, int(oidx.finfo.Size()), true); e != nil {
+		oidx.closeIndex(false)
+		return err.Error("on oidx.mmap - %v", e)
+	}
+
+	return nil
+}
+
 // closeIndex closes the index, at which point the reference to the pointer
-// should be discarded. If modified, the header info is reencoded to the mapped
+// should be discarded. On commit, if modified, header is reencoded to the mapped
 // buffer before unmapping and closing the file. (This is because the header is
 // copied from mapped buffer on open/mmap and updates to header fields are not
-// direclty recorded on the mapped buffer.)
+// direclty recorded on the mapped buffer.) If commit is false, we re-read the
+// header directly, trunc the file back to the original size, and remove any
+// residual records in the last page.
 //
 // Returns index.ErrObjectIndexClosed if index has already been closed.
+//
+// panics on unrecoverable errors.
 func (oidx *oidxFile) closeIndex(commit bool) error {
 	//func (oidx *oidxFile) unmapAndClose() error {
-	var err = errors.For("oidxFile.unmapAndClose")
+	var err = errors.For("oidxFile.closeIndex")
 	if oidx.modified {
-		oidx.header.updated = time.Now().UnixNano()
-		oidx.header.encode(oidx.buf)
-		oidx.modified = false
+		if commit {
+			oidx.header.updated = time.Now().UnixNano()
+			if e := oidx.header.encode(oidx.buf); e != nil {
+				panic(err.Fault(e.Error()))
+			}
+			oidx.modified = false // REVU is this necessary?
+		} else {
+			// reset header from buf
+			*(oidx.header) = *(*objectsHeader)(unsafe.Pointer(&oidx.buf[0]))
+			// truncate to initial load size
+			size := objectsHeaderSize + (oidx.header.pcnt * objectsPageSize)
+			if e := oidx.file.Truncate(int64(size)); e != nil {
+				panic(err.Fault(e.Error()))
+			}
+			// clear residual records in last page
+			offset := int(((oidx.header.ocnt) << 5) + objectsHeaderSize)
+			for xof := offset; xof < int(size); xof++ {
+				oidx.buf[xof] = 0
+			}
+		}
 	}
 	if e := oidx.unmap(); e != nil {
 		return err.ErrorWithCause(e, "oidx.unmap")
@@ -511,43 +544,11 @@ func (oidx *oidxFile) closeIndex(commit bool) error {
 		return err.ErrorWithCause(e, "file.Close")
 	}
 
-	if commit {
-		// swap the wipFile with actual source
-	}
-	// HERE remove the wipFile regardless
 	oidx.header = nil
 	oidx.file = nil
 	oidx.finfo = nil
 	oidx.prot = 0
 	oidx.flags = 0
 	oidx.opMode = 0 // invalid
-	return nil
-}
-
-// HERE these are all closes on faults so we do -not- want to commit anyway
-// oidxFile.extendBy extends the file size by delta, and then remaps the
-// oidxFile buffer.
-func (oidx *oidxFile) extendBy(delta int64) error {
-	//	fmt.Fprintf(os.Stdout, "extendBy(%d) called\n", delta)
-	errorWithCause := errors.ErrorWithCause
-
-	size := oidx.finfo.Size() + delta
-	if e := oidx.file.Truncate(size); e != nil {
-		oidx.closeIndex(false) // HERE << commit should be false
-		return errorWithCause(e, "oidxFile.extendBy")
-	}
-	// update state
-	finfo, e := oidx.file.Stat()
-	if e != nil {
-		oidx.closeIndex(false) // HERE << discarding ..
-		return errorWithCause(e, "oidxFile.extendBy")
-	}
-	oidx.finfo = finfo
-	// remap
-	if e := oidx.mmap(0, int(oidx.finfo.Size()), true); e != nil {
-		oidx.closeIndex(false) // HERE << discarding ..
-		return errorWithCause(e, "oidxFile.extendBy")
-	}
-
 	return nil
 }
