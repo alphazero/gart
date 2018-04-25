@@ -141,7 +141,9 @@ loop:
 					card.Oid().Fingerprint(), card.Version(), card.Type(), digest)
 			}
 		case e = <-ec:
-			break loop
+			if e != nil {
+				break loop
+			}
 		}
 	}
 	cancel() // REVU is this necessary ?
