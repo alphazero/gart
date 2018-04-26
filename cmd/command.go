@@ -94,17 +94,22 @@ func parseArgs(args []string) (Command, Option, error) {
 	return nil, nil, ErrUsage
 }
 
+// TODO use parseCsv in callsites and remove this
 func parseTags(tagspec string) []string {
-	var tags []string
-	for _, s := range strings.Split(tagspec, ",") {
+	return parseCsv(tagspec)
+}
+
+func parseCsv(csv string) []string {
+	var arr []string
+	for _, s := range strings.Split(csv, ",") {
 		s = strings.Trim(s, " ")
 		s = strings.ToLower(s)
 		if s == "" {
-			continue // ignore invalid ,, in spec
+			continue // ignore invalid ,, in csv
 		}
-		tags = append(tags, s)
+		arr = append(arr, s)
 	}
-	return tags
+	return arr
 }
 
 /// command-line process ///////////////////////////////////////////////////////

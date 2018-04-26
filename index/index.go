@@ -435,16 +435,19 @@ func (idx *indexManager) loadTagmap(tag string, create, add bool) (*Tagmap, erro
 
 // REVU should return TODO ResultSet<T>
 func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
-	var err = errors.For("indexManager.Exec")
-	var debug = debug.For("indexManager.Exec")
+	var err = errors.For("indexManager.Search")
+	var debug = debug.For("indexManager.Search")
 
 	var q = qx.asQuery()
+
+	if len(q.include) == 0 {
+		q.IncludeTags(systemic.GartTag())
+	}
 	debug.Printf("called q: %v", q)
 
 	var e error
 
 	var exmap = bitmap.NewWahl()
-
 	var excluded []*bitmap.Wahl
 	for tag, _ := range q.exclude {
 		tagmap, ok := idx.tagmaps[tag]
@@ -461,7 +464,6 @@ func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
 
 	// the included tags
 	var inmap = bitmap.NewWahl() // empty set
-
 	var included []*bitmap.Wahl
 	for tag, _ := range q.include {
 		tagmap, ok := idx.tagmaps[tag]
@@ -732,8 +734,8 @@ func (v selectSpec) verify() error {
 func getObjectSystemics(card Card) ([]string, error) {
 	var err = errors.For("index.getObjectSystemics")
 
-	// day tag
 	var systemics = []string{
+		systemic.GartTag(), // used for all inclusive mapping
 		systemic.TodayTag(),
 		systemic.TypeTag(card.Type().String()),
 	}

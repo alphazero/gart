@@ -9,7 +9,7 @@ import (
 )
 
 /// systemics //////////////////////////////////////////////////////////////////
-
+func GartTag() string            { return fmt.Sprintf("systemic:gart-object") }
 func ExtTag(name string) string  { return fmt.Sprintf("systemic:ext:%s", name) }
 func TypeTag(name string) string { return fmt.Sprintf("systemic:type:%s", name) }
 func TodayTag() string           { return DayTag(time.Now()) }

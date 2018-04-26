@@ -28,6 +28,7 @@ const (
 	URL
 )
 
+func SupportedTypes() []Otype { return []Otype{Text, File} }
 func (v Otype) Verify() error {
 	switch v {
 	case Data:

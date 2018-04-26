@@ -17,36 +17,36 @@ import (
 	"github.com/alphazero/gart/system/systemic"
 )
 
-// REVU rather have gart find --file --text --url TODO
-// gart find -tags "a, b, c" -type file -ext "pdf"
 type findOption struct {
 	cmdOption
-	inctags, exctags string // REVU this should be a type that support flag.Value
-	//	exclude string
-	otype  system.Otype
-	ext    string
-	date   string // TODO ex: -d [-/+]mar-19-2018
-	digest bool
+	incTags, exTags   string
+	incTypes, exTypes string
+	incExts, exExts   string
+	date              string // TODO ex: -d [-/+]mar-19-2018
+	digest            bool
 }
 
 func parseFindArgs(args []string) (Command, Option, error) {
-	//	var deftyp = system.File
-	var option = findOption{
-		otype: system.File,
-		ext:   "-",
-	}
+	var option findOption
 
 	option.flags = flag.NewFlagSet("gart find", flag.ExitOnError)
 	option.usingVerboseFlag("verbose cmd op")
-	option.flags.Var(&option.otype, "type",
-		"objects type {file, text, url, uri}")
-	option.flags.StringVar(&option.ext, "ext", option.ext,
-		"objects with file extension (file type only)")
 	option.flags.BoolVar(&option.digest, "digest", option.digest,
 		"print single line digest of matching object")
-	option.flags.StringVar(&option.inctags, "tags", option.inctags,
+
+	option.flags.StringVar(&option.incTypes, "types", option.incTypes,
+		"objects of type (csv list of {file, text, url, uri})")
+	option.flags.StringVar(&option.exTypes, "x-types", option.exTypes,
+		"exclude objects of type (csv list of {file, text, url, uri})")
+
+	option.flags.StringVar(&option.incExts, "exts", option.incExts,
+		"file objects with extention (csv list)")
+	option.flags.StringVar(&option.exExts, "x-exts", option.exExts,
+		"exclude file objects with extension (csv list)")
+
+	option.flags.StringVar(&option.incTags, "tags", option.incTags,
 		"objects with tags (csv list)")
-	option.flags.StringVar(&option.exctags, "exclude", option.exctags,
+	option.flags.StringVar(&option.exTags, "x-tags", option.exTags,
 		"exclude objects with tags (csv list)")
 
 	// default gart find w/ no tags returns all objects
@@ -68,16 +68,6 @@ func findCommand(ctx context.Context, option0 Option) error {
 	}
 	debug.Printf("options:%v\n", option)
 
-	/// systemic flags //////////////////////////////////////////////
-
-	var systemics []string
-	if option.otype != 0 {
-		systemics = append(systemics, systemic.TypeTag(option.otype.String()))
-		if option.otype == system.File && option.ext != "-" {
-			systemics = append(systemics, systemic.ExtTag(option.ext))
-		}
-	}
-
 	/// gart session ////////////////////////////////////////////////
 
 	var ctxChild, cancel = context.WithCancel(ctx)
@@ -92,18 +82,24 @@ func findCommand(ctx context.Context, option0 Option) error {
 
 	/// find query spec /////////////////////////////////////////////
 
-	var include = parseTags(option.inctags)
-	var exclude = parseTags(option.exctags)
+	var qbuilder = gart.NewQuery()
 
-	var qbuilder = gart.NewQuery().
-		IncludeTags(include...).
-		IncludeTags(systemics...).
-		ExcludeTags(exclude...)
-	if option.otype != 0 {
-		qbuilder.OfType(option.otype)
+	// user tags
+	qbuilder.IncludeTags(parseCsv(option.incTags)...)
+	qbuilder.ExcludeTags(parseCsv(option.exTags)...)
+
+	// systemic flags
+	for _, s := range parseCsv(option.incTypes) {
+		qbuilder.IncludeTags(systemic.TypeTag(s))
 	}
-	if option.otype == system.File && option.ext != "-" {
-		qbuilder.WithExtension(option.ext)
+	for _, s := range parseCsv(option.exTypes) {
+		qbuilder.ExcludeTags(systemic.TypeTag(s))
+	}
+	for _, s := range parseCsv(option.incExts) {
+		qbuilder.IncludeTags(systemic.ExtTag(s))
+	}
+	for _, s := range parseCsv(option.exExts) {
+		qbuilder.ExcludeTags(systemic.ExtTag(s))
 	}
 
 	/// async exec //////////////////////////////////////////////////
