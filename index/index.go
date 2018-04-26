@@ -157,7 +157,7 @@ type indexManager struct {
 	opMode  OpMode
 	oidx    *oidxFile
 	tagmaps map[string]*Tagmap
-	cards   map[*system.Oid]Card
+	cards   map[string]Card
 }
 
 func OpenIndexManager(opMode OpMode) (IndexManager, error) {
@@ -170,7 +170,7 @@ func OpenIndexManager(opMode OpMode) (IndexManager, error) {
 		opMode:  opMode,
 		oidx:    oidx,
 		tagmaps: make(map[string]*Tagmap),
-		cards:   make(map[*system.Oid]Card),
+		cards:   make(map[string]Card),
 	}
 
 	return idxmgr, nil
@@ -182,10 +182,10 @@ func (idx *indexManager) Rollback() error {
 	var debug = debug.For("indexManager.Rollback")
 	debug.Printf("modified cards:%d tagmaps:%d", len(idx.cards), len(idx.tagmaps))
 
-	for key, card := range idx.cards {
-		if e := card.removeWip(); e != nil {
-			return err.Bug("on card[%s].removeWip - e:%v", card.Oid().Fingerprint(), e)
-		}
+	for key, _ := range idx.cards {
+		//		if e := card.removeWip(); e != nil {
+		//			return err.Bug("on card[%s].removeWip - e:%v", card.Oid().Fingerprint(), e)
+		//		}
 		delete(idx.cards, key)
 	}
 	for key, _ := range idx.tagmaps {
@@ -240,10 +240,14 @@ func (idx *indexManager) Close(commit bool) error {
 	// note: cards are in-memory objects
 	// note: save is a nop if card is not modified
 	for oid, card := range idx.cards {
-		if ok, e := card.save(); e != nil || !ok {
-			return err.Bug("on card[%s].save - ok:%t e:%v", oid.Fingerprint(), ok, e)
+		debug.Printf("saving wip card - %s", oid)
+		if ok, e := card.saveWip(); !ok || e != nil {
+			return err.Bug("card.saveWip returned oid:%s ok:%t e:%v", oid, ok, e)
 		}
-		debug.Printf("saved card[%s]", oid.Fingerprint())
+		if ok, e := card.save(); e != nil || !ok {
+			return err.Bug("on card[%s].save - ok:%t e:%v", oid, ok, e)
+		}
+		debug.Printf("saved card[%s]", oid)
 	}
 
 	// note: tagmaps are in-memory objects
@@ -328,6 +332,8 @@ func (idx *indexManager) IndexText(strict bool, text string, tags ...string) (Ca
 // updated tags (if any), or the filename (if new) are added. See indexObject.
 func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string) (Card, bool, error) {
 	var err = errors.For("indexManager.IndexFile")
+	var debug = debug.For("indexManager.IndexFile")
+	debug.Printf("strict:%t filename:%q", strict, filename)
 
 	if !filepath.IsAbs(filename) {
 		return nil, false, err.InvalidArg("filename must be absolute path")
@@ -342,8 +348,9 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 	}
 
 	var isNew bool
-	var card Card
-	if cardExists(oid) {
+	var card Card = idx.cards[oid.String()]
+	switch {
+	case cardExists(oid):
 		if strict {
 			return nil, false, Error{system.Text, oid, ErrObjectExist}
 		}
@@ -351,11 +358,17 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 		if e != nil {
 			return card, false, e
 		}
+		fallthrough
+		//		fileCard := card.(*fileCard)
+		//		if _, e := fileCard.addPath(filename); e != nil {
+		//			return card, false, e
+		//		}
+	case card != nil:
 		fileCard := card.(*fileCard)
 		if _, e := fileCard.addPath(filename); e != nil {
 			return card, false, e
 		}
-	} else {
+	default:
 		var e error
 		card, e = NewFileCard(oid, filename)
 		if e != nil {
@@ -393,13 +406,14 @@ func (idx *indexManager) updateIndex(card Card, isNew bool, tags ...string) erro
 	}
 
 	tags = card.addTag(tags...)
-	if card.IsNew() || card.isModified() {
-		var oidfp = oid.Fingerprint()
-		debug.Printf("saving wip card - %s", oidfp)
-		if ok, e := card.saveWip(); !ok || e != nil {
-			return err.Bug("card.saveWip returned oid:%s ok:%t e:%v", oid.Fingerprint(), ok, e)
-		}
-		idx.cards[oid] = card
+	if idx.cards[oid.String()] == nil && (card.IsNew() || card.isModified()) {
+		//		var oidfp = oid.Fingerprint()
+		//		debug.Printf("saving wip card - %s", oidfp)
+		//		if ok, e := card.saveWip(); !ok || e != nil {
+		//			return err.Bug("card.saveWip returned oid:%s ok:%t e:%v", oid.Fingerprint(), ok, e)
+		//		}
+		debug.Printf("add card %s to cards map", oid.Fingerprint())
+		idx.cards[oid.String()] = card
 	}
 
 	var key = card.Key()
