@@ -32,6 +32,14 @@ func SumUint64(b []byte) uint64 {
 	h := blake2b.Sum256(b)
 	return *(*uint64)(unsafe.Pointer(&h[0]))
 }
+func SumUint64s(b []byte) (arr [4]uint64) {
+	h := blake2b.Sum256(b)
+	arr[0] = *(*uint64)(unsafe.Pointer(&h[0]))
+	arr[1] = *(*uint64)(unsafe.Pointer(&h[8]))
+	arr[2] = *(*uint64)(unsafe.Pointer(&h[16]))
+	arr[3] = *(*uint64)(unsafe.Pointer(&h[24]))
+	return
+}
 
 // Sum: Black2B size 256 digest
 func Sum(b []byte) [HashSize]byte {
