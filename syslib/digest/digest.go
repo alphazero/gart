@@ -32,12 +32,16 @@ func SumUint64(b []byte) uint64 {
 	h := blake2b.Sum256(b)
 	return *(*uint64)(unsafe.Pointer(&h[0]))
 }
-func SumUint64s(b []byte) (arr [4]uint64) {
-	h := blake2b.Sum256(b)
+func SumUint64s(b []byte) (arr [8]uint64) {
+	h := blake2b.Sum512(b)
 	arr[0] = *(*uint64)(unsafe.Pointer(&h[0]))
 	arr[1] = *(*uint64)(unsafe.Pointer(&h[8]))
 	arr[2] = *(*uint64)(unsafe.Pointer(&h[16]))
 	arr[3] = *(*uint64)(unsafe.Pointer(&h[24]))
+	arr[4] = *(*uint64)(unsafe.Pointer(&h[32]))
+	arr[5] = *(*uint64)(unsafe.Pointer(&h[40]))
+	arr[6] = *(*uint64)(unsafe.Pointer(&h[48]))
+	arr[7] = *(*uint64)(unsafe.Pointer(&h[56]))
 	return
 }
 
