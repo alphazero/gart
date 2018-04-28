@@ -133,6 +133,10 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 	var line []byte
 	var n int
 	for {
+		// REVU BUG - if interrupt happens here (e.g. find command pipe breaks) then
+		//            this returns EOF which below is interpreted as 'expected error' and certainly
+		//            not interrupt! So commit actually happens.
+		//
 		line, e = r.ReadBytes('\n')
 		if e != nil {
 			break
@@ -147,7 +151,11 @@ func addStreamedObjects(ctx context.Context, option addOption) error {
 			break
 		}
 	}
-	t0.Mark("add complemeted")
+	t0.Mark("add completed")
+	if e == io.EOF && ctx.Err() != nil {
+		e = ErrInterrupt
+		log.Log("pipe break trapped")
+	}
 
 	var commit = e == nil || e == io.EOF // do not commit on any other error
 	if ec := session.Close(commit); ec != nil {
@@ -173,11 +181,16 @@ func interruptibleAdd(ctx context.Context, session gart.Session, strict bool, ty
 	default:
 		card, added, e := session.AddObject(strict, typ, spec, tags...)
 		if e != nil {
-			if index.IsObjectExistErr(e) {
+			switch {
+			case index.IsObjectExistErr(e):
 				log.Log("%s exists - %q", e.(index.Error).Oid.Fingerprint(), spec)
 				return nil
+			case os.IsNotExist(e):
+				log.Log("%v", e)
+				return nil
+			default:
+				return e
 			}
-			return e
 		}
 		log.Log("%s (added: %t) %q", card.Oid().Fingerprint(), added, spec)
 	}

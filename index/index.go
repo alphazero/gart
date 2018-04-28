@@ -340,7 +340,13 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 	}
 	md, e := digest.SumFile(filename)
 	if e != nil {
-		return nil, false, err.InvalidArg(e.Error())
+		// REVU don't wrap the error as it is 99% os.ErrNotExist due to funky path issues.
+		//      Problem seems to be a Golang bug with embedded \n in file name. filepath
+		//      accepts it, (OS X) ls and cat accept it, but SumFile chokes on it.
+		//
+		//      So return the original error so the top level function can check for it and
+		//      not stop a session because of this issue.
+		return nil, false, e
 	}
 	oid, e := system.NewOid(md[:])
 	if e != nil {
@@ -351,6 +357,14 @@ func (idx *indexManager) IndexFile(strict bool, filename string, tags ...string)
 	var card Card = idx.cards[oid.String()]
 	switch {
 	case cardExists(oid):
+		// REVU strict is strictly broken
+		//      idea behind strict is 'don't index an existing card'. but
+		//      what if in the same session multiple files are resolving to the same
+		//      object? In that case the second case statement (card != nil) will select
+		//      and paths will be updated.
+		//
+		//      And if we include that as well for strict filtering, then how to add paths
+		//      explicitly?
 		if strict {
 			return nil, false, Error{system.Text, oid, ErrObjectExist}
 		}
