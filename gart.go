@@ -5,6 +5,7 @@ package gart
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"github.com/alphazero/gart/index"
 	"github.com/alphazero/gart/syslib/debug"
@@ -12,8 +13,16 @@ import (
 	"github.com/alphazero/gart/system"
 )
 
-var _ = errors.For
-var _ = debug.For
+/// errors /////////////////////////////////////////////////////////////////////
+
+var (
+	ErrIgnoredPath = errors.Error("ignored path")
+)
+
+/// invariants /////////////////////////////////////////////////////////////////
+
+// TODO .gartignore files and paths
+var ignorePaths = []string{".gart/", ".git/"}
 
 /// stateless ops //////////////////////////////////////////////////////////////
 
@@ -138,6 +147,11 @@ func (s *session) AddObject(strict bool, otype system.Otype, spec string, tags .
 		path, e := filepath.Abs(spec)
 		if e != nil {
 			return nil, false, err.ErrorWithCause(e, "unexpected error on filepath.Abs")
+		}
+		for _, s := range ignorePaths {
+			if strings.Contains(path, s) {
+				return nil, false, ErrIgnoredPath
+			}
 		}
 		return s.idx.IndexFile(strict, path, tags...)
 	case system.URL, system.URI:

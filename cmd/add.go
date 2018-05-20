@@ -188,6 +188,9 @@ func interruptibleAdd(ctx context.Context, session gart.Session, strict bool, ty
 			case os.IsNotExist(e):
 				log.Log("%v", e)
 				return nil
+			case e == gart.ErrIgnoredPath:
+				log.Log("%s ignored", spec)
+				return nil
 			default:
 				return e
 			}
