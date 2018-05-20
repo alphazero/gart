@@ -19,15 +19,15 @@ func (t0 *timestamp) mark() int64 {
 }
 
 func (t0 *timestamp) Mark(s string) time.Duration {
-	dt := t0.mark()
-	fmt.Printf(">>> step:%s - dt:%s\n", s, dt)
-	return time.Duration(dt)
+	dt := time.Duration(t0.mark())
+	fmt.Printf("time-mark: %s - dt:%s\n", s, dt)
+	return dt
 }
 
 func (t0 *timestamp) MarkN(s string, ops int) (dt, dtpo time.Duration) {
 	d := t0.mark()
 	dt = time.Duration(d)
 	dtpo = time.Duration(int64(float64(d) / float64(ops)))
-	fmt.Printf(">>> step:%s - dt:%s t/op:%s\n", s, dt, dtpo)
+	fmt.Printf("time-mark: %s - dt:%s t/op:%s\n", s, dt, dtpo)
 	return
 }
