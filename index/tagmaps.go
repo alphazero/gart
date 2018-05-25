@@ -14,6 +14,7 @@ import (
 
 	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/bitmap"
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/fs"
@@ -183,6 +184,9 @@ func createTagmap(tag string) (*Tagmap, error) {
 func loadTagmap(tag string, create bool) (*Tagmap, error) {
 
 	var err = errors.For(fmt.Sprintf("index.loadTagmap(%q)", tag))
+	var debug = debug.For("index.loadTagmap")
+	debug.Printf("tag: %q create: %t", tag, create)
+
 	/// open file ///////////////////////////////////////////////////
 
 	filename := TagmapFilename(tag)
