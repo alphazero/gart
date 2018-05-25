@@ -4,6 +4,7 @@ package gart
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -22,7 +23,8 @@ var (
 /// invariants /////////////////////////////////////////////////////////////////
 
 // TODO .gartignore files and paths
-var ignorePaths = []string{".gart/", ".git/"}
+var ignoredPaths = []string{".gart/", ".git/", ".git_vendor/"}
+var ignoredExts = []string{".jar", ".pom, .bin, .class, .xml, .lock"}
 
 /// stateless ops //////////////////////////////////////////////////////////////
 
@@ -148,16 +150,46 @@ func (s *session) AddObject(strict bool, otype system.Otype, spec string, tags .
 		if e != nil {
 			return nil, false, err.ErrorWithCause(e, "unexpected error on filepath.Abs")
 		}
-		for _, s := range ignorePaths {
-			if strings.Contains(path, s) {
-				return nil, false, ErrIgnoredPath
-			}
+		if ignoreFile(path) {
+			return nil, false, ErrIgnoredPath
 		}
 		return s.idx.IndexFile(strict, path, tags...)
 	case system.URL, system.URI:
 		return nil, false, err.InvalidArg("%s type not supported", otype)
 	}
 	panic(err.Bug("unreachable"))
+}
+
+var hiddenDir = []byte{os.PathSeparator, '.'}
+
+// ignore returns true if file should be ignored.
+func ignoreFile(path string) bool {
+	// filter hidden paths
+	if strings.Contains(path, string(hiddenDir)) {
+		return true
+	}
+
+	// filter hidden files
+	fname := filepath.Base(path)
+	if fname[0] == '.' {
+		return true
+	}
+
+	// filter if path contains ignored path element
+	for _, s := range ignoredPaths {
+		if strings.Contains(path, s) {
+			return true
+		}
+	}
+
+	// filter ignored extensions
+	for _, s := range ignoredExts {
+		if strings.HasSuffix(path, s) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *session) Log() []string {
