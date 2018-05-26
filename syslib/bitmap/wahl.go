@@ -504,6 +504,7 @@ const (
 	XorOp
 )
 
+// REVU why receiver is value type and arg pointer?
 func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 	if w2 == nil {
 		return nil, errors.ErrInvalidArg

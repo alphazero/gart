@@ -3,6 +3,7 @@
 package index
 
 import (
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/system"
 	"github.com/alphazero/gart/system/systemic"
 )
@@ -35,7 +36,19 @@ func NewQuery() *query {
 	}
 }
 
-func (q *query) Build() Query { return q }
+func (q *query) Build() Query {
+	var debug = debug.For("query.Build")
+	debug.Printf("query")
+	debug.Printf("-- include --")
+	for k := range q.include {
+		debug.Printf("\t%s", k)
+	}
+	debug.Printf("-- exclude --")
+	for k := range q.exclude {
+		debug.Printf("\t%s", k)
+	}
+	return q
+}
 
 func (q *query) asQuery() *query { return q }
 
@@ -55,6 +68,19 @@ func (q *query) ExcludeTags(tags ...string) *query {
 	return q
 }
 
+// REVU the following are not used -- find uses above directly.
+//
+// 2 concerns:
+// 1 - find cmd is injecting the type/ext/date semantics. minor concern
+//     is replicating the same elsewhere.
+//
+// 2 - more importantly, query is treating all tags uniformly and that
+//     is losing bits of information possibly useful for query planning.
+//
+// TODO
+//		1 - find should use the functions below.
+//		2 - query struct should be semantic
+//		3 - (long term) query planner.
 func (q *query) OfType(otype system.Otype) *query {
 	var tag = systemic.TypeTag(otype.String())
 	q.include[tag] = struct{}{}

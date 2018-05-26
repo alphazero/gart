@@ -470,6 +470,7 @@ func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
 
 	if len(q.include) == 0 {
 		q.IncludeTags(systemic.GartTag())
+		// REVU we can just jump ahead to result here.
 	}
 	debug.Printf("called q: %v", q)
 
