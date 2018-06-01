@@ -213,6 +213,9 @@ func (s *session) AsyncExec(query index.Query) (<-chan interface{}, <-chan error
 			return
 		}
 		debug.Printf("gart.Exec: found %v objects\n", len(oids))
+		//		close(oc) // XXX
+		//		close(ec) // XXX
+		//	return
 
 		for i, oid := range oids {
 			select {

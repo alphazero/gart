@@ -469,10 +469,10 @@ func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
 	var q = qx.asQuery()
 
 	if len(q.include) == 0 {
+		debug.Printf("include ALL")
 		q.IncludeTags(systemic.GartTag())
-		// REVU we can just jump ahead to result here.
 	}
-	debug.Printf("called q: %v", q)
+	debug.Printf("called q: %v", q) // XXX
 
 	var e error
 
@@ -490,8 +490,8 @@ func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
 	if exmap, e = bitmap.Or(excluded...); e != nil {
 		return nil, err.ErrorWithCause(e, "on exluded set OR")
 	}
+	exmap = exmap.Not()
 
-	// the included tags
 	var inmap = bitmap.NewWahl() // empty set
 	var included []*bitmap.Wahl
 	for tag, _ := range q.include {
@@ -505,6 +505,7 @@ func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
 		}
 		included = append(included, tagmap.bitmap)
 	}
+
 	if inmap, e = bitmap.And(included...); e != nil {
 		return nil, err.ErrorWithCause(e, "on included set AND")
 	}
@@ -512,15 +513,12 @@ func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
 	if inmap.Len() == 0 {
 		return []*system.Oid{}, nil
 	}
-
 	if exmap.Len() > 0 {
-		if exmap, e = inmap.Xor(exmap); e != nil {
-			return nil, err.ErrorWithCause(e, "on XOR")
-		}
 		if inmap, e = inmap.And(exmap); e != nil {
-			return nil, err.ErrorWithCause(e, "on AND")
+			return nil, err.ErrorWithCause(e, "on final AND")
 		}
 	}
+
 	bits := inmap.Bits()
 	return idx.oidx.getOids([]int(bits)...)
 }

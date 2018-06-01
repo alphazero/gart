@@ -45,6 +45,7 @@ import (
 	"unsafe"
 
 	//	"github.com/alphazero/gart/syslib/bench"
+	//	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/sort"
 )
@@ -510,6 +511,7 @@ func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 		return nil, errors.ErrInvalidArg
 	}
 
+	//	debug.Printf("begin - op:%d", op)
 	/// blockwise application of ap /////////////////////////////////
 
 	//	t0 := bench.NewTimestamp()
@@ -526,26 +528,24 @@ func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 		switch {
 		case i >= wlen1 && j >= wlen2:
 		case j >= wlen2:
-			if wb1.rlen > 0 {
+			if wb1.fill && wb1.rlen > 0 {
 				res[k] = (wb1.val & 0xc0000000) | uint32(wb1.rlen)
-				//				debug.Printf("wb1 %2d %v", i, wb1)
-				//				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
+				//				debug.Printf("wb1 %4d %v", i, wb1)
+				//				debug.Printf("res %4d %v", k, WahlBlock(res[k]))
 				i++
 				k++
 			}
 			copy(res[k:], w1.arr[i:])
-			//			n := copy(res[k:], w1.arr[i:])
 			//			debug.Printf("copy(res[%d:], w1.arr[%d:]) -> %d", k+1, i+1, n)
 		case i >= wlen1:
-			if wb2.rlen > 0 {
+			if wb2.fill && wb2.rlen > 0 {
 				res[k] = (wb2.val & 0xc0000000) | uint32(wb2.rlen)
-				//				debug.Printf("wb2 %2d %v", j, wb2)
-				//				debug.Printf("res %2d %v", k, WahlBlock(res[k]))
+				//				debug.Printf("wb2 %4d %v", j, wb2)
+				//				debug.Printf("res %4d %v", k, WahlBlock(res[k]))
 				j++
 				k++
 			}
 			copy(res[k:], w2.arr[j:])
-			//			n := copy(res[k:], w2.arr[j:])
 			//			debug.Printf("copy(res[%d:], w2.arr[%d:]) -> %d", k+1, j+1, n)
 		default:
 			panic(errors.Bug("(i:%d of %d) - (j:%d of %d)", i, wlen1, j, wlen2))
@@ -558,6 +558,16 @@ func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
 	wahl := &Wahl{res}
 	wahl.Compress()
 
+	// XXX
+	switch op {
+	case AndOp:
+	case OrOp:
+		verifyOr(&w1, w2, wahl)
+	case XorOp:
+	}
+	// XXX
+
+	//	debug.Printf("end - op:%d\n", op)
 	//	t0.Mark("blockwise - compress")
 	return wahl, nil
 }

@@ -4,7 +4,9 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 
 	"github.com/alphazero/gart/syslib/bitmap"
 	"github.com/alphazero/gart/syslib/debug"
@@ -13,6 +15,8 @@ import (
 )
 
 /// adhoc test /////////////////////////////////////////////////////////////////
+
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
@@ -28,6 +32,7 @@ func main() {
 	tryCompressed()
 	/* REVU done - Thanks!
 	 */
+	tryQuery()
 }
 
 func exitOnError(e error) {
@@ -59,6 +64,18 @@ func getWahl(n0, cnt uint) *bitmap.Wahl {
 	}
 	w.Set(bits...)
 	verifySet(w, bits)
+	return w
+}
+
+func getRandomWahl(max uint) *bitmap.Wahl {
+	var w = bitmap.NewWahl()
+	var bits []uint
+	for i := uint(0); i < max; i++ {
+		if rnd.Intn(100) > 50 {
+			bits = append(bits, i)
+		}
+	}
+	w.Set(bits...)
 	return w
 }
 
@@ -164,6 +181,106 @@ func tryCompressed() {
 	return
 }
 
+// check query plan
+// i - OR all the excluded
+// ii - NOT the result
+// iii - AND with all
+// iv - AND with included
+func tryQuery() {
+	fmt.Printf("=== query ======================\n")
+	var n = uint(rnd.Intn(1 << 8))
+
+	fmt.Printf("--- all ---\n")
+	var all = getWahl(0, n)
+	all.Compress()
+	all.Print(os.Stdout)
+
+	var xn = rnd.Intn(10)
+	var xlist = make([]*bitmap.Wahl, xn)
+	for i := 0; i < xn; i++ {
+		fmt.Printf("--- exclude ---\n")
+		xlist[i] = getRandomWahl(n)
+		xlist[i].Compress()
+		xlist[i].Print(os.Stdout)
+	}
+
+	var in = rnd.Intn(10)
+	var ilist = make([]*bitmap.Wahl, in)
+	for i := 0; i < in; i++ {
+		fmt.Printf("--- include ---\n")
+		ilist[i] = getRandomWahl(n)
+		ilist[i].Compress()
+		ilist[i].Print(os.Stdout)
+	}
+
+	x0, e := bitmap.Or(xlist...)
+	if e != nil {
+		exitOnError(e)
+	}
+	fmt.Printf("--- x0 exclude ---\n")
+	x0.Print(os.Stdout)
+
+	x0 = x0.Not()
+	fmt.Printf("--- x0 exclude not ---\n")
+	x0.Print(os.Stdout)
+
+	xf, e := x0.And(all)
+	if e != nil {
+		exitOnError(e)
+	}
+	fmt.Printf("--- xf filter ----\n")
+	all.Print(os.Stdout)
+	xf.Print(os.Stdout)
+	verifyAnd(x0, all, xf)
+
+	i0, e := bitmap.And(ilist...)
+	if e != nil {
+		exitOnError(e)
+	}
+	fmt.Printf("--- i0 include ---\n")
+	i0.Print(os.Stdout)
+
+	res, e := i0.And(xf)
+	if e != nil {
+		exitOnError(e)
+	}
+
+	// TODO verify
+	fmt.Printf("=== query result ===============\n")
+	res.Print(os.Stdout)
+}
+
+func tryUncompressed() {
+	// lotsofones are bits in range (1000, 1332)
+	lotsofones := make([]uint, 333)
+	for i := 0; i < len(lotsofones); i++ {
+		lotsofones[i] = uint(i + 1000)
+	}
+
+	var wahl_1 = bitmap.NewWahl()
+	wahl_1.Set(0, 30, 63, 93)
+	wahl_1.Set(lotsofones[:33]...)
+	wahl_1.Bits().Print(os.Stdout)
+	wahl_1.Print(os.Stdout)
+
+	var wahl_2 = bitmap.NewWahl()
+	wahl_2.Set(0, 1, 29, 31, 93, 124, 155, 185, 186, 1000, 1001, 1003, 1007, 2309, 2311)
+	wahl_2.Bits().Print(os.Stdout)
+	wahl_2.Print(os.Stdout)
+
+	fmt.Printf("\n=== TEST AND =( uncompressed )===\n")
+	wahl_1_and_2, e := wahl_1.And(wahl_2)
+	if e != nil {
+		exitOnError(e)
+	}
+	wahl_1_and_2.Bits().Print(os.Stdout)
+	wahl_1_and_2.Print(os.Stdout)
+
+	return
+}
+
+/// helpers //////////////////////////////////////////////////////
+
 func verifySet(w *bitmap.Wahl, a []uint) {
 	w_map := mapArray(w.Bits())
 	for _, bit := range a {
@@ -246,37 +363,6 @@ func verifyOr(a, b, or *bitmap.Wahl) {
 		}
 	}
 }
-
-func tryUncompressed() {
-	// lotsofones are bits in range (1000, 1332)
-	lotsofones := make([]uint, 333)
-	for i := 0; i < len(lotsofones); i++ {
-		lotsofones[i] = uint(i + 1000)
-	}
-
-	var wahl_1 = bitmap.NewWahl()
-	wahl_1.Set(0, 30, 63, 93)
-	wahl_1.Set(lotsofones[:33]...)
-	wahl_1.Bits().Print(os.Stdout)
-	wahl_1.Print(os.Stdout)
-
-	var wahl_2 = bitmap.NewWahl()
-	wahl_2.Set(0, 1, 29, 31, 93, 124, 155, 185, 186, 1000, 1001, 1003, 1007, 2309, 2311)
-	wahl_2.Bits().Print(os.Stdout)
-	wahl_2.Print(os.Stdout)
-
-	fmt.Printf("\n=== TEST AND =( uncompressed )===\n")
-	wahl_1_and_2, e := wahl_1.And(wahl_2)
-	if e != nil {
-		exitOnError(e)
-	}
-	wahl_1_and_2.Bits().Print(os.Stdout)
-	wahl_1_and_2.Print(os.Stdout)
-
-	return
-}
-
-/// helpers //////////////////////////////////////////////////////
 
 func smallerFirst(a, b []int) ([]int, []int) {
 	if len(a) < len(b) {
