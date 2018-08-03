@@ -23,7 +23,7 @@ func (v fnPrinter) Printf(fmtstr string, a ...interface{}) {
 	if Writer == nil {
 		return
 	}
-	printf(3, string(v)+": "+fmtstr, a...)
+	printf(2, string(v)+": "+fmtstr, a...) // this used to be 3 in go1.9.x
 }
 
 func Printf(fmtstr string, a ...interface{}) {
