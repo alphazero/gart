@@ -463,255 +463,6 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// Returns new bitmap that is the logical NOT of the receiver.
-// The new has same len and max as the
-func (w Wahl) Not() *Wahl {
-	var wnot = &Wahl{arr: make([]uint32, len(w.arr))}
-	for i, v := range w.arr {
-		switch v >> 31 {
-		case 1:
-			wnot.arr[i] = v ^ 0x40000000
-		default:
-			wnot.arr[i] = v ^ 0x7FFFFFFF
-		}
-	}
-	return wnot
-}
-
-// And appllies the bitwise logical AND, returns result in a newly allocated bitmap.
-// Returns ErrInvalidArg if input is nil.
-func (w Wahl) And(other *Wahl) (*Wahl, error) {
-	return w.bitwise(AndOp, other)
-}
-
-// Or applies the bitwise logical OR, returns result in a newly allocated bitmap.
-// Returns ErrInvalidArg if input is nil.
-func (w Wahl) Or(other *Wahl) (*Wahl, error) {
-	return w.bitwise(OrOp, other)
-}
-
-// Xor applies the bitwise logical XOR, returns result in a newly allocated bitmap.
-// Returns ErrInvalidArg if input is nil.
-func (w Wahl) Xor(other *Wahl) (*Wahl, error) {
-	return w.bitwise(XorOp, other)
-}
-
-type bitwiseOp byte
-
-const (
-	_ bitwiseOp = iota
-	AndOp
-	OrOp
-	XorOp
-)
-
-// REVU why receiver is value type and arg pointer?
-func (w1 Wahl) bitwise(op bitwiseOp, w2 *Wahl) (*Wahl, error) {
-	if w2 == nil {
-		return nil, errors.ErrInvalidArg
-	}
-
-	//	debug.Printf("begin - op:%d", op)
-	/// blockwise application of ap /////////////////////////////////
-
-	//	t0 := bench.NewTimestamp()
-	i, j, k, res, wb1, wb2 := w1.blockwise(op, w2)
-	//	t0.Mark("blockwise")
-
-	/// op finalization /////////////////////////////////////////////
-
-	// here we check if any partially processed tail blocks remain
-	// we only care if op is XOR | OR and append those directly to blockwise result.
-	if op != AndOp {
-		//		debug.Printf("tail @ i:%d j:%d k:%d", i, j, k)
-		var wlen1, wlen2 int = w1.Len(), w2.Len()
-		switch {
-		case i >= wlen1 && j >= wlen2:
-		case j >= wlen2:
-			if wb1.fill && wb1.rlen > 0 {
-				res[k] = (wb1.val & 0xc0000000) | uint32(wb1.rlen)
-				//				debug.Printf("wb1 %4d %v", i, wb1)
-				//				debug.Printf("res %4d %v", k, WahlBlock(res[k]))
-				i++
-				k++
-			}
-			copy(res[k:], w1.arr[i:])
-			//			debug.Printf("copy(res[%d:], w1.arr[%d:]) -> %d", k+1, i+1, n)
-		case i >= wlen1:
-			if wb2.fill && wb2.rlen > 0 {
-				res[k] = (wb2.val & 0xc0000000) | uint32(wb2.rlen)
-				//				debug.Printf("wb2 %4d %v", j, wb2)
-				//				debug.Printf("res %4d %v", k, WahlBlock(res[k]))
-				j++
-				k++
-			}
-			copy(res[k:], w2.arr[j:])
-			//			debug.Printf("copy(res[%d:], w2.arr[%d:]) -> %d", k+1, j+1, n)
-		default:
-			panic(errors.Bug("(i:%d of %d) - (j:%d of %d)", i, wlen1, j, wlen2))
-		}
-	}
-
-	//	t0.Mark("blockwise - tail")
-	/// compress results ////////////////////////////////////////////
-
-	wahl := &Wahl{res}
-	wahl.Compress()
-
-	// XXX
-	switch op {
-	case AndOp:
-	case OrOp:
-		verifyOr(&w1, w2, wahl)
-	case XorOp:
-	}
-	// XXX
-
-	//	debug.Printf("end - op:%d\n", op)
-	//	t0.Mark("blockwise - compress")
-	return wahl, nil
-}
-
-func (w1 *Wahl) blockwise(op bitwiseOp, w2 *Wahl) (i, j, k int, res []uint32, wb1, wb2 wahlBlock) {
-
-	/// recover from expected OOR error /////////////////////////////
-
-	defer func() {
-		const oor = "runtime error: index out of range"
-		if x := recover(); x != nil {
-			if e, ok := x.(error); ok && e.Error() == oor {
-				return // ok - expected
-			}
-			panic(errors.Bug("unexpected: %v", x))
-		}
-	}()
-
-	/// santa's little helpers //////////////////////////////////////
-
-	var mixpair func(int, uint32) uint32
-	var tilepair func(a, b uint32) uint32
-	var fillpair func(a, b int) uint32
-	switch op {
-	case AndOp:
-		mixpair = func(fval int, val uint32) uint32 {
-			if fval == 1 {
-				return val // val & all 1 is val
-			}
-			return 0 // val & all 0 is 0
-		}
-		tilepair = func(a, b uint32) uint32 { return a & b }
-		fillpair = func(a, b int) uint32 { return uint32((a & b) << 30) }
-	case OrOp:
-		mixpair = func(fval int, val uint32) uint32 {
-			if fval == 1 {
-				return 0x7fffffff // val | all 1 is all 1
-			}
-			return val // val | all 0 is val
-		}
-		tilepair = func(a, b uint32) uint32 { return a | b }
-		fillpair = func(a, b int) uint32 { return uint32((a | b) << 30) }
-	case XorOp:
-		mixpair = func(fval int, val uint32) uint32 {
-			if fval == 1 {
-				return 0x7fffffff ^ val // do xor
-			}
-			return val // val ^ all 0 is val
-		}
-		tilepair = func(a, b uint32) uint32 { return a ^ b }
-		fillpair = func(a, b int) uint32 { return uint32((a ^ b) << 30) }
-	}
-
-	emit := func(info string, i, j, k int, wb1, wb2, wb3 wahlBlock) {
-		//		debug.Printf("--- %s ------------------", info)
-		//		debug.Printf("%2d: %v", i, wb1)
-		//		debug.Printf("%2d: %v", j, wb2)
-		//		debug.Printf("%2d: %v", k, wb3)
-	}
-
-	/// loop ////////////////////////////////////////////////////////
-
-	const _TT, _TF, _FT, _FF = 0, 1, 2, 3
-	var es byte
-
-	res = make([]uint32, (maxInt(w1.Max(), w2.Max())/31)+1)
-outer:
-	for {
-		wb1 = WahlBlock(w1.arr[i])
-		wb2 = WahlBlock(w2.arr[j])
-	inner:
-		for {
-			es = byte(wb2.val>>31 | ((wb1.val >> 31) << 1))
-			switch es {
-			case _TT:
-				res[k] = tilepair(wb1.val, wb2.val)
-				emit("tile-tile", i, j, k, wb1, wb2, WahlBlock(res[k]))
-				wb1.rlen = 0
-				wb2.rlen = 0
-				k++
-				i++
-				j++
-				continue outer
-			case _TF:
-				res[k] = mixpair(wb2.fval, wb1.val)
-				emit("tile-fill", i, j, k, wb1, wb2, WahlBlock(res[k]))
-				wb1.rlen = 0
-				wb2.rlen--
-				k++
-				i++
-				if wb2.rlen > 0 {
-					wb1 = WahlBlock(w1.arr[i])
-					continue inner
-				}
-				j++
-				continue outer
-			case _FT:
-				res[k] = mixpair(wb1.fval, wb2.val)
-				emit("fill-tile", i, j, k, wb1, wb2, WahlBlock(res[k]))
-				wb1.rlen--
-				wb2.rlen = 0
-				k++
-				j++
-				if wb1.rlen > 0 {
-					wb2 = WahlBlock(w2.arr[j])
-					continue inner
-				}
-				i++
-				continue outer
-			case _FF:
-				fill := uint32(0x80000000) | fillpair(wb1.fval, wb2.fval)
-				switch {
-				case wb1.rlen > wb2.rlen:
-					res[k] = fill | uint32(wb2.rlen)
-					emit("fill-fill wb1 > wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
-					wb1.rlen -= wb2.rlen
-					wb2.rlen = 0
-					k++
-					j++
-					wb2 = WahlBlock(w2.arr[j])
-				case wb1.rlen < wb2.rlen:
-					res[k] = fill | uint32(wb1.rlen)
-					emit("fill-fill wb1 < wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
-					wb2.rlen -= wb1.rlen
-					wb1.rlen = 0
-					k++
-					i++
-					wb1 = WahlBlock(w1.arr[i])
-				default:
-					res[k] = fill | uint32(wb1.rlen)
-					emit("fill-fill wb1 = wb2", i, j, k, wb1, wb2, WahlBlock(res[k]))
-					wb1.rlen = 0
-					wb2.rlen = 0
-					i++
-					j++
-					k++
-					continue outer
-				}
-			}
-		}
-	}
-	return
-}
-
 // Returns the position of all set bits in the bitmap. The returned
 // bits are in ascending order. Returns array may be empty but never nil.
 func (w *Wahl) Bits() Bitnums {
@@ -745,6 +496,236 @@ func (w Wahl) Print(writer io.Writer) {
 		panic(errors.Bug("Wahl.Print: %v", e))
 	}
 	fmt.Fprintf(writer, "\n")
+}
+
+/// Bitwise ops ////////////////////////////////////////////////////////////////
+
+// Returns new bitmap that is the logical NOT of the receiver.
+// The new has same len and max as the
+func (w Wahl) Not() *Wahl {
+	var wnot = &Wahl{arr: make([]uint32, len(w.arr))}
+	for i, v := range w.arr {
+		switch v >> 31 {
+		case 1:
+			wnot.arr[i] = v ^ 0x40000000
+		default:
+			wnot.arr[i] = v ^ 0x7FFFFFFF
+		}
+	}
+	return wnot
+}
+
+// And appllies the bitwise logical AND, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+func (w *Wahl) And(other *Wahl) (*Wahl, error) {
+	return w.bitwise(AndOp, other)
+}
+
+// Or applies the bitwise logical OR, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+func (w *Wahl) Or(other *Wahl) (*Wahl, error) {
+	return w.bitwise(OrOp, other)
+}
+
+// Xor applies the bitwise logical XOR, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+func (w *Wahl) Xor(other *Wahl) (*Wahl, error) {
+	return w.bitwise(XorOp, other)
+}
+
+type bitwiseOp byte
+
+const (
+	_ bitwiseOp = iota
+	AndOp
+	OrOp
+	XorOp
+)
+
+var bitwiseFn = []func(uint32, uint32) uint32{
+	func(a, b uint32) uint32 { panic("illegal state") },
+	func(a, b uint32) uint32 { return a & b },
+	func(a, b uint32) uint32 { return a | b },
+	func(a, b uint32) uint32 { return a ^ b },
+}
+
+func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
+	var ri = getWriter(nil)
+	var i0 = w.getReader()
+	var ix = x.getReader()
+	var fn = bitwiseFn[op]
+
+	var rlen = min(ix.rlen, i0.rlen)
+	for rlen > 0 {
+		ri.writeN(fn(i0.word, ix.word), rlen)
+		i0.readN(rlen)
+		ix.readN(rlen)
+		rlen = min(ix.rlen, i0.rlen)
+	}
+
+	// tail end treatment of unequal length bitmaps.
+	// Skip for AND op.
+	var tail *wahlReader
+	if op == AndOp {
+		goto done
+	}
+
+	switch {
+	case ix.rlen > 0 && i0.rlen > 0:
+		panic("bug")
+	case i0.rlen > 0:
+		tail = i0
+	default:
+		tail = ix
+	}
+
+	for tail.rlen > 0 {
+		ri.writeN(fn(tail.word, 0), tail.rlen)
+		tail.readN(tail.rlen)
+	}
+
+done:
+	return ri.done(), nil
+}
+
+/// wahl iterators /////////////////////////////////////////////////////////////
+
+// wahlIterator for sequential read/write of compressed bitmap
+type wahlIterator struct {
+	wahl *Wahl
+	i    int    // index into wahl array
+	rlen int    // run length for word
+	word uint32 // 31-bit encoded word of rlen run length.
+	pos  int    // bit position of the LSB of the current word
+	fill bool
+}
+
+// for internal use only
+type wahlReader wahlIterator
+
+// Returns an immutable, sequential reader for the bitmap.
+func (w *Wahl) getReader() *wahlReader {
+	iter := &wahlReader{
+		wahl: w,
+	}
+	// load initial word, if any
+	iter.loadWord()
+	return iter
+}
+
+// Reads word that spans a run-length of at least n.
+// panics if n exceeds run-length.
+func (r *wahlReader) readN(n int) uint32 {
+	r.rlen -= n
+	switch {
+	case r.rlen == 0:
+		w := r.word
+		r.loadWord() // read next word
+		return w
+	case r.rlen < 0:
+		panic("bug - n exceeds rlen")
+	}
+	return r.word
+}
+
+// if wahlIterator index is past wahl capacity, we're done.
+// Otherwise, read the next wahl block and update wahlIterator state.
+func (r *wahlReader) loadWord() {
+	if r.i >= len(r.wahl.arr) {
+		r.word = 0
+		r.rlen = 0
+		return
+	}
+	var v = r.wahl.arr[r.i]
+	// REVU below benched to be fastest
+	var val = []uint32{0, 0x7fffffff}
+	switch {
+	case v>>31 == 0:
+		r.word = v & 0x7fffffff
+		r.rlen = 1
+	default:
+		r.rlen = int(v) & 0x3fffffff
+		r.word = val[(v>>30)&0x1]
+	}
+	r.i++
+}
+
+// for internal use only
+type wahlWriter wahlIterator
+
+func getWriter(wahl *Wahl) *wahlWriter {
+	if wahl == nil {
+		wahl = NewWahl()
+	}
+	var w = wahlWriter{
+		wahl: wahl,
+		i:    -1,
+	}
+	return &w
+}
+
+func (p *wahlWriter) writeN(word uint32, n int) {
+	// init pending word case
+	if p.i < 0 {
+		p.wahl.arr = make([]uint32, 16)
+		goto set_pending
+	}
+
+	// update rlen of pending FILL word if new word is same
+	if p.fill && p.word == word {
+		// REVU BUG here if rlen exceeds 2^30 ..
+		p.rlen += n
+		return
+	}
+
+	/// flush pending word ///////////////////////////////
+
+	// (re)allocate output buffer if necessary
+	if p.i >= len(p.wahl.arr) {
+		tmp := make([]uint32, len(p.wahl.arr)<<1)
+		copy(tmp, p.wahl.arr)
+		p.wahl.arr = tmp
+	}
+	// encode and update wahl
+	switch {
+	case p.fill && p.word == 0x7fffffff:
+		p.wahl.arr[p.i] = 0xc0000000 | uint32(p.rlen&0x3fffffff)
+	case p.fill:
+		p.wahl.arr[p.i] = 0x80000000 | uint32(p.rlen&0x3fffffff)
+	default:
+		p.wahl.arr[p.i] = p.word
+	}
+
+	/// set new pending word /////////////////////////////
+set_pending:
+	p.word = word
+	p.fill = (word == 0 || word == 0x7fffffff)
+	p.rlen = n
+	p.i++
+}
+
+func (p *wahlWriter) done() *Wahl {
+	if p.i < 0 {
+		return &Wahl{}
+	}
+	var block uint32
+	switch {
+	case p.word == 0:
+		block = 0x80000000 | uint32(p.rlen&0x3fffffff)
+	case p.word == 0x7fffffff:
+		block = 0xc0000000 | uint32(p.rlen&0x3fffffff)
+	default:
+		block = p.word
+	}
+
+	if p.i >= len(p.wahl.arr) {
+		p.wahl.arr = append(p.wahl.arr, block)
+	} else {
+		p.wahl.arr[p.i] = block
+	}
+
+	w := &Wahl{arr: p.wahl.arr[:p.i+1]}
+	return w
 }
 
 /// Wahl codecs ////////////////////////////////////////////////////////////////
