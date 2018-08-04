@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/alphazero/gart/index"
+	"github.com/alphazero/gart/repo"
 	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
@@ -34,12 +35,14 @@ func InitRepo(force bool) (bool, error) {
 
 	debug.Printf("in-args: force:%t", force)
 
-	// TODO create/re-set repo root
-	// REVU that should be in gart/repo
+	// initialize gart's repository
+	if e := repo.Initialize(force); e != nil {
+		return false, e
+	}
 
 	// initialize index
-	e := index.Initialize(force)
-	if e != nil {
+	// NOTE see comment in index.Initialize. 'force' is ignored.
+	if e := index.Initialize(force); e != nil {
 		return false, e
 	}
 	return true, nil

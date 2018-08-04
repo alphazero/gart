@@ -69,54 +69,57 @@ func Initialize(reinit bool) error {
 	var debug = debug.For("index.Initialize")
 	debug.Printf("reinit: %t", reinit)
 
-	_debug0 := func(path, s string) {
-		debug.Printf("reinit:%t - verify-file:%q %s", reinit, path, s)
-	}
-
-	switch reinit {
-	case true:
-		//		println(time.Now().UnixNano())
-		_debug := func(path string) { _debug0(path, "does not exist") }
-		if e := fs.VerifyFile(repo.ObjectIndexPath); e != nil {
-			_debug(repo.ObjectIndexPath)
-			return ErrIndexNotInitialized
+	// REVU this was done before repo.Initialize so it is doing un-necessary work.
+	//      The repo level initializer will deal with 'force' option and this func
+	//      should not even be called if repo was existing, or if force was spec'd
+	//      then that func itself would remove all matter.
+	//
+	//      Will keep this for now as it may be useful to re-init the index only
+	//      (for example to save existing (planned) tag definition files, etc.),
+	/*
+		_debug0 := func(path, s string) {
+			debug.Printf("reinit:%t - verify-file:%q %s", reinit, path, s)
 		}
-		if e := fs.VerifyDir(repo.IndexTagmapsPath); e != nil {
-			_debug(repo.IndexTagmapsPath)
-			return ErrIndexNotInitialized
+		switch reinit {
+		case true:
+			_debug := func(path string) { _debug0(path, "does not exist") }
+			if e := fs.VerifyFile(repo.ObjectIndexPath); e != nil {
+				_debug(repo.ObjectIndexPath)
+				return ErrIndexNotInitialized
+			}
+			if e := fs.VerifyDir(repo.IndexTagmapsPath); e != nil {
+				_debug(repo.IndexTagmapsPath)
+				return ErrIndexNotInitialized
+			}
+			if e := fs.VerifyDir(repo.IndexCardsPath); e != nil {
+				_debug(repo.IndexCardsPath)
+				return ErrIndexNotInitialized
+			}
+			debug.Printf("warn - rm -rf %q", repo.IndexPath)
+			if e := os.RemoveAll(repo.IndexPath); e != nil {
+				return errors.FaultWithCause(e,
+					"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
+			}
+			if e := os.Mkdir(repo.IndexPath, repo.DirPerm); e != nil {
+				return errors.FaultWithCause(e,
+					"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
+			}
+		default:
+			_debug := func(path string) { _debug0(path, "exists") }
+			if e := fs.VerifyFile(repo.ObjectIndexPath); e == nil {
+				_debug(repo.ObjectIndexPath)
+				return ErrIndexInitialized
+			}
+			if e := fs.VerifyDir(repo.IndexTagmapsPath); e == nil {
+				_debug(repo.IndexTagmapsPath)
+				return ErrIndexInitialized
+			}
+			if e := fs.VerifyDir(repo.IndexCardsPath); e == nil {
+				_debug(repo.IndexCardsPath)
+				return ErrIndexInitialized
+			}
 		}
-		if e := fs.VerifyDir(repo.IndexCardsPath); e != nil {
-			_debug(repo.IndexCardsPath)
-			return ErrIndexNotInitialized
-		}
-		//		println(time.Now().UnixNano())
-		debug.Printf("warn - rm -rf %q", repo.IndexPath)
-		if e := os.RemoveAll(repo.IndexPath); e != nil {
-			return errors.FaultWithCause(e,
-				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
-		}
-		//		println(time.Now().UnixNano())
-		if e := os.Mkdir(repo.IndexPath, repo.DirPerm); e != nil {
-			return errors.FaultWithCause(e,
-				"index.Initialize (reinit:%t) - os.Mkdir(%s)", reinit, repo.IndexPath)
-		}
-		//		println(time.Now().UnixNano())
-	default:
-		_debug := func(path string) { _debug0(path, "exists") }
-		if e := fs.VerifyFile(repo.ObjectIndexPath); e == nil {
-			_debug(repo.ObjectIndexPath)
-			return ErrIndexInitialized
-		}
-		if e := fs.VerifyDir(repo.IndexTagmapsPath); e == nil {
-			_debug(repo.IndexTagmapsPath)
-			return ErrIndexInitialized
-		}
-		if e := fs.VerifyDir(repo.IndexCardsPath); e == nil {
-			_debug(repo.IndexCardsPath)
-			return ErrIndexInitialized
-		}
-	}
-
+	*/
 	var dirs = []string{repo.IndexCardsPath, repo.IndexTagmapsPath}
 	for _, dir := range dirs {
 		if e := os.Mkdir(dir, repo.DirPerm); e != nil {

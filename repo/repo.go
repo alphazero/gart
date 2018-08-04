@@ -3,9 +3,11 @@
 package repo
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 )
 
@@ -73,4 +75,35 @@ func InitPaths(rootDir string) {
 			panic(errors.Fault("paths[%d]: %q is not safe!", i, path))
 		}
 	}
+}
+
+func Initialize(force bool) error {
+	errors := errors.For("repo.Initialize")
+	debug := debug.For("repo.Initialize")
+	debug.Printf("repo-path:%q force-init:%t", RepoPath, force)
+
+	// re-initialize existing only if force option is true
+	// Note: dup code in syslib/fs due to dependency cycle.
+	if finfo, e := os.Stat(RepoPath); e == nil {
+		if !finfo.IsDir() {
+			return errors.Fault("existing file at path %q is not a directory!", RepoPath)
+		}
+		debug.Printf("existing repo")
+		if force {
+			debug.Printf("forced re-init of existing repo")
+			if e := os.RemoveAll(RepoPath); e != nil {
+				return errors.FaultWithCause(e, "forced reinit - os.RemoveAll(%q)", RepoPath)
+			}
+		} else {
+			return errors.Fault("existing gart repository -- must force to re-init")
+		}
+	}
+
+	if e := os.Mkdir(RepoPath, DirPerm); e != nil {
+		return errors.FaultWithCause(e, "os.Mkdir(%q)", RepoPath)
+	}
+	if e := os.Mkdir(IndexPath, DirPerm); e != nil {
+		return errors.FaultWithCause(e, "os.Mkdir(%q)", IndexPath)
+	}
+	return nil
 }
