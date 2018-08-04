@@ -117,6 +117,10 @@ func parseCsv(csv string) []string {
 func main() {
 	fmt.Printf("Salaam Samad Sultan of LOVE!\n")
 
+	if os.Getuid() == 0 {
+		exitOnError(errors.Fault("gart will not run as root"))
+	}
+
 	command, option, e := parseArgs(os.Args)
 	switch e {
 	case nil:
