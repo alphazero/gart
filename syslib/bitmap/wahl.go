@@ -555,12 +555,20 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 	var ix = x.getReader()
 	var fn = bitwiseFn[op]
 
-	var rlen = min(ix.rlen, i0.rlen)
+	//	var rlen = min(ix.rlen, i0.rlen)
+	var rlen = ix.rlen
+	if i0.rlen < ix.rlen {
+		rlen = i0.rlen
+	}
 	for rlen > 0 {
 		ri.writeN(fn(i0.word, ix.word), rlen)
 		i0.readN(rlen)
 		ix.readN(rlen)
-		rlen = min(ix.rlen, i0.rlen)
+		// rlen = min(ix.rlen, i0.rlen)
+		rlen = ix.rlen
+		if i0.rlen < ix.rlen {
+			rlen = i0.rlen
+		}
 	}
 
 	// tail end treatment of unequal length bitmaps.
