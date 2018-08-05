@@ -3,7 +3,9 @@
 package test
 
 import (
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/alphazero/gart/syslib/bitmap"
 )
@@ -50,6 +52,54 @@ func TestNewWahl(t *testing.T) {
 		t.Errorf("NewWahl().Decode() returned %v", e)
 	}
 }
+
+/// test bitwise ops ////////////////////////////////////////////////////////
+//var _ = time.Now
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+const maxBit = 1 << 20 // large bitmaps to increase prob of testing all edge cases.
+var w0 = NewRandomWahl(rnd, maxBit)
+var w1 = NewRandomWahl(rnd, maxBit)
+
+func TestNot(t *testing.T) {
+	w0_not := w0.Not()
+	if e := verifyNot(w0, w0_not); e != nil {
+		t.Fatal(e)
+	}
+}
+
+func TestAnd(t *testing.T) {
+	w_and, e := bitmap.And(w0, w1)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := verifyAnd(w0, w1, w_and); e != nil {
+		t.Fatal(e)
+	}
+}
+
+func TestOr(t *testing.T) {
+	w_or, e := bitmap.Or(w0, w1)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := verifyOr(w0, w1, w_or); e != nil {
+		t.Fatal(e)
+	}
+}
+
+func TestXor(t *testing.T) {
+	w_xor, e := bitmap.Xor(w0, w1)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := verifyXor(w0, w1, w_xor); e != nil {
+		t.Fatal(e)
+	}
+}
+
+// TODO verifyXor & testXor
+// TODO test basic ops, clear, set, etc per below
 
 // func NewWahlInit(bits ...uint) *Wahl {
 // func AND(bitmaps ...*Wahl) (*Wahl, error) {

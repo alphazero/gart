@@ -9,7 +9,7 @@ import (
 )
 
 // NewRandomBitmap creates a new bitmap.Wahl bitmap with a random mix of FILL{0,1}
-// and TILE blocks.
+// and TILE blocks. The new bitmap is compressed.
 // TODO optimize this by using wahlWriter.
 func NewRandomWahl(rnd *rand.Rand, max uint) *bitmap.Wahl {
 	var w = bitmap.NewWahl()
