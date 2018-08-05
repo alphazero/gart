@@ -3,15 +3,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math/rand"
 	"os"
-	//	"time"
-	"flag"
 
 	"github.com/alphazero/gart/syslib/bench"
 	"github.com/alphazero/gart/syslib/bitmap"
-	//	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/syslib/bitmap/test"
 )
 
 var (
@@ -35,8 +34,8 @@ func main() {
 
 	var tstamp = bench.NewTimestamp()
 	var w_0, w_1 *bitmap.Wahl
-	w_0 = newRandomBitmap(max)
-	w_1 = newRandomBitmap(max)
+	w_0 = test.NewRandomWahl(rnd, max)
+	w_1 = test.NewRandomWahl(rnd, max)
 	tstamp.Mark("2 newRandomBitmap")
 
 	const reps = 100
@@ -47,40 +46,12 @@ func main() {
 	for i := 0; i < reps; i++ {
 		bitmap.Or(w_0, w_1)
 	}
-	tstamp.MarkN("OR", reps)
+	tstamp.MarkN("OR ", reps)
 	for i := 0; i < reps; i++ {
 		bitmap.Xor(w_0, w_1)
 	}
 	tstamp.MarkN("XOR", reps)
 
-}
-
-func newRandomBitmap(max uint) *bitmap.Wahl {
-	var w = bitmap.NewWahl()
-	var bits []uint
-	for i := uint(0); i < max; {
-		var m uint
-		switch typ := rnd.Intn(12); {
-		case typ < 8:
-			m = uint(31 << uint(rnd.Intn(7)))
-			if rnd.Int()&1 == 0 {
-				for j := uint(0); j < m; j++ {
-					bits = append(bits, i+j)
-				}
-			}
-		default:
-			m = uint(31 << uint(rnd.Intn(3)))
-			for j := uint(0); j < m; j++ {
-				if rnd.Intn(100) > 50 {
-					bits = append(bits, i+j)
-				}
-			}
-		}
-		i += m
-	}
-	w.Set(bits...)
-	w.Compress()
-	return w
 }
 
 func exitOnError(e error) {

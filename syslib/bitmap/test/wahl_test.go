@@ -1,29 +1,12 @@
 // Doost!
 
-package bitmap
+package test
 
 import (
 	"testing"
-	"testing/quick"
 
-	"github.com/alphazero/gart/syslib/errors"
+	"github.com/alphazero/gart/syslib/bitmap"
 )
-
-// func maxInt(a, b int) int {
-func TestMaxInt(t *testing.T) {
-	test := func(a, b int) bool {
-		switch {
-		case a > b:
-			return a == maxInt(a, b)
-		case b > a:
-			return b == maxInt(a, b)
-		}
-		return true
-	}
-	if e := quick.Check(test, nil); e != nil {
-		t.Error(e)
-	}
-}
 
 // func WahlBlock(v uint32) wahlBlock
 // func blockRange(b uint32, max0 int) (uint, uint, int)
@@ -41,7 +24,7 @@ func TestMaxInt(t *testing.T) {
 //	- be encodable
 //  - be decodable
 func TestNewWahl(t *testing.T) {
-	var w = NewWahl()
+	var w = bitmap.NewWahl()
 	if w == nil {
 		t.Error("NewWahl returned nil")
 	}
@@ -91,52 +74,3 @@ func TestNewWahl(t *testing.T) {
 // wahl.go:func (w *Wahl) Encode(buf []byte) error {
 // wahl.go:func (w *Wahl) Decode(buf []byte) error {
 // wahl.go:func (w *Wahl) apply(visit visitFn) error {
-func mapArray(a []int) map[int]bool {
-	a_map := make(map[int]bool)
-	for _, v := range a {
-		a_map[v] = true
-	}
-	return a_map
-}
-
-func verifySet(w *Wahl, a []uint) {
-	w_map := mapArray(w.Bits())
-	for _, bit := range a {
-		// bit must be in map
-		if !w_map[int(bit)] {
-			panic(errors.Bug("Set: bit %d is not in bitmap\n", bit))
-		}
-	}
-}
-
-func verifyClear(w *Wahl, a []uint) {
-	w_map := mapArray(w.Bits())
-	for _, bit := range a {
-		// bit must -not- be in map
-		if w_map[int(bit)] {
-			panic(errors.Bug("Clear: bit %d is in bitmap\n", bit))
-		}
-	}
-}
-
-func verifyAnd(a, b, and *Wahl) {
-	a_map := mapArray(a.Bits())
-	b_map := mapArray(b.Bits())
-	for _, bit := range and.Bits() {
-		// bit must be in both maps for AND
-		if !(a_map[bit] && b_map[bit]) {
-			panic(errors.Bug("AND: bit %d is not in both maps\n", bit))
-		}
-	}
-}
-
-func verifyOr(a, b, or *Wahl) {
-	a_map := mapArray(a.Bits())
-	b_map := mapArray(b.Bits())
-	for _, bit := range or.Bits() {
-		// bit must be in both maps for AND
-		if !(a_map[bit] || b_map[bit]) {
-			panic(errors.Bug("OR: bit %d is not in either maps\n", bit))
-		}
-	}
-}
