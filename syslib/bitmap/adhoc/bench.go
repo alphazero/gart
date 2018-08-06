@@ -16,6 +16,7 @@ import (
 var (
 	seed int64
 	max  uint = 1 << 16
+	reps int  = 1000
 )
 
 var rnd *rand.Rand
@@ -23,6 +24,7 @@ var rnd *rand.Rand
 func init() {
 	flag.Int64Var(&seed, "seed", seed, "seed")
 	flag.UintVar(&max, "max", max, "max bit num")
+	flag.IntVar(&reps, "reps", reps, "reps")
 }
 
 func main() {
@@ -38,7 +40,6 @@ func main() {
 	w_1 = test.NewRandomWahl(rnd, max)
 	tstamp.Mark("2 newRandomBitmap")
 
-	const reps = 100
 	for i := 0; i < reps; i++ {
 		bitmap.And(w_0, w_1)
 	}

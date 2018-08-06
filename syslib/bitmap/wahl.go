@@ -562,8 +562,8 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 	}
 	for rlen > 0 {
 		ri.writeN(fn(i0.word, ix.word), rlen)
-		i0.readN(rlen)
-		ix.readN(rlen)
+		i0.advanceN(rlen)
+		ix.advanceN(rlen)
 		// rlen = min(ix.rlen, i0.rlen)
 		rlen = ix.rlen
 		if i0.rlen < ix.rlen {
@@ -589,7 +589,7 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 
 	for tail.rlen > 0 {
 		ri.writeN(fn(tail.word, 0), tail.rlen)
-		tail.readN(tail.rlen)
+		tail.advanceN(tail.rlen)
 	}
 
 done:
@@ -623,17 +623,15 @@ func (w *Wahl) getReader() *wahlReader {
 
 // Reads word that spans a run-length of at least n.
 // panics if n exceeds run-length.
-func (r *wahlReader) readN(n int) uint32 {
+func (r *wahlReader) advanceN(n int) {
 	r.rlen -= n
 	switch {
 	case r.rlen == 0:
-		w := r.word
 		r.loadWord() // read next word
-		return w
 	case r.rlen < 0:
 		panic("bug - n exceeds rlen")
 	}
-	return r.word
+	return
 }
 
 // if wahlIterator index is past wahl capacity, we're done.
