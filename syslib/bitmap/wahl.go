@@ -555,7 +555,7 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 	var ix = x.getReader()
 	var fn = bitwiseFn[op]
 
-	//	var rlen = min(ix.rlen, i0.rlen)
+	// in-line min
 	var rlen = ix.rlen
 	if i0.rlen < ix.rlen {
 		rlen = i0.rlen
@@ -564,7 +564,7 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 		ri.writeN(fn(i0.word, ix.word), rlen)
 		i0.advanceN(rlen)
 		ix.advanceN(rlen)
-		// rlen = min(ix.rlen, i0.rlen)
+		// in-line min
 		rlen = ix.rlen
 		if i0.rlen < ix.rlen {
 			rlen = i0.rlen
