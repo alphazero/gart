@@ -588,7 +588,8 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 	}
 
 	for tail.rlen > 0 {
-		ri.writeN(fn(tail.word, 0), tail.rlen)
+		//		ri.writeN(fn(tail.word, 0), tail.rlen)
+		ri.writeN(tail.word, tail.rlen)
 		tail.advanceN(tail.rlen)
 	}
 
@@ -617,8 +618,7 @@ func (w *Wahl) getReader() *wahlReader {
 		wahl: w,
 	}
 	// load initial word, if any
-	// TODO inline loadWord
-	//	iter.loadWord()
+	// inlined loadWord
 	if len(w.arr) > 0 {
 		var v = w.arr[0]
 		var val = []uint32{0, 0x7fffffff}
@@ -641,8 +641,7 @@ func (r *wahlReader) advanceN(n int) {
 	r.rlen -= n
 	switch {
 	case r.rlen == 0:
-		// TODO inline loadWord
-		//		r.loadWord() // read next word
+		// inlined loadWord
 		if r.i >= len(r.wahl.arr) {
 			r.word = 0
 			r.rlen = 0
@@ -666,6 +665,7 @@ func (r *wahlReader) advanceN(n int) {
 	return
 }
 
+/* deprecated
 // if wahlIterator index is past wahl capacity, we're done.
 // Otherwise, read the next wahl block and update wahlIterator state.
 func (r *wahlReader) loadWord() {
@@ -687,6 +687,7 @@ func (r *wahlReader) loadWord() {
 	}
 	r.i++
 }
+*/
 
 // for internal use only
 type wahlWriter wahlIterator
