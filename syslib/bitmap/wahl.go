@@ -613,12 +613,26 @@ type wahlReader wahlIterator
 
 // Returns an immutable, sequential reader for the bitmap.
 func (w *Wahl) getReader() *wahlReader {
-	iter := &wahlReader{
+	r := &wahlReader{
 		wahl: w,
 	}
 	// load initial word, if any
-	iter.loadWord()
-	return iter
+	// TODO inline loadWord
+	//	iter.loadWord()
+	if len(w.arr) > 0 {
+		var v = w.arr[0]
+		var val = []uint32{0, 0x7fffffff}
+		switch {
+		case v>>31 == 0:
+			r.word = v & 0x7fffffff
+			r.rlen = 1
+		default:
+			r.rlen = int(v) & 0x3fffffff
+			r.word = val[(v>>30)&0x1]
+		}
+		r.i = 1
+	}
+	return r
 }
 
 // Reads word that spans a run-length of at least n.
@@ -627,7 +641,25 @@ func (r *wahlReader) advanceN(n int) {
 	r.rlen -= n
 	switch {
 	case r.rlen == 0:
-		r.loadWord() // read next word
+		// TODO inline loadWord
+		//		r.loadWord() // read next word
+		if r.i >= len(r.wahl.arr) {
+			r.word = 0
+			r.rlen = 0
+			return
+		}
+		var v = r.wahl.arr[r.i]
+		// REVU below benched to be fastest
+		var val = []uint32{0, 0x7fffffff}
+		switch {
+		case v>>31 == 0:
+			r.word = v & 0x7fffffff
+			r.rlen = 1
+		default:
+			r.rlen = int(v) & 0x3fffffff
+			r.word = val[(v>>30)&0x1]
+		}
+		r.i++
 	case r.rlen < 0:
 		panic("bug - n exceeds rlen")
 	}
