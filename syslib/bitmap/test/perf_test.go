@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+
+	"github.com/alphazero/gart/syslib/bitmap"
 )
 
 var bench_rnd *rand.Rand
@@ -26,8 +28,8 @@ func BenchmarkBitwiseOps(b *testing.B) {
 		// generate random bitmaps for given maxbit
 		maxBit := maxBit
 		sname := fmt.Sprintf("[%d bits]", maxBit)
-		w_0 := NewRandomWahl(bench_rnd, maxBit)
-		w_1 := NewRandomWahl(bench_rnd, maxBit)
+		w_0 := bitmap.NewRandomWahl(bench_rnd, maxBit)
+		w_1 := bitmap.NewRandomWahl(bench_rnd, maxBit)
 
 		// bench all ops for maxbit sized bitmaps.
 		for _, op := range bitwiseOps {

@@ -550,7 +550,7 @@ var bitwiseFn = []func(uint32, uint32) uint32{
 }
 
 func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
-	var ri = getWriter(nil)
+	var ri = newWriter(nil)
 	var i0 = w.getReader()
 	var ix = x.getReader()
 	var fn = bitwiseFn[op]
@@ -692,7 +692,7 @@ func (r *wahlReader) loadWord() {
 // for internal use only
 type wahlWriter wahlIterator
 
-func getWriter(wahl *Wahl) *wahlWriter {
+func newWriter(wahl *Wahl) *wahlWriter {
 	if wahl == nil {
 		wahl = NewWahl()
 	}
