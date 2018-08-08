@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"time"
 
 	"github.com/alphazero/gart/syslib/bench"
 	"github.com/alphazero/gart/syslib/bitmap"
-	"github.com/alphazero/gart/syslib/bitmap/test"
+	//	"github.com/alphazero/gart/syslib/bitmap/test"
 )
 
 var (
@@ -32,18 +33,31 @@ func main() {
 	flag.Parse()
 	fmt.Printf("bench wahl: max: %d - seed: %d\n", max, seed)
 
+	if seed == 0 {
+		seed = time.Now().UnixNano()
+	}
 	rnd = rand.New(rand.NewSource(seed))
 
 	var tstamp = bench.NewTimestamp()
 	var w_0, w_1 *bitmap.Wahl
-	w_0 = test.NewRandomWahl(rnd, max)
-	w_1 = test.NewRandomWahl(rnd, max)
-	tstamp.Mark("2 newRandomBitmap")
+	w_0 = bitmap.NewRandomWahl(rnd, max)
+	w_1 = bitmap.NewRandomWahl(rnd, max)
+	//	w_0 = test.NewRandomWahl(rnd, max)
+	//	w_1 = test.NewRandomWahl(rnd, max)
+	dt := tstamp.Mark("2 newRandomBitmap")
+	//	w_0.Print(os.Stdout)
+	//	w_1.Print(os.Stdout)
+	fmt.Printf("2 new wahls: %v\n", dt)
 
+	var w_and *bitmap.Wahl
 	for i := 0; i < reps; i++ {
-		bitmap.And(w_0, w_1)
+		w_and, _ = bitmap.And(w_0, w_1)
 	}
 	tstamp.MarkN("AND", reps)
+	//	w_and.Print(os.Stdout)
+	if w_and == nil {
+		panic("never")
+	}
 	for i := 0; i < reps; i++ {
 		bitmap.Or(w_0, w_1)
 	}

@@ -550,49 +550,47 @@ var bitwiseFn = []func(uint32, uint32) uint32{
 }
 
 func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
-	var ri = getWriter(nil)
+
 	var i0 = w.getReader()
 	var ix = x.getReader()
-	var fn = bitwiseFn[op]
-
-	// in-line min
-	var rlen = ix.rlen
-	if i0.rlen < ix.rlen {
-		rlen = i0.rlen
+	// min rlens
+	var rlen = i0.rlen
+	if i0.rlen > ix.rlen {
+		rlen = ix.rlen
 	}
+	var fn = bitwiseFn[op]
+	var ri = newWriter(nil)
 	for rlen > 0 {
 		ri.writeN(fn(i0.word, ix.word), rlen)
 		i0.advanceN(rlen)
 		ix.advanceN(rlen)
-		// in-line min
-		rlen = ix.rlen
-		if i0.rlen < ix.rlen {
-			rlen = i0.rlen
+		// min rlens
+		rlen = i0.rlen
+		if i0.rlen > ix.rlen {
+			rlen = ix.rlen
 		}
 	}
 
 	// tail end treatment of unequal length bitmaps.
 	// Skip for AND op.
-	var tail *wahlReader
 	if op == AndOp {
-		goto done
+		return ri.done(), nil
 	}
 
+	var tail *wahlReader
 	switch {
 	case ix.rlen > 0 && i0.rlen > 0:
-		panic("bug")
+		return ri.done(), nil
 	case i0.rlen > 0:
 		tail = i0
 	default:
 		tail = ix
 	}
-
 	for tail.rlen > 0 {
-		ri.writeN(fn(tail.word, 0), tail.rlen)
+		ri.writeN(tail.word, tail.rlen)
 		tail.advanceN(tail.rlen)
 	}
 
-done:
 	return ri.done(), nil
 }
 
@@ -600,12 +598,13 @@ done:
 
 // wahlIterator for sequential read/write of compressed bitmap
 type wahlIterator struct {
-	wahl *Wahl
-	i    int    // index into wahl array
-	rlen int    // run length for word
-	word uint32 // 31-bit encoded word of rlen run length.
-	pos  int    // bit position of the LSB of the current word
-	fill bool
+	wahl   *Wahl
+	arrLen int
+	i      int    // index into wahl array
+	rlen   int    // run length for word
+	word   uint32 // 31-bit encoded word of rlen run length.
+	pos    int    // bit position of the LSB of the current word
+	fill   bool
 }
 
 // for internal use only
@@ -613,27 +612,59 @@ type wahlReader wahlIterator
 
 // Returns an immutable, sequential reader for the bitmap.
 func (w *Wahl) getReader() *wahlReader {
-	iter := &wahlReader{
-		wahl: w,
+	r := &wahlReader{
+		wahl:   w,
+		arrLen: len(w.arr),
 	}
 	// load initial word, if any
-	iter.loadWord()
-	return iter
+	// inlined loadWord
+	if len(w.arr) > 0 {
+		var val = []uint32{0, 0, 0, 0x7fffffff}
+		var v = w.arr[0]
+		switch v & 0x80000000 {
+		case 0:
+			r.word = v
+			r.rlen = 1
+		default:
+			r.word = val[v>>30]
+			r.rlen = int(v) & 0x3fffffff
+		}
+		r.i = 1
+	}
+	return r
 }
 
 // Reads word that spans a run-length of at least n.
+// NOTE internal use only so n is guaranteed to be >= r.rlen
+// by use of min of n readers including this one.
 // panics if n exceeds run-length.
 func (r *wahlReader) advanceN(n int) {
 	r.rlen -= n
-	switch {
-	case r.rlen == 0:
-		r.loadWord() // read next word
-	case r.rlen < 0:
-		panic("bug - n exceeds rlen")
+	if r.rlen > 0 {
+		return
 	}
+	// REVU ** asserting ** r.rlen == 0 here
+
+	// advance next wahl array element
+	if r.i >= r.arrLen {
+		r.word = 0
+		return
+	}
+	var val = []uint32{0, 0, 0, 0x7fffffff}
+	var v = r.wahl.arr[r.i]
+	switch v & 0x80000000 {
+	case 0:
+		r.word = v
+		r.rlen = 1
+	default:
+		r.word = val[v>>30]
+		r.rlen = int(v) & 0x3fffffff
+	}
+	r.i++
 	return
 }
 
+/* deprecated
 // if wahlIterator index is past wahl capacity, we're done.
 // Otherwise, read the next wahl block and update wahlIterator state.
 func (r *wahlReader) loadWord() {
@@ -655,11 +686,12 @@ func (r *wahlReader) loadWord() {
 	}
 	r.i++
 }
+*/
 
 // for internal use only
 type wahlWriter wahlIterator
 
-func getWriter(wahl *Wahl) *wahlWriter {
+func newWriter(wahl *Wahl) *wahlWriter {
 	if wahl == nil {
 		wahl = NewWahl()
 	}

@@ -18,7 +18,7 @@ func NewRandomWahl(rnd *rand.Rand, max uint) *bitmap.Wahl {
 		var m uint
 		switch typ := rnd.Intn(12); {
 		case typ < 8:
-			m = uint(31 << uint(rnd.Intn(7)))
+			m = uint(31 * uint(rnd.Intn(7)))
 			if rnd.Int()&1 == 0 {
 				for j := uint(0); j < m; j++ {
 					bits = append(bits, i+j)
