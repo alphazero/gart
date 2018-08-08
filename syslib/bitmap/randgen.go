@@ -14,12 +14,11 @@ import (
 func NewRandomWahl(rnd *rand.Rand, max uint) *Wahl {
 	w := newWriter(nil)
 
-	//	var bits []uint
 	for i := uint(0); i < max; {
 		var m uint // m is cap on bit range (i, i+m]
-		switch typ := rnd.Intn(12); {
-		case typ < 6:
-			x := rnd.Intn(30)
+		switch typ := rnd.Intn(100); {
+		case typ < 50:
+			x := rnd.Intn(int(max)>>10) + 1
 			m = uint(31 * uint(x))
 			if rnd.Int()&1 == 0 {
 				w.writeN(0x7fffffff, x)
@@ -28,16 +27,13 @@ func NewRandomWahl(rnd *rand.Rand, max uint) *Wahl {
 			}
 			i += m
 		default:
-			x := rnd.Intn(3)
-			m = uint(31 << uint(x))
+			x := rnd.Intn(12) // larger x longer run of tiles
+			m = uint(31 * uint(x))
 			for k := 0; k < x; k++ {
 				w.writeN(uint32(rnd.Intn(0x7fffffff)), 1)
 				i += 31
 			}
 		}
-		//		i += m
 	}
-	//	w.Set(bits...)
-	//	w.Compress()
 	return w.done()
 }

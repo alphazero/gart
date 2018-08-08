@@ -4,6 +4,7 @@ package test
 
 import (
 	"math/rand"
+	//	"os"
 	"testing"
 	"time"
 
@@ -58,8 +59,8 @@ func TestNewWahl(t *testing.T) {
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 const maxBit = 1 << 20 // large bitmaps to increase prob of testing all edge cases.
-var w0 = NewRandomWahl(rnd, maxBit)
-var w1 = NewRandomWahl(rnd, maxBit)
+var w0 = bitmap.NewRandomWahl(rnd, maxBit)
+var w1 = bitmap.NewRandomWahl(rnd, maxBit)
 
 func TestNot(t *testing.T) {
 	w0_not := w0.Not()
@@ -70,6 +71,9 @@ func TestNot(t *testing.T) {
 
 func TestAnd(t *testing.T) {
 	w_and, e := bitmap.And(w0, w1)
+	//	w0.Print(os.Stdout)
+	//	w1.Print(os.Stdout)
+	//	w_and.Print(os.Stdout)
 	if e != nil {
 		t.Fatal(e)
 	}
