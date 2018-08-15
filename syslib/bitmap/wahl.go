@@ -44,8 +44,6 @@ import (
 	"math/bits"
 	"unsafe"
 
-	//	"github.com/alphazero/gart/syslib/bench"
-	//	"github.com/alphazero/gart/syslib/debug"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/syslib/sort"
 )
@@ -664,30 +662,6 @@ func (r *wahlReader) advanceN(n int) {
 	return
 }
 
-/* deprecated
-// if wahlIterator index is past wahl capacity, we're done.
-// Otherwise, read the next wahl block and update wahlIterator state.
-func (r *wahlReader) loadWord() {
-	if r.i >= len(r.wahl.arr) {
-		r.word = 0
-		r.rlen = 0
-		return
-	}
-	var v = r.wahl.arr[r.i]
-	// REVU below benched to be fastest
-	var val = []uint32{0, 0x7fffffff}
-	switch {
-	case v>>31 == 0:
-		r.word = v & 0x7fffffff
-		r.rlen = 1
-	default:
-		r.rlen = int(v) & 0x3fffffff
-		r.word = val[(v>>30)&0x1]
-	}
-	r.i++
-}
-*/
-
 // for internal use only
 type wahlWriter wahlIterator
 
@@ -839,7 +813,6 @@ func maxBitsVisitor(max *int) visitFn {
 	}
 }
 
-//func debugVisitor(w io.Writer, max *int) visitFn {
 func printVisitor(w io.Writer, max *int) visitFn {
 	return func(bnum int, bval uint32) (bool, error) {
 		block := WahlBlock(bval)
