@@ -147,7 +147,7 @@ type IndexManager interface {
 	IndexText(bool, string, ...string) (Card, bool, error)
 	IndexFile(bool, string, ...string) (Card, bool, error)
 	Select(spec selectSpec, tags ...string) ([]*system.Oid, error)
-	Search(Query) ([]*system.Oid, error) // REVU this is really Search
+	Search(Query) ([]*system.Oid, error)
 	DeleteObject(oid *system.Oid) (bool, error)
 	DeleteObjectsByTag(tags ...string) (int, error)
 	RemoveTags(oid *system.Oid, tag ...string) ([]string, error)
@@ -467,61 +467,78 @@ func (idx *indexManager) loadTagmap(tag string, create, add bool) (*Tagmap, erro
 // REVU should return TODO ResultSet<T>
 func (idx *indexManager) Search(qx Query) ([]*system.Oid, error) {
 	var err = errors.For("indexManager.Search")
-	var debug = debug.For("indexManager.Search")
+	//	var debug = debug.For("indexManager.Search")
 
 	var q = qx.asQuery()
 
-	if len(q.include) == 0 {
-		debug.Printf("include ALL")
-		q.IncludeTags(systemic.GartTag())
+	// load the all-inclusive systemic tagmap
+	allmap, e0 := loadTagmap(systemic.GartTag(), false)
+	if e0 != nil {
+		return nil, err.Bug("loadTagmap(systemic:gart-objects) - %v", e0)
 	}
-	debug.Printf("called q: %v", q) // XXX
 
 	var e error
 
-	var exmap = bitmap.NewWahl()
-	var excluded []*bitmap.Wahl
-	for tag, _ := range q.exclude {
-		tagmap, ok := idx.tagmaps[tag]
-		if !ok {
-			if tagmap, e = loadTagmap(tag, false); e != nil && e == ErrTagNotExist {
-				continue
+	// Exclude objects that have been tagged with -any- of the exluded tags
+	var exmap = bitmap.NewWahl() // tagmap of the final exclusion bitmap
+	if len(q.exclude) > 0 {
+		var excluded []*bitmap.Wahl
+		for tag, _ := range q.exclude {
+			tagmap, ok := idx.tagmaps[tag]
+			if !ok {
+				// if specified tag to exclude doesn't exist, just ignore it.
+				if tagmap, e = loadTagmap(tag, false); e != nil && e == ErrTagNotExist {
+					continue
+				}
 			}
+			excluded = append(excluded, tagmap.bitmap)
 		}
-		excluded = append(excluded, tagmap.bitmap)
+		// create final exclusion bitmap
+		if exmap, e = bitmap.Or(excluded...); e != nil {
+			return nil, err.ErrorWithCause(e, "on exluded set OR")
+		}
+		if exmap, e = exmap.Xor(allmap.bitmap); e != nil {
+			return nil, err.ErrorWithCause(e, "on exluded set XOR")
+		}
 	}
-	if exmap, e = bitmap.Or(excluded...); e != nil {
-		return nil, err.ErrorWithCause(e, "on exluded set OR")
-	}
-	exmap = exmap.Not()
 
-	var inmap = bitmap.NewWahl() // empty set
+	// Include objects that have been tags with -all- of the include tags
+	var inmap = bitmap.NewWahl() // tagmap of the initial inclusion set
 	var included []*bitmap.Wahl
-	for tag, _ := range q.include {
-		tagmap, ok := idx.tagmaps[tag]
-		if !ok {
-			if tagmap, e = loadTagmap(tag, false); e != nil && e == ErrTagNotExist {
-				return []*system.Oid{}, nil // fast-path return w/ empty set
-			} else if e != nil {
-				return nil, err.Bug("loadTagmap(%s) - %v", tag, e)
+	if len(q.include) > 0 {
+		for tag, _ := range q.include {
+			tagmap, ok := idx.tagmaps[tag]
+			if !ok {
+				// if specified tag to include doesn't exist, then return empty-set.
+				if tagmap, e = loadTagmap(tag, false); e != nil && e == ErrTagNotExist {
+					return []*system.Oid{}, nil
+				} else if e != nil {
+					return nil, err.Bug("loadTagmap(%s) - %v", tag, e)
+				}
 			}
+			included = append(included, tagmap.bitmap)
 		}
-		included = append(included, tagmap.bitmap)
+		// create tentative inclusion bitmap
+		if inmap, e = bitmap.And(included...); e != nil {
+			return nil, err.ErrorWithCause(e, "on included set AND")
+		}
+	} else {
+		// If none were specified, treat it as everything.
+		// REVU shouldn't this be a decision made at the caller site?
+		inmap = allmap.bitmap
 	}
 
-	if inmap, e = bitmap.And(included...); e != nil {
-		return nil, err.ErrorWithCause(e, "on included set AND")
-	}
-
-	if inmap.Len() == 0 {
-		return []*system.Oid{}, nil
-	}
+	// filter exclusion list, if any.
 	if exmap.Len() > 0 {
 		if inmap, e = inmap.And(exmap); e != nil {
 			return nil, err.ErrorWithCause(e, "on final AND")
 		}
 	}
 
+	// REVU need a lower level that does above but only returns a bitmap
+	// and delegates (costly) Bits() func until it is absolutely necessary.
+	//      further, that would allow nested queries, etc. for a proper query processor.
+	// TODO
 	bits := inmap.Bits()
 	return idx.oidx.getOids([]int(bits)...)
 }

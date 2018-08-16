@@ -547,6 +547,13 @@ var bitwiseFn = []func(uint32, uint32) uint32{
 	func(a, b uint32) uint32 { return a ^ b },
 }
 
+var bitwiseTailFn = []func(uint32, uint32) uint32{
+	func(a, b uint32) uint32 { panic("illegal state") },
+	func(a, b uint32) uint32 { return 0 }, // AND
+	func(a, b uint32) uint32 { return a }, // OR
+	func(a, b uint32) uint32 { return a }, // XOR
+}
+
 func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 
 	var i0 = w.getReader()
@@ -569,11 +576,15 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 		}
 	}
 
+	// BUG 0001 (wip) insure that result of bitwise
+	// coverage the maximal range of w, and x.
+	// TODO assert this
+	//
 	// tail end treatment of unequal length bitmaps.
 	// Skip for AND op.
-	if op == AndOp {
-		return ri.done(), nil
-	}
+	//	if op == AndOp {
+	//		return ri.done(), nil
+	//	}
 
 	var tail *wahlReader
 	switch {
@@ -584,8 +595,12 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 	default:
 		tail = ix
 	}
+	var fudge = []uint32{0, 0, 0x7fffffff, 0x7fffffff}
+	var fudgefactor = fudge[op]
+	//	fn = bitwiseTailFn[op]
 	for tail.rlen > 0 {
-		ri.writeN(tail.word, tail.rlen)
+		//		ri.writeN(tail.word, tail.rlen)
+		ri.writeN(tail.word&fudgefactor, tail.rlen)
 		tail.advanceN(tail.rlen)
 	}
 
