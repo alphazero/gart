@@ -4,17 +4,19 @@ package test
 
 import (
 	"fmt"
+	"github.com/alphazero/gart/syslib/bitmap"
 	"math/rand"
 	"os"
 	"testing"
-
-	"github.com/alphazero/gart/syslib/bitmap"
+	"time"
 )
 
 var bench_rnd *rand.Rand
 
 func init() {
-	bench_rnd = rand.New(rand.NewSource(0)) // deterministic
+	seed = time.Now().UnixNano()
+	bench_rnd = rand.New(rand.NewSource(seed))
+	println(seed) // to reproduce
 }
 
 func BenchmarkBitwiseOps(b *testing.B) {
@@ -32,8 +34,6 @@ func BenchmarkBitwiseOps(b *testing.B) {
 		w_0 := bitmap.NewRandomWahl(bench_rnd, maxBit)
 		w_1 := bitmap.NewRandomWahl(bench_rnd, maxBit)
 
-		//		w_0.Print(os.Stdout)
-		//		w_1.Print(os.Stdout)
 		fmt.Fprintf(os.Stdout, "for %d lens (%d %d)\n", maxBit, w_0.Len(), w_1.Len())
 		// bench all ops for maxbit sized bitmaps.
 		for _, op := range bitwiseOps {

@@ -3,8 +3,8 @@
 package test
 
 import (
+	"fmt"
 	"math/rand"
-	//	"os"
 	"testing"
 	"time"
 
@@ -56,7 +56,13 @@ func TestNewWahl(t *testing.T) {
 
 /// test bitwise ops ////////////////////////////////////////////////////////
 //var _ = time.Now
-var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+var seed = time.Now().UnixNano()
+var rnd = rand.New(rand.NewSource(seed))
+
+// print the seed so in case of test failures we can reproduce the error.
+func init() {
+	fmt.Printf("seed is %d\n", seed)
+}
 
 const maxBit = 1 << 20 // large bitmaps to increase prob of testing all edge cases.
 var w0 = bitmap.NewRandomWahl(rnd, maxBit)

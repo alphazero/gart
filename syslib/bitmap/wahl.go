@@ -145,6 +145,18 @@ func bitwise(op bitwiseOp, bitmaps ...*Wahl) (*Wahl, error) {
 	return resmap, nil
 }
 
+func (w *Wahl) bitwise(op bitwiseOp, other *Wahl) (*Wahl, error) {
+	switch op {
+	case AndOp:
+		return w.And(other)
+	case OrOp:
+		return w.Or(other)
+	case XorOp:
+		return w.Xor(other)
+	}
+	panic("unreachable - invalid op")
+}
+
 // Set sets the given 'bits' of the bitmap. It is irrelevant whether the bitmap
 // Set sets the given 'bits' of the bitmap. It is irrelevant whether the bitmap
 // is in compressed or decompressed state.
@@ -513,24 +525,6 @@ func (w Wahl) Not() *Wahl {
 	return wnot
 }
 
-// And appllies the bitwise logical AND, returns result in a newly allocated bitmap.
-// Returns ErrInvalidArg if input is nil.
-func (w *Wahl) And(other *Wahl) (*Wahl, error) {
-	return w.bitwise(AndOp, other)
-}
-
-// Or applies the bitwise logical OR, returns result in a newly allocated bitmap.
-// Returns ErrInvalidArg if input is nil.
-func (w *Wahl) Or(other *Wahl) (*Wahl, error) {
-	return w.bitwise(OrOp, other)
-}
-
-// Xor applies the bitwise logical XOR, returns result in a newly allocated bitmap.
-// Returns ErrInvalidArg if input is nil.
-func (w *Wahl) Xor(other *Wahl) (*Wahl, error) {
-	return w.bitwise(XorOp, other)
-}
-
 type bitwiseOp byte
 
 const (
@@ -540,6 +534,7 @@ const (
 	XorOp
 )
 
+/*
 var bitwiseFn = []func(uint32, uint32) uint32{
 	func(a, b uint32) uint32 { panic("illegal state") },
 	func(a, b uint32) uint32 { return a & b },
@@ -547,26 +542,138 @@ var bitwiseFn = []func(uint32, uint32) uint32{
 	func(a, b uint32) uint32 { return a ^ b },
 }
 
+
 var bitwiseTailFn = []func(uint32, uint32) uint32{
 	func(a, b uint32) uint32 { panic("illegal state") },
 	func(a, b uint32) uint32 { return 0 }, // AND
 	func(a, b uint32) uint32 { return a }, // OR
 	func(a, b uint32) uint32 { return a }, // XOR
 }
-
-func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
-
+*/
+// And appllies the bitwise logical AND, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+// REVU 33% faster than generic bitwise
+// TODO rename to And -- replace above
+func (w *Wahl) And(x *Wahl) (*Wahl, error) {
+	//func (w *Wahl) BitwiseAnd(x *Wahl) (*Wahl, error) {
 	var i0 = w.getReader()
 	var ix = x.getReader()
-	// min rlens
+	var writer = newWriter(nil)
+next:
+	for i0.rlen > 0 && ix.rlen > 0 {
+		if i0.rlen == ix.rlen {
+			writer.writeN(i0.word&ix.word, i0.rlen)
+			i0.advanceN(i0.rlen)
+			ix.advanceN(ix.rlen)
+			continue next
+		}
+		var shorter, longer = i0, ix
+		if i0.rlen > ix.rlen {
+			shorter = ix
+			longer = i0
+		}
+		if longer.word == 0 {
+			var rem = longer.rlen
+			for shorter.rlen > 0 && shorter.rlen <= rem {
+				rem -= shorter.rlen
+				shorter.advanceN(shorter.rlen)
+			}
+			writer.writeN(0, longer.rlen-rem)
+			longer.advanceN(longer.rlen - rem)
+		} else if longer.word == 0x7fffffff {
+			for shorter.rlen > 0 && shorter.rlen < longer.rlen {
+				writer.writeN(shorter.word, shorter.rlen)
+				longer.advanceN(shorter.rlen)
+				shorter.advanceN(shorter.rlen)
+			}
+		}
+	}
+
+	var tail *wahlReader
+	switch {
+	case ix.rlen == 0 && i0.rlen == 0:
+		return writer.done(), nil
+	case i0.rlen > 0:
+		tail = i0
+	default:
+		tail = ix
+	}
+	for tail.rlen > 0 {
+		writer.writeN(0, tail.rlen)
+		tail.advanceN(tail.rlen)
+	}
+	return writer.done(), nil
+}
+
+// Or applies the bitwise logical OR, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+// REVU 33% faster than generic bitwise
+// TODO rename to Or -- replace above
+func (w *Wahl) Or(x *Wahl) (*Wahl, error) {
+	var i0 = w.getReader()
+	var ix = x.getReader()
+	var writer = newWriter(nil)
+
+next:
+	for i0.rlen > 0 && ix.rlen > 0 {
+		if i0.rlen == ix.rlen {
+			writer.writeN(i0.word|ix.word, i0.rlen)
+			i0.advanceN(i0.rlen)
+			ix.advanceN(ix.rlen)
+			continue next
+		}
+		var shorter, longer *wahlReader = i0, ix
+		if i0.rlen > ix.rlen {
+			shorter = ix
+			longer = i0
+		}
+		if longer.word == 0x7fffffff {
+			var rem = longer.rlen
+			for shorter.rlen > 0 && shorter.rlen <= rem {
+				rem -= shorter.rlen
+				shorter.advanceN(shorter.rlen)
+			}
+			writer.writeN(0x7fffffff, longer.rlen-rem)
+			longer.advanceN(longer.rlen - rem)
+		} else if longer.word == 0 {
+			for shorter.rlen > 0 && shorter.rlen < longer.rlen {
+				writer.writeN(shorter.word, shorter.rlen)
+				longer.advanceN(shorter.rlen)
+				shorter.advanceN(shorter.rlen)
+			}
+		}
+	}
+
+	var tail *wahlReader
+	switch {
+	case ix.rlen == 0 && i0.rlen == 0:
+		return writer.done(), nil
+	case i0.rlen > 0:
+		tail = i0
+	default:
+		tail = ix
+	}
+	for tail.rlen > 0 {
+		writer.writeN(tail.word, tail.rlen)
+		tail.advanceN(tail.rlen)
+	}
+	return writer.done(), nil
+}
+
+// Xor applies the bitwise logical XOR, returns result in a newly allocated bitmap.
+// Returns ErrInvalidArg if input is nil.
+// REVU can't apply skipping (like And/Or) for Xor since both fast forward cases require
+// applying individual shorter's word to output bitmap. So Xor will be ~33% slower than And/Or.
+func (w *Wahl) Xor(x *Wahl) (*Wahl, error) {
+	var i0 = w.getReader()
+	var ix = x.getReader()
 	var rlen = i0.rlen
 	if i0.rlen > ix.rlen {
 		rlen = ix.rlen
 	}
-	var fn = bitwiseFn[op]
 	var ri = newWriter(nil)
 	for rlen > 0 {
-		ri.writeN(fn(i0.word, ix.word), rlen)
+		ri.writeN(i0.word^ix.word, rlen)
 		i0.advanceN(rlen)
 		ix.advanceN(rlen)
 		// min rlens
@@ -575,16 +682,6 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 			rlen = ix.rlen
 		}
 	}
-
-	// BUG 0001 (wip) insure that result of bitwise
-	// coverage the maximal range of w, and x.
-	// TODO assert this
-	//
-	// tail end treatment of unequal length bitmaps.
-	// Skip for AND op.
-	//	if op == AndOp {
-	//		return ri.done(), nil
-	//	}
 
 	var tail *wahlReader
 	switch {
@@ -595,12 +692,8 @@ func (w *Wahl) bitwise(op bitwiseOp, x *Wahl) (*Wahl, error) {
 	default:
 		tail = ix
 	}
-	var fudge = []uint32{0, 0, 0x7fffffff, 0x7fffffff}
-	var fudgefactor = fudge[op]
-	//	fn = bitwiseTailFn[op]
 	for tail.rlen > 0 {
-		//		ri.writeN(tail.word, tail.rlen)
-		ri.writeN(tail.word&fudgefactor, tail.rlen)
+		ri.writeN(tail.word^0, tail.rlen)
 		tail.advanceN(tail.rlen)
 	}
 
