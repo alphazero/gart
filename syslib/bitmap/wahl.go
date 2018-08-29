@@ -704,7 +704,8 @@ func (w *Wahl) Xor(x *Wahl) (*Wahl, error) {
 
 // wahlIterator for sequential read/write of compressed bitmap
 type wahlIterator struct {
-	wahl   *Wahl
+	//	wahl   *Wahl
+	arr    []uint32
 	arrLen int
 	i      int    // index into wahl array
 	rlen   int    // run length for word
@@ -719,7 +720,7 @@ type wahlReader wahlIterator
 // Returns an immutable, sequential reader for the bitmap.
 func (w *Wahl) getReader() *wahlReader {
 	r := &wahlReader{
-		wahl:   w,
+		arr:    w.arr,
 		arrLen: len(w.arr),
 	}
 	// load initial word, if any
@@ -757,7 +758,7 @@ func (r *wahlReader) advanceN(n int) {
 		return
 	}
 	var val = []uint32{0, 0, 0, 0x7fffffff}
-	var v = r.wahl.arr[r.i]
+	var v = r.arr[r.i]
 	switch v & 0x80000000 {
 	case 0:
 		r.word = v
@@ -778,8 +779,8 @@ func newWriter(wahl *Wahl) *wahlWriter {
 		wahl = NewWahl()
 	}
 	var w = wahlWriter{
-		wahl: wahl,
-		i:    -1,
+		arr: wahl.arr,
+		i:   -1,
 	}
 	return &w
 }
@@ -787,7 +788,7 @@ func newWriter(wahl *Wahl) *wahlWriter {
 func (p *wahlWriter) writeN(word uint32, n int) {
 	// init pending word case
 	if p.i < 0 {
-		p.wahl.arr = make([]uint32, 16)
+		p.arr = make([]uint32, 16)
 		goto set_pending
 	}
 
@@ -801,19 +802,19 @@ func (p *wahlWriter) writeN(word uint32, n int) {
 	/// flush pending word ///////////////////////////////
 
 	// (re)allocate output buffer if necessary
-	if p.i >= len(p.wahl.arr) {
-		tmp := make([]uint32, len(p.wahl.arr)<<1)
-		copy(tmp, p.wahl.arr)
-		p.wahl.arr = tmp
+	if p.i >= len(p.arr) {
+		tmp := make([]uint32, len(p.arr)<<1)
+		copy(tmp, p.arr)
+		p.arr = tmp
 	}
 	// encode and update wahl
 	switch {
 	case p.fill && p.word == 0x7fffffff:
-		p.wahl.arr[p.i] = 0xc0000000 | uint32(p.rlen&0x3fffffff)
+		p.arr[p.i] = 0xc0000000 | uint32(p.rlen&0x3fffffff)
 	case p.fill:
-		p.wahl.arr[p.i] = 0x80000000 | uint32(p.rlen&0x3fffffff)
+		p.arr[p.i] = 0x80000000 | uint32(p.rlen&0x3fffffff)
 	default:
-		p.wahl.arr[p.i] = p.word
+		p.arr[p.i] = p.word
 	}
 
 	/// set new pending word /////////////////////////////
@@ -838,13 +839,13 @@ func (p *wahlWriter) done() *Wahl {
 		block = p.word
 	}
 
-	if p.i >= len(p.wahl.arr) {
-		p.wahl.arr = append(p.wahl.arr, block)
+	if p.i >= len(p.arr) {
+		p.arr = append(p.arr, block)
 	} else {
-		p.wahl.arr[p.i] = block
+		p.arr[p.i] = block
 	}
 
-	w := &Wahl{arr: p.wahl.arr[:p.i+1]}
+	w := &Wahl{arr: p.arr[:p.i+1]}
 	return w
 }
 
