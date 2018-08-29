@@ -40,6 +40,7 @@ func BenchmarkBitwiseOps(b *testing.B) {
 			op := op
 			bname := fmt.Sprintf("%s %s", sname, op.name)
 			b.Run(bname, func(b *testing.B) {
+				b.SetBytes(int64(w_0.Size()+w_1.Size()) / 2)
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					op.fn(w_0, w_1)
