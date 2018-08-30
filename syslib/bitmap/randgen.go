@@ -41,9 +41,28 @@ func NewRandomWahl(rnd *rand.Rand, max uint) *Wahl {
 // TODO a typical form of bitmap will have clusters of 1s in form of
 //      Tile[000..111..] Fill-1 [rlen-cluster-core] Tile[1111..00..] Fill-0[rlen-gap]
 //      This will happen, for example, when adding a set of new files w/ the same tags.
-func NewRandomClustered(rnd *rand.Rand, max uint) *Wahl {
+func NewRandomClusteredWahl(rnd *rand.Rand, max uint, clusterCnt int) *Wahl {
+	// for each cluster
 	// basically pick Tile-init, Tile-end, and cluster-len and gap-len randomly.
-	panic("not implemented")
+	w := newWriter(nil)
+	initgap := rnd.Intn(int(max) / 100)
+	w.writeN(0x0, initgap)
+	max -= uint(initgap)
+	cnum := rnd.Intn(clusterCnt) + 1
+	clenmax := max / uint(cnum)
+	for i := uint(0); i < max; {
+		// make tile-begin, fill-cluster, tile-end, fill-gap
+		fclen := rnd.Intn(int(clenmax) / 2)
+		fglen := int(clenmax) - fclen - 2 // 2 for the tiles
+		// we now have a cluster with fclen+2 cluster followed by fglen gap fill-0
+		//
+		w.writeN(uint32(0x007fffff), 1)
+		w.writeN(0x7fffffff, fclen)
+		w.writeN(uint32(0x7FFFFE00), 1)
+		w.writeN(0x0, fglen)
+		i += clenmax
+	}
+	return w.done()
 }
 
 // TODO a pathological case of bitmap is where we have long runs of tiles which are

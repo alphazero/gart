@@ -50,3 +50,35 @@ func BenchmarkBitwiseOps(b *testing.B) {
 		println()
 	}
 }
+func BenchmarkBitwiseOpsClustered(b *testing.B) {
+	// maximum number of wahl blocks, e.g.
+	// sizes[i] * 31 => max set bit position.
+	var sizes []uint
+	for pow := uint(10); pow < 26; pow += 2 {
+		sizes = append(sizes, 1<<pow)
+	}
+
+	const maxClusters = 20
+	for _, maxBit := range sizes {
+		// generate random bitmaps for given maxbit
+		maxBit := maxBit
+		sname := fmt.Sprintf("clustered [%d bits]", maxBit)
+		w_0 := bitmap.NewRandomClusteredWahl(bench_rnd, maxBit, maxClusters)
+		w_1 := bitmap.NewRandomClusteredWahl(bench_rnd, maxBit, maxClusters)
+
+		fmt.Fprintf(os.Stdout, "for %d lens (%d %d)\n", maxBit, w_0.Len(), w_1.Len())
+		// bench all ops for maxbit sized bitmaps.
+		for _, op := range bitwiseOps {
+			op := op
+			bname := fmt.Sprintf("%s %s", sname, op.name)
+			b.Run(bname, func(b *testing.B) {
+				b.SetBytes(int64(w_0.Size()+w_1.Size()) / 2)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					op.fn(w_0, w_1)
+				}
+			})
+		}
+		println()
+	}
+}
