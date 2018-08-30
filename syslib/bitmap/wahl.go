@@ -704,7 +704,6 @@ func (w *Wahl) Xor(x *Wahl) (*Wahl, error) {
 
 // wahlIterator for sequential read/write of compressed bitmap
 type wahlIterator struct {
-	//	wahl   *Wahl
 	arr    []uint32
 	arrLen int
 	i      int    // index into wahl array
@@ -779,19 +778,23 @@ func newWriter(wahl *Wahl) *wahlWriter {
 		wahl = NewWahl()
 	}
 	var w = wahlWriter{
-		arr: wahl.arr,
-		i:   -1,
+		arr:  make([]uint32, 16), //wahl.arr,
+		i:    0,
+		word: 0,
+		fill: false,
+		rlen: 0,
 	}
 	return &w
 }
 
 func (p *wahlWriter) writeN(word uint32, n int) {
 	// init pending word case
-	if p.i < 0 {
-		p.arr = make([]uint32, 16)
-		goto set_pending
-	}
-
+	/*
+		if p.i < 0 {
+			p.arr = make([]uint32, 16)
+			goto set_pending
+		}
+	*/
 	// update rlen of pending FILL word if new word is same
 	if p.fill && p.word == word {
 		// REVU BUG here if rlen exceeds 2^30 ..
@@ -818,7 +821,7 @@ func (p *wahlWriter) writeN(word uint32, n int) {
 	}
 
 	/// set new pending word /////////////////////////////
-set_pending:
+	//set_pending:
 	p.word = word
 	p.fill = (word == 0 || word == 0x7fffffff)
 	p.rlen = n
@@ -845,7 +848,7 @@ func (p *wahlWriter) done() *Wahl {
 		p.arr[p.i] = block
 	}
 
-	w := &Wahl{arr: p.arr[:p.i+1]}
+	w := &Wahl{arr: p.arr[1 : p.i+1]}
 	return w
 }
 
