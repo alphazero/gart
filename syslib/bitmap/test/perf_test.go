@@ -14,7 +14,7 @@ import (
 var bench_rnd *rand.Rand
 
 func init() {
-	seed = time.Now().UnixNano()
+	seed := time.Now().UnixNano()
 	bench_rnd = rand.New(rand.NewSource(seed))
 	println(seed) // to reproduce
 }
