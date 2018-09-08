@@ -347,7 +347,8 @@ func (oidx *oidxFile) validateQueryArgs(keys ...int) ([]int, error) {
 	if oidx.opMode != Read {
 		return nil, err.Bug("invalid op-mode:%s", oidx.opMode)
 	}
-	if len(keys) == 0 { // a bug given that indexManager is the (only) caller.
+	if len(keys) == 0 { // a bug given that oidx (self) is the (only) caller.
+		panic("here")
 		return nil, err.Bug("no keys specified")
 	}
 
@@ -371,6 +372,9 @@ func (oidx *oidxFile) validateQueryArgs(keys ...int) ([]int, error) {
 func (oidx *oidxFile) getOids(keys ...int) ([]*system.Oid, error) {
 	if oidx.file == nil {
 		return nil, ErrObjectIndexClosed
+	}
+	if len(keys) == 0 {
+		return []*system.Oid{}, nil
 	}
 	keys, e := oidx.validateQueryArgs(keys...)
 	if e != nil {
@@ -397,6 +401,9 @@ func (oidx *oidxFile) getOids(keys ...int) ([]*system.Oid, error) {
 // Returns index.ErrObjectIndexClosed or any other encountered error, in which
 // the resultant map will be nil.
 func (oidx *oidxFile) getOidsExcluding(keys ...int) ([]*system.Oid, error) {
+	if len(keys) == 0 {
+		return []*system.Oid{}, nil
+	}
 	keys, e := oidx.validateQueryArgs(keys...)
 	if e != nil {
 		return nil, e
