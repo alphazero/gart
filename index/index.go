@@ -133,6 +133,11 @@ func Initialize(reinit bool) error {
 			"index.InitializeRepo: error creating objects index")
 	}
 
+	// Create systemic tagmaps.
+	if _, e := createTagmap(systemic.GartTag()); e != nil {
+		return errors.ErrorWithCause(e,
+			"index.InitializeRepo: error creating gart object systemic tagmap")
+	}
 	return nil
 }
 
