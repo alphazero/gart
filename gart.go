@@ -25,7 +25,7 @@ var (
 
 // TODO .gartignore files and paths
 var ignoredPaths = []string{".gart/", ".git/", ".git_vendor/"}
-var ignoredExts = []string{".jar", ".pom, .bin, .class, .xml, .lock"}
+var ignoredExts = []string{".jar", ".pom", ".bin", ".class", ".xml", ".lock", ".o"}
 
 /// stateless ops //////////////////////////////////////////////////////////////
 
@@ -167,27 +167,28 @@ var hiddenDir = []byte{os.PathSeparator, '.'}
 
 // ignore returns true if file should be ignored.
 func ignoreFile(path string) bool {
-	// filter hidden paths
-	if strings.Contains(path, string(hiddenDir)) {
-		return true
-	}
-
 	// filter hidden files
 	fname := filepath.Base(path)
 	if fname[0] == '.' {
 		return true
 	}
 
+	// filter hidden paths
+	if strings.Contains(path, string(hiddenDir)) {
+		return true
+	}
+
 	// filter if path contains ignored path element
-	for _, s := range ignoredPaths {
-		if strings.Contains(path, s) {
+	for _, ignore := range ignoredPaths {
+		if strings.Contains(path, ignore) {
 			return true
 		}
 	}
 
 	// filter ignored extensions
-	for _, s := range ignoredExts {
-		if strings.HasSuffix(path, s) {
+	ext := filepath.Ext(path)
+	for _, ignore := range ignoredExts {
+		if ext == ignore {
 			return true
 		}
 	}
