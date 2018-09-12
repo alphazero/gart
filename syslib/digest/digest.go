@@ -6,10 +6,10 @@ import (
 	"blake2b"
 	"hash/crc32"
 	"hash/crc64"
+	"io/ioutil"
 	"unsafe"
 
 	"github.com/alphazero/gart/syslib/errors"
-	"github.com/alphazero/gart/syslib/fs"
 )
 
 /// consts and vars ///////////////////////////////////////////////////////////
@@ -52,7 +52,7 @@ func Sum(b []byte) [HashSize]byte {
 
 // Returns the (32 byte) Blake2B digest of the named file.
 func SumFile(fname string) ([]byte, error) {
-	buf, e := fs.ReadFull(fname)
+	buf, e := ioutil.ReadFile(fname)
 	if e != nil {
 		return nil, e
 	}

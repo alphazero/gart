@@ -4,7 +4,6 @@ package fs
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -119,33 +118,6 @@ func SwapfileName(fname string) string {
 	// [.../]fname -> [.../].fname.swp
 	var swapbase = fmt.Sprintf(".%s.swp", filepath.Base(fname))
 	return filepath.Join(filepath.Dir(fname), swapbase)
-}
-
-// Exclusively fully reads the named file. File is closed on return.
-func ReadFull(fname string) ([]byte, error) {
-
-	fi, e := os.Stat(fname)
-	if e != nil {
-		return nil, e
-	}
-
-	// REVU why not just use os.Open(fname) ?
-	var flags = os.O_RDONLY
-	file, e := os.OpenFile(fname, flags, repo.FilePerm) // REVU check if perm here makes any diff
-	if e != nil {
-		return nil, e
-	}
-	defer file.Close()
-
-	bufsize := fi.Size()
-	buf := make([]byte, bufsize)
-
-	_, e = io.ReadFull(file, buf)
-	if e != nil {
-		return nil, e
-	}
-
-	return buf, e
 }
 
 // iterates over gartDirs and applies function fn.
