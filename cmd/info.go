@@ -8,13 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	//	"strings"
 
 	"github.com/alphazero/gart"
 	"github.com/alphazero/gart/syslib/digest"
 	"github.com/alphazero/gart/syslib/errors"
 	"github.com/alphazero/gart/system"
-	"github.com/alphazero/gart/system/log"
 )
 
 type infoOption struct {
@@ -46,7 +45,6 @@ func parseInfoArgs(args []string) (Command, Option, error) {
 		option.path = option.flags.Args()[0]
 	default:
 		option.oid = option.flags.Args()[0]
-		option.oid = strings.Split(option.oid, ".")[0]
 		if option.oid == "" {
 			return nil, option, ErrUsage
 		}
@@ -63,50 +61,45 @@ func infoCommand(ctx context.Context, option0 Option) error {
 		return err.InvalidArg("expecting infoOption - %v", option0)
 	}
 
-	// use provided oid, or optionally compute from file if using path
-	oid := option.oid
+	// use provided oid fingerprint, or optionally compute from file if using path
+	fingerprint := option.oid
 	if option.usepath {
-		path, e := filepath.Abs(option.path)
-		if e != nil {
-			return err.ErrorWithCause(e, "unexpected error on filepath.Abs")
-		}
-		md, e := digest.SumFile(path)
-		if e != nil {
-			return err.ErrorWithCause(e, "error computing digest for file")
-		}
-		p, e := system.NewOid(md)
+		oid, e := getOidForFile(option.path)
 		if e != nil {
 			return err.ErrorWithCause(e, "unexpected error creating Oid for file digest ")
 		}
-		oid = strings.Split(p.Fingerprint(), ".")[0]
+		fingerprint = oid.Fingerprint()
 	}
-	cards, e := gart.FindCard(oid)
+	cards, e := gart.FindCard(fingerprint)
 	if e != nil {
 		return e
 	}
 
 	switch len(cards) {
 	case 0:
-		return errors.Error("no cards found for %s", oid)
-	case 1:
+		return errors.Error("no cards found for %s", fingerprint)
 	default:
-		msg := fmt.Sprintf("Ambiguous oid pattern - found %d cards for %s",
-			len(cards), oid)
-
-		log.Log(msg)
 		for _, card := range cards {
-			log.Log("-> %s %s", card.Type(), card.Oid().Fingerprint())
+			switch option.isVerbose() {
+			case true:
+				card.Print(os.Stdout)
+			default:
+				fmt.Fprintf(os.Stdout, "%s\n", card.Info())
+			}
 		}
-		return err.Error(msg)
 	}
-
-	var card = cards[0]
-	switch option.isVerbose() {
-	case true:
-		card.Print(os.Stdout) // TODO add verbose flag to Card.Print
-	default:
-		card.Print(os.Stdout) // TODO minimal info emit for card
-	}
-
 	return nil
+}
+
+func getOidForFile(path string) (*system.Oid, error) {
+	var err = errors.For("cmd.getOidForFile")
+	path, e := filepath.Abs(path)
+	if e != nil {
+		return nil, err.ErrorWithCause(e, "unexpected error on filepath.Abs")
+	}
+	md, e := digest.SumFile(path)
+	if e != nil {
+		return nil, err.ErrorWithCause(e, "error computing digest for file")
+	}
+	return system.NewOid(md)
 }

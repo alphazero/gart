@@ -48,9 +48,9 @@ func InitRepo(force bool) (bool, error) {
 	return true, nil
 }
 
-// REVU rather not have cmds access index directly.
 func FindCard(oidspec string) ([]index.Card, error) {
-	return index.FindCard(oidspec)
+	// REVU rather not have cmds access index directly.
+	return index.FindCard(strings.Split(oidspec, ".")[0])
 }
 
 func NewQuery() index.QueryBuilder { return index.NewQuery() }

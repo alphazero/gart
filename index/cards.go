@@ -34,10 +34,11 @@ import (
 
 type Card interface {
 	Oid() *system.Oid
-	Key() int64
+	Key() int64         // REVU why public?
 	Type() system.Otype // REVU use for systemics tags ..
 	IsNew() bool
 	Version() int
+	Info() string
 	Print(io.Writer)
 	Debug()
 	Tags() []string
@@ -131,6 +132,10 @@ type cardFile struct {
 	encode   func([]byte) error
 }
 
+func (h *cardFileHeader) Info() string {
+	return fmt.Sprintf("%s", h.otype)
+}
+
 func (h *cardFileHeader) Print(w io.Writer) {
 	fmt.Fprintf(w, "type:      %s\n", h.otype)
 	fmt.Fprintf(w, "flags:     %08b\n", h.flags)
@@ -146,6 +151,11 @@ func (h *cardFileHeader) Debug() {
 	fmt.Fprintf(w, "key:       %d\n", h.key)
 	fmt.Fprintf(w, "tagcnt:    %d\n", h.tagcnt)
 	fmt.Fprintf(w, "tagslen:   %d\n", h.tagslen)
+}
+
+func (c *cardFile) Info() string {
+	hinfo := c.header.Info()
+	return fmt.Sprintf("%s %s", c.oid.Fingerprint(), hinfo)
 }
 
 func (c *cardFile) Print(w io.Writer) {
@@ -623,6 +633,11 @@ func (c *textCard) Text() string {
 	return string(c.text)
 }
 
+func (c *textCard) Info() string {
+	cfinfo := c.cardFile.Info()
+	return fmt.Sprintf("%s %q", cfinfo, c.text)
+}
+
 func (c *textCard) Print(w io.Writer) {
 	c.cardFile.Print(w)
 	fmt.Fprintf(w, "text:      %q\n", c.text)
@@ -675,6 +690,16 @@ func (c *fileCard) encode(buf []byte) error {
 func (c *fileCard) decode(buf []byte) error {
 	c.datalen = int64(len(buf))
 	return c.paths.Decode(buf)
+}
+
+func (c *fileCard) Info() string {
+	cfinfo := c.cardFile.Info()
+	paths := c.paths.List()
+	var more string
+	if len(paths) > 1 {
+		more = fmt.Sprintf(" (+dups:%d)", len(paths)-1)
+	}
+	return fmt.Sprintf("%s %s%s", cfinfo, paths[0], more)
 }
 
 func (c *fileCard) Print(w io.Writer) {
